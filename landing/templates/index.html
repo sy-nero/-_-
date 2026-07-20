@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>הרשמה — {{ association_name }}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: Arial, Helvetica, sans-serif;
+      background: linear-gradient(135deg, #1f3a5f 0%, #2e5a8f 100%);
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      padding: 20px; color: #2b2b2b;
+    }
+    .card {
+      background: #fff; border-radius: 16px; max-width: 520px; width: 100%;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.25); overflow: hidden;
+    }
+    .header { background: #1f3a5f; color: #fff; padding: 28px 24px; text-align: center; }
+    .header h1 { margin: 0 0 6px; font-size: 24px; }
+    .header p { margin: 0; opacity: 0.9; font-size: 15px; }
+    .body { padding: 28px 26px; }
+    .intro { font-size: 15px; line-height: 1.7; color: #444; margin: 0 0 22px; }
+    label { display: block; font-weight: bold; font-size: 14px; margin: 14px 0 6px; }
+    input[type=text], input[type=tel], input[type=email], textarea {
+      width: 100%; padding: 12px 14px; border: 1px solid #ccc; border-radius: 8px;
+      font-size: 15px; font-family: inherit;
+    }
+    textarea { resize: vertical; min-height: 80px; }
+    .checkbox-row { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
+    .checkbox-row input { width: 18px; height: 18px; }
+    .checkbox-row label { margin: 0; font-weight: normal; }
+    button {
+      margin-top: 22px; width: 100%; padding: 14px; background: #2e7d32; color: #fff;
+      border: none; border-radius: 8px; font-size: 17px; font-weight: bold; cursor: pointer;
+    }
+    button:hover { background: #256628; }
+    .error { background: #fdecea; color: #b71c1c; padding: 10px 14px; border-radius: 8px;
+             font-size: 14px; margin-bottom: 16px; }
+    .req { color: #c00; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <h1>{{ association_name }}</h1>
+      <p>הצטרפו אלינו — מלאו פרטים ונחזור אליכם</p>
+    </div>
+    <div class="body">
+      {% if error %}<div class="error">{{ error }}</div>{% endif %}
+      <p class="intro">
+        אנחנו קבוצה שמאגדת עסקים מקומיים ומעניקה לחברים ליווי, חשיפה ותמיכה.
+        השאירו פרטים ונחזור אליכם בהקדם להשלמת ההרשמה.
+      </p>
+      <form method="POST" action="/register">
+        <input type="hidden" name="ref" value="{{ ref }}">
+
+        <label for="full_name">שם מלא <span class="req">*</span></label>
+        <input type="text" id="full_name" name="full_name" required>
+
+        <label for="business">שם העסק</label>
+        <input type="text" id="business" name="business">
+
+        <label for="phone">טלפון <span class="req">*</span></label>
+        <input type="tel" id="phone" name="phone" required>
+
+        <label for="email">אימייל</label>
+        <input type="email" id="email" name="email">
+
+        <label for="message">הערה / שאלה</label>
+        <textarea id="message" name="message"></textarea>
+
+        <div class="checkbox-row">
+          <input type="checkbox" id="callback" name="callback">
+          <label for="callback">אשמח שתחזרו אליי טלפונית</label>
+        </div>
+
+        <button type="submit">שליחה והרשמה</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>
