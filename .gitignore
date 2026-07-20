@@ -16,6 +16,10 @@ data/leads.db
 exports/
 *.csv
 
+# Demo / rendered output
+data/sample_email.html
+data/*.html
+
 # Logs
 *.log
 
