@@ -18,6 +18,10 @@ def _bool(value: str, default: bool = False) -> bool:
 class Config:
     # Google Places
     google_api_key: str = os.getenv("GOOGLE_MAPS_API_KEY", "")
+    # מצב API: auto (ברירת מחדל) / new / legacy
+    places_api_mode: str = os.getenv("PLACES_API_MODE", "auto")
+    # כמה עמודי תוצאות למשוך לכל סוג עסק (רק ב-legacy; כל עמוד = עד 20 תוצאות)
+    max_pages_per_type: int = int(os.getenv("MAX_PAGES_PER_TYPE", "1"))
 
     # Filtering
     max_review_count: int = int(os.getenv("MAX_REVIEW_COUNT", "0"))

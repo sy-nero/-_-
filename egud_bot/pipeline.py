@@ -6,7 +6,7 @@ import logging
 
 from config import Config
 from data.neighborhoods import HAREDI_NEIGHBORHOODS, Neighborhood
-from egud_bot.places import PlacesClient
+from egud_bot.places import make_client
 from egud_bot.filters import BusinessLead, passes_filters
 from egud_bot.email_finder import find_email
 from egud_bot.storage import Storage
@@ -26,7 +26,7 @@ def scan(
     מחזיר סיכום מספרי.
     """
     neighborhoods = neighborhoods or HAREDI_NEIGHBORHOODS
-    client = PlacesClient(cfg.google_api_key, cfg.request_delay_seconds)
+    client = make_client(cfg)
 
     summary = {"scanned": 0, "passed": 0, "new": 0, "with_email": 0, "no_email": 0}
 
@@ -46,6 +46,9 @@ def scan(
             if storage.exists(lead.place_id):
                 continue  # כבר טופל בעבר
             summary["new"] += 1
+
+            # העשרת אתר/טלפון (רלוונטי ל-legacy — קריאת Details רק ללידים שעברו סינון)
+            client.enrich_contact(lead)
 
             email = find_email(lead.website, cfg.request_delay_seconds) if lead.website else None
             if email:
