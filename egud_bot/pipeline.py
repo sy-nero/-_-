@@ -109,18 +109,15 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False) -> dict:
         use_ssl=cfg.smtp_use_ssl,
         logo_path=cfg.logo_path,
     ) as mailer:
-        logo_src = "cid:logo" if mailer.logo_path else ""
         for lead in leads:
-            field = templates.field_label(lead["primary_type"])
-            subject = templates.build_subject(cfg.association_name, lead["name"], field)
+            subject = templates.build_subject(cfg.association_name, lead["name"])
             html = templates.build_html(
                 lead["name"], cfg.association_name,
                 cfg.landing_page_url, cfg.unsubscribe_url, lead["place_id"],
-                logo_src=logo_src or "cid:logo", field=field,
             )
             text = templates.build_text(
                 lead["name"], cfg.association_name,
-                cfg.landing_page_url, cfg.unsubscribe_url, lead["place_id"], field=field,
+                cfg.landing_page_url, cfg.unsubscribe_url, lead["place_id"],
             )
             try:
                 mailer.send(lead["email"], subject, html, text)

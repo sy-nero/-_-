@@ -43,7 +43,7 @@ class Config:
     landing_page_url: str = os.getenv("LANDING_PAGE_URL", "https://example.co.il/register")
     unsubscribe_url: str = os.getenv("UNSUBSCRIBE_URL", "https://example.co.il/unsubscribe")
     # נתיב לקובץ הלוגו של האיגוד (PNG/JPG) שיוטמע במייל
-    logo_path: str = os.getenv("LOGO_PATH", "assets/logo.png")
+    logo_path: str = os.getenv("LOGO_PATH", "assets/logo_white.png")
 
     # יעד איסוף: כמות מיילים שהסריקה תנסה לאסוף לפני עצירה
     target_emails: int = int(os.getenv("TARGET_EMAILS", "50"))

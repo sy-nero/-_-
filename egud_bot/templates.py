@@ -1,8 +1,8 @@
 """
 תבנית המייל שנשלח לעסקים — עיצוב מותג האיגוד (עברית, RTL).
 
-המסר: איגוד העסקים החרדיים פותח קבוצת מימון חדשה לעסקים — ממוקדת בתחום
-של הנמען. ההודעה מותאמת אישית לפי תחום העסק (מ-Google primary type).
+המסר: איגוד העסקים החרדיים פותח קבוצה חדשה למימון עסקים, ומזמין את העסק
+להצטרף כבר בשלב ההקמה. הניסוח כללי (לא מתמקד בתחום ספציפי).
 
 צבעי המותג:
   זהב (אקצנט/כפתורים)   #f4ea67
@@ -28,40 +28,11 @@ CARD = "#ffffff"
 TEXT = "#111827"
 TEXT_2 = "#4b5563"
 
-# ---- מיפוי תחום העסק (Google type -> תיאור בעברית) ----
-FIELD_LABELS = {
-    "bakery": "המאפיות",
-    "restaurant": "המסעדנות",
-    "food": "המזון",
-    "cafe": "בתי הקפה",
-    "clothing_store": "האופנה וההלבשה",
-    "grocery_store": "המכולת והמזון",
-    "convenience_store": "המרכולים",
-    "hair_care": "עיצוב השיער",
-    "beauty_salon": "היופי והטיפוח",
-    "book_store": "הספרים",
-    "electronics_store": "האלקטרוניקה",
-    "furniture_store": "הריהוט",
-    "jewelry_store": "התכשיטים",
-    "shoe_store": "ההנעלה",
-    "hardware_store": "כלי העבודה והברזל",
-    "florist": "הפרחים",
-    "gift_shop": "המתנות",
-    "pharmacy": "הפארם והבריאות",
-    "laundry": "המכבסות",
-    "store": "הקמעונאות",
-}
 
-
-def field_label(primary_type: str) -> str:
-    """מחזיר תיאור תחום בעברית לפי סוג העסק, או ברירת מחדל כללית."""
-    return FIELD_LABELS.get((primary_type or "").lower(), "שלכם")
-
-
-def build_subject(association_name: str, business_name: str = "", field: str = "שלכם") -> str:
+def build_subject(association_name: str, business_name: str = "") -> str:
     if business_name:
-        return f"{business_name}, נפתחת קבוצת מימון לעסקים בתחום {field} ✦"
-    return f"נפתחת קבוצת מימון לעסקים, הזמנה מ{association_name} ✦"
+        return f"{business_name}, נפתחת קבוצת מימון חדשה לעסקים ✦"
+    return f"נפתחת קבוצת מימון חדשה לעסקים, הזמנה מ{association_name} ✦"
 
 
 def _landing_link(base_url: str, place_id: str) -> str:
@@ -99,16 +70,15 @@ def build_html(
     unsubscribe_url: str,
     place_id: str = "",
     logo_src: str = "cid:logo",
-    field: str = "שלכם",
 ) -> str:
     link = _landing_link(landing_url, place_id)
     greeting = f"שלום {business_name}," if business_name else "שלום,"
 
     benefits = (
         _benefit_row("₪", "מימון בתנאים מותאמים",
-                     f"גישה למקורות מימון והון לצמיחה, בהתאמה לצרכים של עסקים בתחום {field}.")
-        + _benefit_row("✦", "קבוצה ממוקדת לתחום",
-                       f"לצד עסקים בדיוק כמו שלכם מתחום {field}: שיתופי פעולה, כוח קנייה והזדמנויות.")
+                     "גישה למקורות מימון והון לצמיחה, בהתאמה לצרכים של העסק שלכם.")
+        + _benefit_row("✦", "קהילת עסקים חזקה",
+                       "לצד עסקים נוספים מהמגזר: שיתופי פעולה, כוח קנייה והזדמנויות.")
         + _benefit_row("♦", "ליווי פיננסי אישי",
                        "ליווי מקצועי לאורך כל הדרך, מהבקשה ועד קבלת המימון בפועל.")
     )
@@ -124,7 +94,7 @@ def build_html(
 <body style="margin:0;padding:0;background:{PAGE_BG};
              font-family:'Segoe UI',Arial,Helvetica,sans-serif;">
   <div style="display:none;max-height:0;overflow:hidden;opacity:0;">
-    נפתחת קבוצת מימון חדשה לעסקים בתחום {field}. הזמנה אישית מ{association_name}.
+    נפתחת קבוצה חדשה למימון עסקים. הזמנה אישית מ{association_name}.
   </div>
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
          style="background:{PAGE_BG};padding:28px 12px;">
@@ -137,24 +107,18 @@ def build_html(
 
         <tr>
           <td style="background:linear-gradient(135deg,{NAVY_DARK} 0%,{NAVY_MID} 55%,{NAVY_DEEP} 100%);
-                     padding:38px 30px 34px;text-align:center;">
-            <div style="display:inline-block;background:#ffffff;border-radius:14px;
-                        padding:14px 22px;box-shadow:0 4px 14px rgba(0,0,0,0.18);">
-              <img src="{logo_src}" alt="{association_name}" width="200"
-                   style="display:block;width:200px;max-width:60vw;height:auto;">
-            </div>
-            <div style="display:inline-block;margin:24px 0 0;padding:5px 16px;border:1px solid {GOLD};
+                     padding:40px 30px 36px;text-align:center;">
+            <img src="{logo_src}" alt="{association_name}" width="230"
+                 style="display:block;margin:0 auto;width:230px;max-width:70vw;height:auto;">
+            <div style="display:inline-block;margin:26px 0 0;padding:5px 16px;border:1px solid {GOLD};
                         border-radius:999px;color:{GOLD};font-size:13px;font-weight:600;letter-spacing:.4px;">
               ✦ קבוצה חדשה נפתחת עכשיו
             </div>
-            <h1 style="margin:16px 0 8px;color:#ffffff;font-size:26px;line-height:1.35;font-weight:800;">
-              קבוצת מימון חדשה<br>לעסקים בתחום {field}
+            <h1 style="margin:16px 0 8px;color:#ffffff;font-size:27px;line-height:1.35;font-weight:800;">
+              קבוצת מימון חדשה לעסקים
             </h1>
             <div style="display:inline-block;height:3px;width:64px;background:{GOLD};
-                        border-radius:2px;margin:6px 0 14px;"></div>
-            <p style="margin:0;color:{GOLD};font-size:16px;font-weight:600;letter-spacing:.3px;">
-              {association_name}
-            </p>
+                        border-radius:2px;margin:8px 0 0;"></div>
           </td>
         </tr>
 
@@ -163,8 +127,7 @@ def build_html(
             <p style="margin:0 0 14px;font-size:17px;font-weight:bold;color:{TEXT};">{greeting}</p>
             <p style="margin:0 0 12px;font-size:16px;line-height:1.75;color:{TEXT_2};">
               אנחנו <strong style="color:{TEXT};">איגוד העסקים החרדיים</strong>, ואנחנו פותחים
-              בימים אלה <strong style="color:{TEXT};">קבוצה חדשה למימון עסקים</strong>,
-              ממוקדת דווקא בתחום {field}.
+              בימים אלה <strong style="color:{TEXT};">קבוצה חדשה למימון עסקים</strong>.
             </p>
             <p style="margin:0 0 8px;font-size:16px;line-height:1.75;color:{TEXT_2};">
               במסגרת סריקה של העסקים החדשים והמבטיחים באזור זיהינו דווקא
@@ -230,20 +193,18 @@ def build_text(
     landing_url: str,
     unsubscribe_url: str,
     place_id: str = "",
-    field: str = "שלכם",
 ) -> str:
     """גרסת טקסט פשוט (fallback עבור לקוחות מייל ללא HTML)."""
     link = _landing_link(landing_url, place_id)
     greeting = f"שלום {business_name}," if business_name else "שלום,"
     return (
         f"{greeting}\n\n"
-        f"אנחנו {association_name}, ואנחנו פותחים בימים אלה קבוצה חדשה למימון עסקים, "
-        f"ממוקדת דווקא בתחום {field}.\n\n"
+        f"אנחנו {association_name}, ואנחנו פותחים בימים אלה קבוצה חדשה למימון עסקים.\n\n"
         f"במסגרת סריקה של העסקים החדשים והמבטיחים באזור זיהינו דווקא אתכם, "
         f"ונשמח לצרף אתכם לקבוצה כבר בשלב ההקמה.\n\n"
         f"מה מקבלים כחברים בקבוצה:\n"
-        f"  • מימון והון לצמיחה בתנאים מותאמים לתחום {field}\n"
-        f"  • קבוצה ממוקדת לתחום: שיתופי פעולה, כוח קנייה והזדמנויות\n"
+        f"  • מימון והון לצמיחה בתנאים מותאמים\n"
+        f"  • קהילת עסקים חזקה: שיתופי פעולה, כוח קנייה והזדמנויות\n"
         f"  • ליווי פיננסי אישי מהבקשה ועד קבלת המימון\n\n"
         f"להצטרפות לקבוצת המימון (או שנחזור אליכם טלפונית):\n{link}\n\n"
         f"הודעה זו נשלחה מטעם {association_name}. להסרה מהרשימה: {unsubscribe_url}\n"
