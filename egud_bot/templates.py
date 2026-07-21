@@ -61,7 +61,7 @@ def field_label(primary_type: str) -> str:
 def build_subject(association_name: str, business_name: str = "", field: str = "שלכם") -> str:
     if business_name:
         return f"{business_name}, נפתחת קבוצת מימון לעסקים בתחום {field} ✦"
-    return f"נפתחת קבוצת מימון לעסקים — הזמנה מ{association_name} ✦"
+    return f"נפתחת קבוצת מימון לעסקים, הזמנה מ{association_name} ✦"
 
 
 def _landing_link(base_url: str, place_id: str) -> str:
@@ -107,10 +107,10 @@ def build_html(
     benefits = (
         _benefit_row("₪", "מימון בתנאים מותאמים",
                      f"גישה למקורות מימון והון לצמיחה, בהתאמה לצרכים של עסקים בתחום {field}.")
-        + _benefit_row("✦", "קבוצה ממוקדת־תחום",
-                       f"לצד עסקים בדיוק כמו שלכם מתחום {field} — שיתופי פעולה, כוח קנייה והזדמנויות.")
+        + _benefit_row("✦", "קבוצה ממוקדת לתחום",
+                       f"לצד עסקים בדיוק כמו שלכם מתחום {field}: שיתופי פעולה, כוח קנייה והזדמנויות.")
         + _benefit_row("♦", "ליווי פיננסי אישי",
-                       "ליווי מקצועי לאורך כל הדרך — מהבקשה ועד קבלת המימון בפועל.")
+                       "ליווי מקצועי לאורך כל הדרך, מהבקשה ועד קבלת המימון בפועל.")
     )
 
     return f"""<!DOCTYPE html>
@@ -124,7 +124,7 @@ def build_html(
 <body style="margin:0;padding:0;background:{PAGE_BG};
              font-family:'Segoe UI',Arial,Helvetica,sans-serif;">
   <div style="display:none;max-height:0;overflow:hidden;opacity:0;">
-    נפתחת קבוצת מימון חדשה לעסקים בתחום {field} — הזמנה אישית מ{association_name}.
+    נפתחת קבוצת מימון חדשה לעסקים בתחום {field}. הזמנה אישית מ{association_name}.
   </div>
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
          style="background:{PAGE_BG};padding:28px 12px;">
@@ -133,10 +133,8 @@ def build_html(
              style="max-width:600px;width:100%;background:{CARD};border-radius:18px;
                     overflow:hidden;box-shadow:0 8px 30px rgba(15,31,56,0.14);">
 
-        <!-- פס זהב עליון -->
         <tr><td style="height:6px;background:{GOLD};font-size:0;line-height:0;">&nbsp;</td></tr>
 
-        <!-- Hero: נייבי + לוגו -->
         <tr>
           <td style="background:linear-gradient(135deg,{NAVY_DARK} 0%,{NAVY_MID} 55%,{NAVY_DEEP} 100%);
                      padding:38px 30px 34px;text-align:center;">
@@ -160,23 +158,21 @@ def build_html(
           </td>
         </tr>
 
-        <!-- גוף ההודעה -->
         <tr>
           <td style="padding:32px 34px 8px;">
             <p style="margin:0 0 14px;font-size:17px;font-weight:bold;color:{TEXT};">{greeting}</p>
             <p style="margin:0 0 12px;font-size:16px;line-height:1.75;color:{TEXT_2};">
               אנחנו <strong style="color:{TEXT};">איגוד העסקים החרדיים</strong>, ואנחנו פותחים
-              בימים אלה <strong style="color:{TEXT};">קבוצה חדשה למימון עסקים</strong> —
+              בימים אלה <strong style="color:{TEXT};">קבוצה חדשה למימון עסקים</strong>,
               ממוקדת דווקא בתחום {field}.
             </p>
             <p style="margin:0 0 8px;font-size:16px;line-height:1.75;color:{TEXT_2};">
-              במסגרת סריקה של העסקים החדשים והמבטיחים באזור — <strong style="color:{TEXT};">זיהינו
-              דווקא אתכם</strong>, ונשמח לצרף אתכם לקבוצה כבר בשלב ההקמה.
+              במסגרת סריקה של העסקים החדשים והמבטיחים באזור זיהינו דווקא
+              <strong style="color:{TEXT};">אתכם</strong>, ונשמח לצרף אתכם לקבוצה כבר בשלב ההקמה.
             </p>
           </td>
         </tr>
 
-        <!-- יתרונות -->
         <tr>
           <td style="padding:8px 34px 6px;">
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
@@ -185,7 +181,6 @@ def build_html(
           </td>
         </tr>
 
-        <!-- CTA -->
         <tr>
           <td style="padding:22px 34px 6px;text-align:center;">
             <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
@@ -204,7 +199,6 @@ def build_html(
           </td>
         </tr>
 
-        <!-- קו הפרדה + קישור טקסט -->
         <tr>
           <td style="padding:22px 34px 4px;">
             <div style="border-top:1px solid #eef0f4;padding-top:14px;font-size:12px;color:#9aa2b1;
@@ -215,7 +209,6 @@ def build_html(
           </td>
         </tr>
 
-        <!-- Footer -->
         <tr>
           <td style="padding:16px 30px 22px;background:{PAGE_BG};
                      color:#9aa2b1;font-size:12px;line-height:1.7;text-align:center;">
@@ -244,15 +237,14 @@ def build_text(
     greeting = f"שלום {business_name}," if business_name else "שלום,"
     return (
         f"{greeting}\n\n"
-        f"אנחנו {association_name}, ואנחנו פותחים בימים אלה קבוצה חדשה למימון עסקים — "
+        f"אנחנו {association_name}, ואנחנו פותחים בימים אלה קבוצה חדשה למימון עסקים, "
         f"ממוקדת דווקא בתחום {field}.\n\n"
         f"במסגרת סריקה של העסקים החדשים והמבטיחים באזור זיהינו דווקא אתכם, "
         f"ונשמח לצרף אתכם לקבוצה כבר בשלב ההקמה.\n\n"
         f"מה מקבלים כחברים בקבוצה:\n"
         f"  • מימון והון לצמיחה בתנאים מותאמים לתחום {field}\n"
-        f"  • קבוצה ממוקדת־תחום — שיתופי פעולה, כוח קנייה והזדמנויות\n"
+        f"  • קבוצה ממוקדת לתחום: שיתופי פעולה, כוח קנייה והזדמנויות\n"
         f"  • ליווי פיננסי אישי מהבקשה ועד קבלת המימון\n\n"
         f"להצטרפות לקבוצת המימון (או שנחזור אליכם טלפונית):\n{link}\n\n"
-        f"---\n"
         f"הודעה זו נשלחה מטעם {association_name}. להסרה מהרשימה: {unsubscribe_url}\n"
     )
