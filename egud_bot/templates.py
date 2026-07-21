@@ -54,8 +54,8 @@ def _benefit_row(icon: str, title: str, desc: str) -> str:
                           line-height:38px;">{icon}</div>
             </td>
             <td valign="top" style="padding-right:12px;">
-              <div style="font-size:16px;font-weight:bold;color:{TEXT};margin-bottom:2px;">{title}</div>
-              <div style="font-size:14px;color:{TEXT_2};line-height:1.6;">{desc}</div>
+              <div style="font-size:18px;font-weight:bold;color:{TEXT};margin-bottom:3px;">{title}</div>
+              <div style="font-size:16px;color:{TEXT_2};line-height:1.65;">{desc}</div>
             </td>
           </tr>
         </table>
@@ -114,12 +114,12 @@ def build_html(
                         border-radius:999px;color:{GOLD};font-size:13px;font-weight:600;letter-spacing:.4px;">
               ✦ קבוצה חדשה נפתחת עכשיו
             </div>
-            <p style="margin:18px 0 2px;color:{GOLD};font-size:18px;font-weight:700;">
+            <h1 style="margin:18px 0 4px;color:#ffffff;font-size:33px;line-height:1.3;font-weight:800;">
               העסק שלך זקוק למימון?
-            </p>
-            <h1 style="margin:6px 0 8px;color:#ffffff;font-size:27px;line-height:1.35;font-weight:800;">
-              קבוצת מימון חדשה לעסקים
             </h1>
+            <p style="margin:0 0 6px;color:{GOLD};font-size:20px;font-weight:700;">
+              קבוצת מימון חדשה לעסקים
+            </p>
             <div style="display:inline-block;height:3px;width:64px;background:{GOLD};
                         border-radius:2px;margin:8px 0 0;"></div>
           </td>
@@ -127,8 +127,8 @@ def build_html(
 
         <tr>
           <td style="padding:32px 34px 4px;">
-            <p style="margin:0 0 14px;font-size:17px;font-weight:bold;color:{TEXT};">{greeting}</p>
-            <p style="margin:0 0 12px;font-size:16px;line-height:1.75;color:{TEXT_2};">
+            <p style="margin:0 0 16px;font-size:20px;font-weight:bold;color:{TEXT};">{greeting}</p>
+            <p style="margin:0 0 12px;font-size:18px;line-height:1.8;color:{TEXT_2};">
               אנחנו ב<strong style="color:{TEXT};">איגוד העסקים החרדיים</strong> פותחים בימים אלו
               <strong style="color:{TEXT};">קבוצה של מימון לבעלי עסקים מהאזור שלך</strong>.
               הקבוצה נועדה לתת לך גב פיננסי אמיתי, גישה למקורות מימון בתנאים טובים
@@ -139,7 +139,7 @@ def build_html(
 
         <tr>
           <td style="padding:12px 34px 6px;">
-            <p style="margin:0 0 4px;font-size:18px;font-weight:800;color:{NAVY_DARK};">
+            <p style="margin:0 0 6px;font-size:21px;font-weight:800;color:{NAVY_DARK};">
               מה תקבלו בקבוצה:
             </p>
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
@@ -154,36 +154,16 @@ def build_html(
               <tr><td align="center" style="border-radius:12px;background:{GOLD};
                        box-shadow:0 6px 16px rgba(244,234,103,0.5);">
                 <a href="{link}" target="_blank"
-                   style="display:inline-block;padding:16px 44px;color:{NAVY_DEEP};
-                          text-decoration:none;font-size:18px;font-weight:800;border-radius:12px;">
-                  להצטרפות לקבוצת המימון ›
+                   style="display:inline-block;padding:17px 48px;color:{NAVY_DEEP};
+                          text-decoration:none;font-size:20px;font-weight:800;border-radius:12px;">
+                  להשארת פרטים ›
                 </a>
               </td></tr>
             </table>
-            <p style="margin:16px 0 0;font-size:14px;color:{TEXT_2};">
-              מעדיפים שנחזור אליכם? השאירו פרטים בקישור ונתקשר אליכם. 📞
-            </p>
           </td>
         </tr>
 
-        <tr>
-          <td style="padding:22px 34px 4px;">
-            <div style="border-top:1px solid #eef0f4;padding-top:14px;font-size:12px;color:#9aa2b1;
-                        text-align:center;line-height:1.6;">
-              אם הכפתור אינו עובד, העתיקו את הקישור לדפדפן:<br>
-              <a href="{link}" style="color:{NAVY_MID};">{link}</a>
-            </div>
-          </td>
-        </tr>
-
-        <tr>
-          <td style="padding:16px 30px 22px;background:{PAGE_BG};
-                     color:#9aa2b1;font-size:12px;line-height:1.7;text-align:center;">
-            הודעה זו נשלחה מטעם <strong style="color:{TEXT_2};">{association_name}</strong> לעסקים באזור.<br>
-            אם אינכם מעוניינים לקבל פניות נוספות,
-            <a href="{unsubscribe_url}" style="color:#9aa2b1;text-decoration:underline;">להסרה לחצו כאן</a>.
-          </td>
-        </tr>
+        <tr><td style="height:14px;font-size:0;line-height:0;">&nbsp;</td></tr>
       </table>
     </td></tr>
   </table>
@@ -211,6 +191,5 @@ def build_text(
         f"  • מימון והון לצמיחה בתנאים מותאמים\n"
         f"  • קהילת עסקים חזקה: שיתופי פעולה, כוח קנייה והזדמנויות\n"
         f"  • ליווי פיננסי אישי מהבקשה ועד קבלת המימון\n\n"
-        f"להצטרפות לקבוצת המימון (או שנחזור אליכם טלפונית):\n{link}\n\n"
-        f"הודעה זו נשלחה מטעם {association_name}. להסרה מהרשימה: {unsubscribe_url}\n"
+        f"להשארת פרטים:\n{link}\n"
     )
