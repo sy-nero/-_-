@@ -114,7 +114,10 @@ def build_html(
                         border-radius:999px;color:{GOLD};font-size:13px;font-weight:600;letter-spacing:.4px;">
               ✦ קבוצה חדשה נפתחת עכשיו
             </div>
-            <h1 style="margin:16px 0 8px;color:#ffffff;font-size:27px;line-height:1.35;font-weight:800;">
+            <p style="margin:18px 0 2px;color:{GOLD};font-size:18px;font-weight:700;">
+              העסק שלך זקוק למימון?
+            </p>
+            <h1 style="margin:6px 0 8px;color:#ffffff;font-size:27px;line-height:1.35;font-weight:800;">
               קבוצת מימון חדשה לעסקים
             </h1>
             <div style="display:inline-block;height:3px;width:64px;background:{GOLD};
@@ -123,21 +126,22 @@ def build_html(
         </tr>
 
         <tr>
-          <td style="padding:32px 34px 8px;">
+          <td style="padding:32px 34px 4px;">
             <p style="margin:0 0 14px;font-size:17px;font-weight:bold;color:{TEXT};">{greeting}</p>
             <p style="margin:0 0 12px;font-size:16px;line-height:1.75;color:{TEXT_2};">
-              אנחנו <strong style="color:{TEXT};">איגוד העסקים החרדיים</strong>, ואנחנו פותחים
-              בימים אלה <strong style="color:{TEXT};">קבוצה חדשה למימון עסקים</strong>.
-            </p>
-            <p style="margin:0 0 8px;font-size:16px;line-height:1.75;color:{TEXT_2};">
-              במסגרת סריקה של העסקים החדשים והמבטיחים באזור זיהינו דווקא
-              <strong style="color:{TEXT};">אתכם</strong>, ונשמח לצרף אתכם לקבוצה כבר בשלב ההקמה.
+              אנחנו ב<strong style="color:{TEXT};">איגוד העסקים החרדיים</strong> פותחים בימים אלו
+              <strong style="color:{TEXT};">קבוצה של מימון לבעלי עסקים מהאזור שלך</strong>.
+              הקבוצה נועדה לתת לך גב פיננסי אמיתי, גישה למקורות מימון בתנאים טובים
+              וליווי צמוד לאורך כל הדרך, כדי שהעסק שלך יוכל לצמוח ולהתפתח בביטחון.
             </p>
           </td>
         </tr>
 
         <tr>
-          <td style="padding:8px 34px 6px;">
+          <td style="padding:12px 34px 6px;">
+            <p style="margin:0 0 4px;font-size:18px;font-weight:800;color:{NAVY_DARK};">
+              מה תקבלו בקבוצה:
+            </p>
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
               {benefits}
             </table>
@@ -198,11 +202,12 @@ def build_text(
     link = _landing_link(landing_url, place_id)
     greeting = f"שלום {business_name}," if business_name else "שלום,"
     return (
+        f"העסק שלך זקוק למימון?\n\n"
         f"{greeting}\n\n"
-        f"אנחנו {association_name}, ואנחנו פותחים בימים אלה קבוצה חדשה למימון עסקים.\n\n"
-        f"במסגרת סריקה של העסקים החדשים והמבטיחים באזור זיהינו דווקא אתכם, "
-        f"ונשמח לצרף אתכם לקבוצה כבר בשלב ההקמה.\n\n"
-        f"מה מקבלים כחברים בקבוצה:\n"
+        f"אנחנו ב{association_name} פותחים בימים אלו קבוצה של מימון לבעלי עסקים מהאזור שלך. "
+        f"הקבוצה נועדה לתת לך גב פיננסי אמיתי, גישה למקורות מימון בתנאים טובים "
+        f"וליווי צמוד לאורך כל הדרך, כדי שהעסק שלך יוכל לצמוח ולהתפתח בביטחון.\n\n"
+        f"מה תקבלו בקבוצה:\n"
         f"  • מימון והון לצמיחה בתנאים מותאמים\n"
         f"  • קהילת עסקים חזקה: שיתופי פעולה, כוח קנייה והזדמנויות\n"
         f"  • ליווי פיננסי אישי מהבקשה ועד קבלת המימון\n\n"
