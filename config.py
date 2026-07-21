@@ -39,7 +39,7 @@ class Config:
     reply_to: str = os.getenv("REPLY_TO", "")
 
     # Email content
-    association_name: str = os.getenv("ASSOCIATION_NAME", "האיגוד")
+    association_name: str = os.getenv("ASSOCIATION_NAME", "איגוד העסקים החרדיים")
     landing_page_url: str = os.getenv("LANDING_PAGE_URL", "https://example.co.il/register")
     unsubscribe_url: str = os.getenv("UNSUBSCRIBE_URL", "https://example.co.il/unsubscribe")
     # נתיב לקובץ הלוגו של האיגוד (PNG/JPG) שיוטמע במייל
