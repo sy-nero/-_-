@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 96" role="img" aria-label="לוגו האיגוד">
+  <circle cx="48" cy="48" r="40" fill="#1a2e4a" stroke="#f4ea67" stroke-width="4"/>
+  <text x="48" y="63" text-anchor="middle" font-family="Arial, sans-serif" font-size="44" font-weight="bold" fill="#f4ea67">א</text>
+  <text x="308" y="52" text-anchor="end" font-family="Arial, sans-serif" font-size="34" font-weight="bold" fill="#1a2e4a">האיגוד</text>
+  <text x="308" y="76" text-anchor="end" font-family="Arial, sans-serif" font-size="15" fill="#4b5563">איגוד העסקים</text>
+</svg>

@@ -20,18 +20,22 @@ def scan(
     cfg: Config,
     storage: Storage,
     neighborhoods: list[Neighborhood] | None = None,
+    target_emails: int | None = None,
 ) -> dict:
     """
     סורק את השכונות, מסנן, מאתר מיילים ושומר לידים חדשים ב-DB.
+    עוצר מוקדם ברגע שנאספו `target_emails` מיילים חדשים (ברירת מחדל: cfg.target_emails).
     מחזיר סיכום מספרי.
     """
     neighborhoods = neighborhoods or HAREDI_NEIGHBORHOODS
+    target = cfg.target_emails if target_emails is None else target_emails
     client = make_client(cfg)
 
     summary = {"scanned": 0, "passed": 0, "new": 0, "with_email": 0, "no_email": 0}
 
     for nb in neighborhoods:
-        logger.info("סורק שכונה: %s", nb.name)
+        logger.info("סורק שכונה: %s (מיילים שנאספו: %d/%d)",
+                    nb.name, summary["with_email"], target)
         places = client.scan_point(nb.lat, nb.lng, cfg.search_radius_meters)
         summary["scanned"] += len(places)
 
@@ -54,12 +58,25 @@ def scan(
             if email:
                 summary["with_email"] += 1
                 storage.upsert_lead(lead, email, status="found")
+                logger.info("  ✔ מייל נמצא (%d/%d): %s → %s",
+                            summary["with_email"], target, lead.name, email)
             else:
                 summary["no_email"] += 1
                 storage.upsert_lead(lead, None, status="no_email")
 
             time.sleep(cfg.request_delay_seconds)
 
+            if summary["with_email"] >= target:
+                logger.info("הושג יעד של %d מיילים — עוצר את הסריקה.", target)
+                logger.info("סיכום סריקה: %s", summary)
+                return summary
+
+    if summary["with_email"] < target:
+        logger.warning(
+            "הסריקה מוצתה עם %d מיילים בלבד (יעד: %d). "
+            "רוב העסקים החדשים ללא אתר/מייל — שקלו העלאת MAX_REVIEW_COUNT או הרחבת שכונות.",
+            summary["with_email"], target,
+        )
     logger.info("סיכום סריקה: %s", summary)
     return summary
 
@@ -90,12 +107,15 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False) -> dict:
         from_name=cfg.from_name,
         reply_to=cfg.reply_to,
         use_ssl=cfg.smtp_use_ssl,
+        logo_path=cfg.logo_path,
     ) as mailer:
+        logo_src = "cid:logo" if mailer.logo_path else ""
         for lead in leads:
             subject = templates.build_subject(cfg.association_name, lead["name"])
             html = templates.build_html(
                 lead["name"], cfg.association_name,
                 cfg.landing_page_url, cfg.unsubscribe_url, lead["place_id"],
+                logo_src=logo_src or "cid:logo",
             )
             text = templates.build_text(
                 lead["name"], cfg.association_name,

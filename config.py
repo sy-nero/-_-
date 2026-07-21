@@ -42,6 +42,11 @@ class Config:
     association_name: str = os.getenv("ASSOCIATION_NAME", "האיגוד")
     landing_page_url: str = os.getenv("LANDING_PAGE_URL", "https://example.co.il/register")
     unsubscribe_url: str = os.getenv("UNSUBSCRIBE_URL", "https://example.co.il/unsubscribe")
+    # נתיב לקובץ הלוגו של האיגוד (PNG/JPG) שיוטמע במייל
+    logo_path: str = os.getenv("LOGO_PATH", "assets/logo.png")
+
+    # יעד איסוף: כמות מיילים שהסריקה תנסה לאסוף לפני עצירה
+    target_emails: int = int(os.getenv("TARGET_EMAILS", "50"))
 
     # Safety / rate
     max_emails_per_run: int = int(os.getenv("MAX_EMAILS_PER_RUN", "50"))
