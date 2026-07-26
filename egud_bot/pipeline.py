@@ -113,11 +113,12 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False) -> dict:
             subject = templates.build_subject(cfg.association_name, lead["name"])
             html = templates.build_html(
                 lead["name"], cfg.association_name,
-                cfg.landing_page_url, cfg.unsubscribe_url, lead["place_id"],
+                cfg.contact_email, cfg.unsubscribe_url, lead["place_id"],
+                logo_src=logo_src or "cid:logo",
             )
             text = templates.build_text(
                 lead["name"], cfg.association_name,
-                cfg.landing_page_url, cfg.unsubscribe_url, lead["place_id"],
+                cfg.contact_email, cfg.unsubscribe_url, lead["place_id"],
             )
             try:
                 mailer.send(lead["email"], subject, html, text)

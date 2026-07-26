@@ -15,7 +15,7 @@
   טקסט ראשי             #111827
   טקסט משני             #4b5563
 """
-from urllib.parse import urlencode
+from urllib.parse import urlencode, quote
 
 # ---- פלטת צבעי המותג ----
 GOLD = "#f4ea67"
@@ -63,15 +63,28 @@ def _benefit_row(icon: str, title: str, desc: str) -> str:
     </tr>"""
 
 
+def _mailto(contact_email: str, business_name: str = "") -> str:
+    """בונה קישור mailto עם נושא וגוף מוכנים מראש לפנייה חזרה לאיגוד."""
+    subject = "מעוניין בקבוצת המימון של איגוד העסקים החרדיים"
+    body = (
+        "שלום,\n"
+        "אשמח לקבל פרטים על קבוצת המימון.\n\n"
+        f"שם העסק: {business_name}\n"
+        "שם איש קשר: \n"
+        "טלפון: \n"
+    )
+    return f"mailto:{contact_email}?subject={quote(subject)}&body={quote(body)}"
+
+
 def build_html(
     business_name: str,
     association_name: str,
-    landing_url: str,
-    unsubscribe_url: str,
+    contact_email: str,
+    unsubscribe_url: str = "",
     place_id: str = "",
     logo_src: str = "cid:logo",
 ) -> str:
-    link = _landing_link(landing_url, place_id)
+    link = _mailto(contact_email, business_name)
     greeting = f"שלום {business_name}," if business_name else "שלום,"
 
     benefits = (
@@ -177,12 +190,11 @@ def build_html(
 def build_text(
     business_name: str,
     association_name: str,
-    landing_url: str,
-    unsubscribe_url: str,
+    contact_email: str,
+    unsubscribe_url: str = "",
     place_id: str = "",
 ) -> str:
     """גרסת טקסט פשוט (fallback עבור לקוחות מייל ללא HTML)."""
-    link = _landing_link(landing_url, place_id)
     greeting = f"שלום {business_name}," if business_name else "שלום,"
     return (
         f"נמאס לשלם הון ליועצי מימון?\n\n"
@@ -195,5 +207,5 @@ def build_text(
         f"  • הנחות אצל יועצי מימון, במקום לשלם מחיר מלא\n"
         f"  • אנחנו עושים בשבילך את העבודה מול היועצים\n"
         f"  • תנאים ומקורות מימון טובים יותר\n\n"
-        f"להשארת פרטים:\n{link}\n"
+        f"להשארת פרטים, השיבו למייל הזה או שלחו הודעה אל: {contact_email}\n"
     )
