@@ -93,20 +93,34 @@ class Storage:
             )
 
     def mark_emailed(self, place_id: str, success: bool, error: str = "") -> None:
+        status = "emailed" if success else "failed"
         with self._conn() as conn:
-            conn.execute(
-                """UPDATE leads SET status=?, error=?, emailed_at=?
-                   WHERE place_id=?""",
-                ("emailed" if success else "failed", error, _now(), place_id),
-            )
+            # מסמנים את כל הלידים עם אותה כתובת מייל, כדי לא לשלוח פעמיים לאותו אדם
+            row = conn.execute(
+                "SELECT email FROM leads WHERE place_id=?", (place_id,)
+            ).fetchone()
+            email = row["email"] if row else None
+            if email:
+                conn.execute(
+                    """UPDATE leads SET status=?, error=?, emailed_at=?
+                       WHERE lower(email)=lower(?)""",
+                    (status, error, _now(), email),
+                )
+            else:
+                conn.execute(
+                    """UPDATE leads SET status=?, error=?, emailed_at=?
+                       WHERE place_id=?""",
+                    (status, error, _now(), place_id),
+                )
 
     def leads_to_email(self, limit: int) -> list[sqlite3.Row]:
-        """לידים עם מייל שעדיין לא נשלח אליהם."""
+        """לידים עם מייל שעדיין לא נשלח אליהם (ללא כפילויות מייל)."""
         with self._conn() as conn:
             return conn.execute(
                 """SELECT * FROM leads
                    WHERE email IS NOT NULL AND email != ''
                      AND status IN ('found', 'no_email')
+                   GROUP BY lower(email)
                    ORDER BY found_at ASC LIMIT ?""",
                 (limit,),
             ).fetchall()
