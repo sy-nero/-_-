@@ -6,13 +6,15 @@ Google Places לא מחזיר מייל, לכן אנחנו נכנסים לאתר 
 """
 import re
 import logging
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, unquote
 import requests
 from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
 EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
+# ולידציה מלאה של כתובת (בלי %, בלי רווחים) — לאחר ניקוי
+EMAIL_STRICT_RE = re.compile(r"^[a-zA-Z0-9._+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
 
 # סיומות קבצים שאינן מיילים אמיתיים (מסננים false positives)
 _IGNORE_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".css", ".js")
@@ -29,11 +31,14 @@ HEADERS = {
 
 
 def _clean_email(email: str) -> str | None:
-    email = email.strip().strip(".").lower()
-    low = email.lower()
-    if any(low.endswith(suf) for suf in _IGNORE_SUFFIXES):
+    # פענוח %20 וכד', והסרת רווחים/סימנים מיותרים בקצוות
+    email = unquote(email).strip().strip(".").strip().lower()
+    # ולידציה קפדנית — פוסל כתובות עם רווחים/תווים לא חוקיים
+    if not EMAIL_STRICT_RE.match(email):
         return None
-    domain = low.split("@")[-1]
+    if any(email.endswith(suf) for suf in _IGNORE_SUFFIXES):
+        return None
+    domain = email.split("@")[-1]
     if any(bad in domain for bad in _IGNORE_DOMAINS):
         return None
     return email

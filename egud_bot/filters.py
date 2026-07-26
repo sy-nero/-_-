@@ -8,7 +8,28 @@
 שהוגדר. לכן שני התנאים ("שנת ייסוד עד שנה" ו-"אין תגובות") מתמזגים
 לתנאי אחד יישים: מספר ביקורות <= סף.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+# סוגי מקומות שאינם עסקים שזקוקים למימון — נסננים החוצה
+# (מוסדות ציבור, בנקים, בתי ספר, מוסדות דת, ממשלה, בריאות וכו')
+EXCLUDED_TYPES = {
+    # חינוך
+    "school", "primary_school", "secondary_school", "university",
+    "preschool", "library",
+    # פיננסים / בנקאות
+    "bank", "atm", "accounting",
+    # ממשל / ציבורי / חירום
+    "local_government_office", "city_hall", "courthouse", "police",
+    "fire_station", "post_office", "embassy", "government",
+    # דת
+    "place_of_worship", "synagogue", "church", "mosque", "hindu_temple",
+    "cemetery", "funeral_home",
+    # בריאות / מוסדות
+    "hospital", "doctor", "dentist",
+    # תחבורה / תשתית
+    "transit_station", "bus_station", "train_station", "subway_station",
+    "airport", "parking",
+}
 
 
 @dataclass
@@ -25,6 +46,7 @@ class BusinessLead:
     business_status: str
     primary_type: str
     neighborhood: str = ""
+    types: list = field(default_factory=list)
 
     @classmethod
     def from_place(cls, place: dict, neighborhood: str = "") -> "BusinessLead":
@@ -43,6 +65,7 @@ class BusinessLead:
             business_status=place.get("businessStatus", ""),
             primary_type=place.get("primaryType", ""),
             neighborhood=neighborhood,
+            types=place.get("types", []) or [],
         )
 
 
@@ -55,5 +78,9 @@ def passes_filters(
     if require_operational and lead.business_status not in ("", "OPERATIONAL"):
         return False
     if lead.review_count > max_review_count:
+        return False
+    # פסילת מוסדות שאינם עסקים (בנקים, בתי ספר, משטרה, מוסדות דת וכו')
+    all_types = set(lead.types) | {lead.primary_type}
+    if all_types & EXCLUDED_TYPES:
         return False
     return True
