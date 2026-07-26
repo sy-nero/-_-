@@ -46,14 +46,14 @@ def _benefit_row(icon: str, title: str, desc: str) -> str:
     return f"""
     <tr>
       <td style="padding:10px 0;" valign="top">
-        <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+        <table role="presentation" dir="rtl" cellpadding="0" cellspacing="0" width="100%">
           <tr>
             <td width="46" valign="top">
               <div style="width:38px;height:38px;border-radius:50%;background:{GOLD};
                           color:{NAVY_DEEP};font-size:19px;font-weight:bold;text-align:center;
                           line-height:38px;">{icon}</div>
             </td>
-            <td valign="top" style="padding-right:12px;">
+            <td valign="top" style="padding-right:12px;direction:rtl;text-align:right;">
               <div style="font-size:18px;font-weight:bold;color:{TEXT};margin-bottom:3px;">{title}</div>
               <div style="font-size:16px;color:{TEXT_2};line-height:1.65;">{desc}</div>
             </td>
@@ -109,12 +109,12 @@ def build_html(
   <div style="display:none;max-height:0;overflow:hidden;opacity:0;">
     נפתחת קבוצה חדשה למימון עסקים. הזמנה אישית מ{association_name}.
   </div>
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-         style="background:{PAGE_BG};padding:28px 12px;">
+  <table role="presentation" dir="rtl" width="100%" cellpadding="0" cellspacing="0"
+         style="background:{PAGE_BG};padding:28px 12px;direction:rtl;">
     <tr><td align="center">
-      <table role="presentation" width="600" cellpadding="0" cellspacing="0"
+      <table role="presentation" dir="rtl" width="600" cellpadding="0" cellspacing="0"
              style="max-width:600px;width:100%;background:{CARD};border-radius:18px;
-                    overflow:hidden;box-shadow:0 8px 30px rgba(15,31,56,0.14);">
+                    overflow:hidden;box-shadow:0 8px 30px rgba(15,31,56,0.14);direction:rtl;">
 
         <tr><td style="height:6px;background:{GOLD};font-size:0;line-height:0;">&nbsp;</td></tr>
 
@@ -139,7 +139,7 @@ def build_html(
         </tr>
 
         <tr>
-          <td style="padding:32px 34px 4px;">
+          <td dir="rtl" style="padding:32px 34px 4px;direction:rtl;text-align:right;">
             <p style="margin:0 0 16px;font-size:20px;font-weight:bold;color:{TEXT};">{greeting}</p>
             <p style="margin:0 0 12px;font-size:18px;line-height:1.8;color:{TEXT_2};">
               אנחנו ב<strong style="color:{TEXT};">איגוד העסקים החרדיים</strong> הקמנו
@@ -154,7 +154,7 @@ def build_html(
         </tr>
 
         <tr>
-          <td style="padding:12px 34px 6px;">
+          <td dir="rtl" style="padding:12px 34px 6px;direction:rtl;text-align:right;">
             <p style="margin:0 0 6px;font-size:21px;font-weight:800;color:{NAVY_DARK};">
               מה תקבלו בקבוצה:
             </p>
