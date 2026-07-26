@@ -111,6 +111,7 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False) -> dict:
         use_ssl=cfg.smtp_use_ssl,
         logo_path=cfg.logo_path,
     ) as mailer:
+        logo_src = "cid:logo" if mailer.logo_path else ""
         for lead in leads:
             subject = templates.build_subject(cfg.association_name, lead["name"])
             html = templates.build_html(
