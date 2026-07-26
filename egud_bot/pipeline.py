@@ -95,7 +95,9 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False) -> dict:
     if dry_run:
         for lead in leads:
             logger.info("[DRY-RUN] היה נשלח מייל אל %s <%s>", lead["name"], lead["email"])
-        summary["sent"] = len(leads)
+        summary["would_send"] = len(leads)
+        summary["note"] = "תצוגה מקדימה בלבד — לא נשלח דבר! להרצה אמיתית: python main.py send"
+        logger.info("זו תצוגה מקדימה (DRY-RUN) — לא נשלח אף מייל בפועל.")
         return summary
 
     with Mailer(
