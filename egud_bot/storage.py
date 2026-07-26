@@ -111,6 +111,20 @@ class Storage:
                 (limit,),
             ).fetchall()
 
+    def purge_non_business(self) -> list[str]:
+        """מסיר מה-DB לידים שהם מוסדות (לפי שם או סוג), בלי סריקה מחדש."""
+        from egud_bot.filters import is_excluded_by_name, EXCLUDED_TYPES
+        removed = []
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT place_id, name, primary_type FROM leads"
+            ).fetchall()
+            for r in rows:
+                if is_excluded_by_name(r["name"]) or r["primary_type"] in EXCLUDED_TYPES:
+                    conn.execute("DELETE FROM leads WHERE place_id=?", (r["place_id"],))
+                    removed.append(r["name"])
+        return removed
+
     def stats(self) -> dict:
         with self._conn() as conn:
             rows = conn.execute(

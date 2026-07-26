@@ -63,6 +63,17 @@ def cmd_run(args) -> int:
     return cmd_send(args)
 
 
+def cmd_clean(args) -> int:
+    storage = Storage(config.db_path)
+    removed = storage.purge_non_business()
+    print(f"\nהוסרו {len(removed)} מוסדות (לא עסקים):")
+    for name in removed:
+        print(f"  - {name}")
+    if not removed:
+        print("  (אין מה להסיר, הרשימה נקייה)")
+    return 0
+
+
 def cmd_stats(args) -> int:
     storage = Storage(config.db_path)
     stats = storage.stats()
@@ -105,6 +116,8 @@ def build_parser() -> argparse.ArgumentParser:
     rp = sub.add_parser("run", help="scan ואז send")
     rp.add_argument("--dry-run", action="store_true", help="בלי לשלוח בפועל")
     rp.set_defaults(func=cmd_run)
+
+    sub.add_parser("clean", help="הסרת מוסדות (לא עסקים) מה-DB").set_defaults(func=cmd_clean)
 
     sub.add_parser("stats", help="הצגת סטטיסטיקות").set_defaults(func=cmd_stats)
 

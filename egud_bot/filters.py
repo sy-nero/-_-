@@ -31,6 +31,21 @@ EXCLUDED_TYPES = {
     "airport", "parking",
 }
 
+# מילות מפתח בשם שמעידות על מוסד ולא על עסק (Google לא תמיד מסווג נכון)
+EXCLUDED_NAME_KEYWORDS = (
+    "ישיבה", "ישיבת", "בית המדרש", "בית מדרש", "תלמוד תורה",
+    "כולל", "בית כנסת", "בית הכנסת", "סמינר", "אולפנה", "תיכון",
+    "בית ספר", "בית-ספר", "גן ילדים", "מעון", "עמותה", "עמותת",
+    "מוסדות", "משטרה", "עירייה", "עיריית", "מתנ\"ס", "מתנס",
+    "בית חולים", "קופת חולים", "בנק ", "לשכת", "מועצה דתית",
+)
+
+
+def is_excluded_by_name(name: str) -> bool:
+    """מזהה מוסדות לפי מילות מפתח בשם (ישיבה, בית כנסת, בית ספר וכו')."""
+    n = name or ""
+    return any(kw in n for kw in EXCLUDED_NAME_KEYWORDS)
+
 
 @dataclass
 class BusinessLead:
@@ -82,5 +97,8 @@ def passes_filters(
     # פסילת מוסדות שאינם עסקים (בנקים, בתי ספר, משטרה, מוסדות דת וכו')
     all_types = set(lead.types) | {lead.primary_type}
     if all_types & EXCLUDED_TYPES:
+        return False
+    # פסילה נוספת לפי מילות מפתח בשם (ישיבה, בית כנסת וכו')
+    if is_excluded_by_name(lead.name):
         return False
     return True
