@@ -1,9 +1,9 @@
 """
 תבנית המייל שנשלח לעסקים.
 
-הגישה: מייל אישי אמיתי מבן אדם (לא ניוזלטר מעוצב). בלי צבעים, בלי לוגו,
-בלי כפתורים. טקסט פשוט, בגובה העיניים, חתום בשם ותפקיד, עם התייחסות אישית
-לעסק (סוג ושכונה). הפנייה: להשיב למייל.
+הגישה: מייל קצר ואנושי, כמו שאדם אמיתי כותב בלי מאמץ. בלי צבעים, בלי לוגו,
+בלי כפתורים ובלי שפה שיווקית. התייחסות קצרה לעסק (סוג ושכונה), ושאלה ישירה
+עם מי לדבר. הפנייה: להשיב למייל.
 """
 
 # מיפוי סוג העסק (Google type) לשם עברי, לפנייה אישית
@@ -11,7 +11,7 @@ FIELD_NOUNS = {
     "bakery": "מאפייה",
     "restaurant": "מסעדה",
     "cafe": "בית קפה",
-    "clothing_store": "חנות אופנה",
+    "clothing_store": "חנות בגדים",
     "grocery_store": "מכולת",
     "convenience_store": "מרכול",
     "hair_care": "מספרה",
@@ -20,7 +20,7 @@ FIELD_NOUNS = {
     "electronics_store": "חנות אלקטרוניקה",
     "furniture_store": "חנות רהיטים",
     "jewelry_store": "חנות תכשיטים",
-    "shoe_store": "חנות הנעלה",
+    "shoe_store": "חנות נעליים",
     "hardware_store": "חנות כלי עבודה",
     "florist": "חנות פרחים",
     "gift_shop": "חנות מתנות",
@@ -34,21 +34,21 @@ def field_noun(primary_type: str) -> str:
     return FIELD_NOUNS.get((primary_type or "").lower(), "")
 
 
-def _business_ref(field: str = "", neighborhood: str = "") -> str:
-    """מתאר את העסק לפי הנתונים הקיימים: 'מאפייה בגאולה' / 'עסק במאה שערים' / 'עסק'."""
+def _saw_clause(field: str = "", neighborhood: str = "") -> str:
+    """משפט קצר שמראה שראינו את העסק, לפי הנתונים הקיימים."""
     if field and neighborhood:
-        return f"{field} ב{neighborhood}"
+        return f", וראיתי שיש לכם {field} ב{neighborhood}."
     if field:
-        return field
+        return f", וראיתי שיש לכם {field}."
     if neighborhood:
-        return f"עסק ב{neighborhood}"
-    return "עסק"
+        return f", וראיתי שהעסק שלכם ב{neighborhood}."
+    return "."
 
 
 def build_subject(association_name: str, business_name: str = "") -> str:
     if business_name:
-        return f"{business_name}, בנוגע למימון לעסק שלך"
-    return "בנוגע למימון לעסק שלך"
+        return f"{business_name}, לגבי מימון לעסק"
+    return "לגבי מימון לעסק שלכם"
 
 
 def build_text(
@@ -59,22 +59,18 @@ def build_text(
     field: str = "",
     neighborhood: str = "",
 ) -> str:
-    """גוף המייל כטקסט אישי."""
-    greeting = f"שלום {business_name}," if business_name else "שלום,"
-    ref = _business_ref(field, neighborhood)
+    """גוף המייל כטקסט קצר ואנושי."""
+    saw = _saw_clause(field, neighborhood)
     return (
-        f"{greeting}\n\n"
-        f"שמי {sender_name}, אני {sender_title} ב{association_name}.\n\n"
-        f"אנחנו מארגנים בימים אלה קבוצה של בעלי עסקים מהמגזר, שמטרתה להשיג מימון "
-        f"בתנאים הוגנים. ראיתי שיש לך {ref}, אז חשבתי לפנות אליך באופן אישי.\n\n"
-        f"אני מכיר את הסיפור טוב מדי: אתה צריך מימון, והבנקים מקשים, מבקשים ערבויות "
-        f"שאין לך ומחזירים אותך ריק. בקבוצה שלנו אנחנו נלחמים בשבילך מול הגורמים, "
-        f"דואגים שתקבל מימון אמיתי בתנאים הוגנים, ונמצאים לצידך לאורך כל הדרך.\n\n"
-        f"אם זה מעניין אותך, פשוט תשיב לי למייל הזה עם שם וטלפון ואחזור אליך עם כל "
-        f"הפרטים. בלי שום התחייבות.\n\n"
-        f"בהצלחה,\n"
+        f"שלום,\n\n"
+        f"שמי {sender_name}, מ{association_name}.\n\n"
+        f"אנחנו מארגנים עכשיו קבוצה של בעלי עסקים מהמגזר החרדי בשביל להשיג מימון "
+        f"בתנאים טובים{saw}\n\n"
+        f"עם מי אפשר לדבר על זה אצלכם? אם זה מעניין אתכם, תשיבו לי לכאן עם שם וטלפון "
+        f"ואחזור אליכם.\n\n"
+        f"תודה,\n"
         f"{sender_name}\n"
-        f"{sender_title}, {association_name}\n"
+        f"{association_name}\n"
     )
 
 
@@ -86,9 +82,8 @@ def build_html(
     field: str = "",
     neighborhood: str = "",
 ) -> str:
-    """גוף המייל כ-HTML מינימלי (ללא עיצוב/לוגו), כדי שיראה כמו מייל אישי רגיל."""
-    greeting = f"שלום {business_name}," if business_name else "שלום,"
-    ref = _business_ref(field, neighborhood)
+    """גוף המייל כ-HTML מינימלי, כדי שיראה כמו מייל רגיל שאדם כתב."""
+    saw = _saw_clause(field, neighborhood)
     p = "margin:0 0 14px;"
     return f"""<!DOCTYPE html>
 <html lang="he" dir="rtl">
@@ -100,23 +95,18 @@ def build_html(
   <div dir="rtl" style="direction:rtl;text-align:right;max-width:600px;margin:0 auto;
        padding:22px 20px;font-family:Arial,Helvetica,sans-serif;font-size:16px;
        line-height:1.75;color:#222222;">
-    <p style="{p}">{greeting}</p>
-    <p style="{p}">שמי {sender_name}, אני {sender_title} ב{association_name}.</p>
+    <p style="{p}">שלום,</p>
+    <p style="{p}">שמי {sender_name}, מ{association_name}.</p>
     <p style="{p}">
-      אנחנו מארגנים בימים אלה קבוצה של בעלי עסקים מהמגזר, שמטרתה להשיג מימון
-      בתנאים הוגנים. ראיתי שיש לך {ref}, אז חשבתי לפנות אליך באופן אישי.
+      אנחנו מארגנים עכשיו קבוצה של בעלי עסקים מהמגזר החרדי בשביל להשיג מימון
+      בתנאים טובים{saw}
     </p>
     <p style="{p}">
-      אני מכיר את הסיפור טוב מדי: אתה צריך מימון, והבנקים מקשים, מבקשים ערבויות
-      שאין לך ומחזירים אותך ריק. בקבוצה שלנו אנחנו נלחמים בשבילך מול הגורמים,
-      דואגים שתקבל מימון אמיתי בתנאים הוגנים, ונמצאים לצידך לאורך כל הדרך.
+      עם מי אפשר לדבר על זה אצלכם? אם זה מעניין אתכם, תשיבו לי לכאן עם שם וטלפון
+      ואחזור אליכם.
     </p>
-    <p style="{p}">
-      אם זה מעניין אותך, פשוט תשיב לי למייל הזה עם שם וטלפון ואחזור אליך עם כל
-      הפרטים. בלי שום התחייבות.
-    </p>
-    <p style="margin:0 0 4px;">בהצלחה,</p>
-    <p style="margin:0;">{sender_name}<br>{sender_title}, {association_name}</p>
+    <p style="margin:0 0 4px;">תודה,</p>
+    <p style="margin:0;">{sender_name}<br>{association_name}</p>
   </div>
 </body>
 </html>"""
