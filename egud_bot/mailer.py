@@ -93,7 +93,9 @@ class Mailer:
         alt.attach(MIMEText(html_body, "html", "utf-8"))
         root.attach(alt)
 
-        self._attach_logo(root)
+        # מטמיעים לוגו רק אם ה-HTML מפנה אליו (mail אישי הוא ללא לוגו)
+        if "cid:logo" in html_body:
+            self._attach_logo(root)
 
         self._server.sendmail(self.from_email, [to_email], root.as_string())
         logger.info("מייל נשלח אל %s", to_email)

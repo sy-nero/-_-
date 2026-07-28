@@ -40,8 +40,11 @@ class Config:
 
     # Email content
     association_name: str = os.getenv("ASSOCIATION_NAME", "איגוד העסקים החרדיים")
-    # הכתובת שאליה יופנו הפניות ("להשארת פרטים" פותח מייל לכתובת הזו)
+    # הכתובת שאליה יופנו הפניות
     contact_email: str = os.getenv("CONTACT_EMAIL", "cto@egud.org.il")
+    # שם ותפקיד השולח (למייל אישי חתום)
+    sender_name: str = os.getenv("SENDER_NAME", "יוסף חיים וייס")
+    sender_title: str = os.getenv("SENDER_TITLE", "מנהל קשרי לקוחות")
     landing_page_url: str = os.getenv("LANDING_PAGE_URL", "https://example.co.il/register")
     unsubscribe_url: str = os.getenv("UNSUBSCRIBE_URL", "https://example.co.il/unsubscribe")
     # נתיב לקובץ הלוגו של האיגוד (PNG/JPG) שיוטמע במייל
