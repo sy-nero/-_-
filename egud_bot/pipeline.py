@@ -85,11 +85,20 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False) -> dict:
     """
     שולח מייל ללידים חדשים שיש להם כתובת מייל (עד המכסה בהרצה).
     """
-    leads = storage.leads_to_email(cfg.max_emails_per_run)
-    summary = {"candidates": len(leads), "sent": 0, "failed": 0}
+    # סינון לפי יומן שליחות קבוע: לעולם לא לשלוח שוב למי שכבר קיבל (גם אחרי מחיקת DB)
+    sent_before = storage.already_sent_emails()
+    all_candidates = storage.leads_to_email(10 ** 9)
+    skipped = [l for l in all_candidates if (l["email"] or "").lower() in sent_before]
+    leads = [l for l in all_candidates
+             if (l["email"] or "").lower() not in sent_before][:cfg.max_emails_per_run]
+
+    summary = {"candidates": len(leads), "sent": 0, "failed": 0,
+               "skipped_already_sent": len(skipped)}
+    if skipped:
+        logger.info("דילוג על %d כתובות שכבר קיבלו מייל בעבר.", len(skipped))
 
     if not leads:
-        logger.info("אין לידים לשליחה.")
+        logger.info("אין לידים חדשים לשליחה (כולם כבר קיבלו או שאין מיילים).")
         return summary
 
     if dry_run:
@@ -126,6 +135,7 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False) -> dict:
             try:
                 mailer.send(lead["email"], subject, html, text)
                 storage.mark_emailed(lead["place_id"], success=True)
+                storage.record_sent(lead["email"])   # יומן קבוע נגד שליחה כפולה
                 summary["sent"] += 1
             except Exception as exc:  # noqa: BLE001
                 logger.warning("שליחה אל %s נכשלה: %s", lead["email"], exc)

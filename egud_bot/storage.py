@@ -139,6 +139,26 @@ class Storage:
                     removed.append(r["name"])
         return removed
 
+    # ---------- יומן שליחות קבוע (שורד מחיקת DB) ----------
+    def _sent_log_path(self) -> str:
+        return os.path.join(os.path.dirname(self.db_path) or ".", "sent_emails.txt")
+
+    def already_sent_emails(self) -> set:
+        """מחזיר את כל כתובות המייל שכבר נשלח אליהן אי־פעם (מיומן קבוע)."""
+        path = self._sent_log_path()
+        if not os.path.exists(path):
+            return set()
+        with open(path, encoding="utf-8") as f:
+            return {line.strip().lower() for line in f if line.strip()}
+
+    def record_sent(self, email: str) -> None:
+        """רושם כתובת ביומן הקבוע כדי שלעולם לא תקבל מייל פעמיים."""
+        email = (email or "").strip().lower()
+        if not email:
+            return
+        with open(self._sent_log_path(), "a", encoding="utf-8") as f:
+            f.write(email + "\n")
+
     def stats(self) -> dict:
         with self._conn() as conn:
             rows = conn.execute(
