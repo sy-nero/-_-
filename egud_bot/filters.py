@@ -46,12 +46,36 @@ EXCLUDED_NAME_KEYWORDS = (
 )
 
 
+# סוגי מקום שאינם חנות קמעונאית (שירותים, אוכל מוכן, חברות, מקצועות) — נסננים
+NON_RETAIL_TYPES = {
+    # שירותים אישיים
+    "hair_care", "beauty_salon", "laundry", "spa", "gym",
+    # אוכל מוכן / הסעדה
+    "restaurant", "cafe", "meal_takeaway", "meal_delivery", "catering",
+    # חברות / נדל"ן / מקצועות / B2B
+    "real_estate_agency", "general_contractor", "lawyer", "insurance_agency",
+    "accounting", "moving_company", "storage", "travel_agency", "finance",
+    "car_repair", "car_dealer", "car_wash", "electrician", "plumber",
+    "painter", "roofing_contractor", "car_rental",
+}
+
+# מילות מפתח בשם שמעידות על עסק שאינו חנות קמעונאית
+NON_RETAIL_KEYWORDS = (
+    "הנדסה", "תשתיות", "קבלן", 'נדל"ן', "נדלן", "סיטונאות", "סיטונאי",
+    "ייעוץ", "הוצאת ספרים", "הוצאה לאור", "Services", "שירותים",
+)
+
+
 def is_excluded_by_name(name: str) -> bool:
-    """מזהה מה שאינו עסק חרדי רלוונטי: שם בערבית, או מילות מפתח של מוסד."""
+    """מזהה מה שאינו חנות קמעונאית חרדית: ערבית, מוסד, או חברה/שירות."""
     n = name or ""
     if ARABIC_RE.search(n):  # עסק מהמגזר הערבי
         return True
-    return any(kw in n for kw in EXCLUDED_NAME_KEYWORDS)
+    if any(kw in n for kw in EXCLUDED_NAME_KEYWORDS):
+        return True
+    if any(kw in n for kw in NON_RETAIL_KEYWORDS):
+        return True
+    return False
 
 
 @dataclass
@@ -105,7 +129,10 @@ def passes_filters(
     all_types = set(lead.types) | {lead.primary_type}
     if all_types & EXCLUDED_TYPES:
         return False
-    # פסילה נוספת לפי מילות מפתח בשם (ישיבה, בית כנסת וכו')
+    # רק חנות קמעונאית: פסילת שירותים/הסעדה/חברות (מספרה, מסעדה, נדל"ן וכו')
+    if lead.primary_type in NON_RETAIL_TYPES:
+        return False
+    # פסילה נוספת לפי מילות מפתח בשם (ישיבה, חברת הנדסה, סיטונאות וכו')
     if is_excluded_by_name(lead.name):
         return False
     return True
