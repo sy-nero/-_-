@@ -31,8 +31,8 @@ TEXT_2 = "#4b5563"
 
 def build_subject(association_name: str, business_name: str = "") -> str:
     if business_name:
-        return f"{business_name}, נפתחת קבוצת מימון חדשה לעסקים ✦"
-    return f"נפתחת קבוצת מימון חדשה לעסקים, הזמנה מ{association_name} ✦"
+        return f"{business_name}, הבנקים אמרו לא? אנחנו אומרים כן ✦"
+    return f"הבנקים אמרו לא? אנחנו אומרים כן. הזמנה מ{association_name} ✦"
 
 
 def _landing_link(base_url: str, place_id: str) -> str:
@@ -88,12 +88,12 @@ def build_html(
     greeting = f"שלום {business_name}," if business_name else "שלום,"
 
     benefits = (
-        _benefit_row("₪", "הנחות אצל יועצי מימון",
-                     "אנחנו דואגים לך להנחות משמעותיות אצל היועצים, במקום לשלם מחיר מלא.")
-        + _benefit_row("♦", "אנחנו עושים את העבודה",
-                       "מטפלים בשבילך בכל התהליך מול היועצים, מהבקשה ועד קבלת המימון.")
-        + _benefit_row("✦", "תנאים ומקורות מימון טובים יותר",
-                       "גישה למקורות מימון והשגת התנאים הטובים ביותר עבור העסק שלך.")
+        _benefit_row("₪", "גב אמיתי, לא עוד \"לא\"",
+                     "אנחנו נלחמים כדי להשיג לך את המימון, גם כשהבנקים כבר אמרו לא.")
+        + _benefit_row("♦", "בלי הפתעות ובלי אותיות קטנות",
+                       "תנאים הוגנים ושקופים מהרגע הראשון, בלי עמלות מנופחות ובלי מלכודות.")
+        + _benefit_row("✦", "מישהו מהצד שלך",
+                       "ליווי אישי של אנשים מהמגזר שמבינים אותך ואת העסק, ורוצים שתצליח.")
     )
 
     return f"""<!DOCTYPE html>
@@ -107,7 +107,7 @@ def build_html(
 <body style="margin:0;padding:0;background:{PAGE_BG};
              font-family:'Segoe UI',Arial,Helvetica,sans-serif;">
   <div style="display:none;max-height:0;overflow:hidden;opacity:0;">
-    נפתחת קבוצה חדשה למימון עסקים. הזמנה אישית מ{association_name}.
+    הבנקים אמרו לך לא? קבוצת מימון חדשה לבעלי עסקים מתחילים, מ{association_name}.
   </div>
   <table role="presentation" dir="rtl" width="100%" cellpadding="0" cellspacing="0"
          style="background:{PAGE_BG};padding:28px 12px;direction:rtl;">
@@ -128,10 +128,10 @@ def build_html(
               ✦ קבוצה חדשה נפתחת עכשיו
             </div>
             <h1 style="margin:18px 0 4px;color:#ffffff;font-size:32px;line-height:1.3;font-weight:800;">
-              נמאס לשלם הון ליועצי מימון?
+              הבנקים אמרו לך לא?
             </h1>
             <p style="margin:0 0 6px;color:{GOLD};font-size:20px;font-weight:700;">
-              קבוצת מימון חדשה לעסקים
+              קבוצת מימון לבעלי עסקים מתחילים
             </p>
             <div style="display:inline-block;height:3px;width:64px;background:{GOLD};
                         border-radius:2px;margin:8px 0 0;"></div>
@@ -142,13 +142,17 @@ def build_html(
           <td dir="rtl" style="padding:32px 34px 4px;direction:rtl;text-align:right;">
             <p style="margin:0 0 16px;font-size:20px;font-weight:bold;color:{TEXT};">{greeting}</p>
             <p style="margin:0 0 12px;font-size:18px;line-height:1.8;color:{TEXT_2};">
-              אנחנו ב<strong style="color:{TEXT};">איגוד העסקים החרדיים</strong> הקמנו
-              <strong style="color:{TEXT};">קבוצה למימון לבעלי עסקים כמוך</strong>.
+              אתה יודע בדיוק על מה אנחנו מדברים. פתחת עסק, שמת בו את כל כולך, ודווקא
+              כשאתה הכי צריך גב, הבנקים מסתכלים עליך מלמעלה, מבקשים ערבויות שאין לך
+              ומחזירים אותך ריק. <strong style="color:{TEXT};">כל יום בלי מימון הוא עוד לחץ,
+              עוד חשבון ועוד לילה בלי שינה.</strong>
             </p>
             <p style="margin:0 0 12px;font-size:18px;line-height:1.8;color:{TEXT_2};">
-              ואנחנו דואגים בשבילך לכל השאר: <strong style="color:{TEXT};">הנחות אצל יועצי
-              המימון</strong>, התנאים הטובים ביותר וליווי מלא לאורך הדרך, כדי שתקבל את המימון
-              שהעסק שלך צריך בעלות נמוכה ובלי כאב ראש.
+              אנחנו ב<strong style="color:{TEXT};">איגוד העסקים החרדיים</strong> מכירים את זה
+              מקרוב, כי אנחנו מהמגזר שלך ובשבילך. לכן הקמנו קבוצה שנותנת לבעלי עסקים
+              מתחילים בדיוק את מה שאף אחד אחר לא נותן:
+              <strong style="color:{TEXT};">מימון אמיתי, בתנאים הוגנים, ומישהו שנלחם עליך
+              במקום נגדך.</strong>
             </p>
           </td>
         </tr>
@@ -172,7 +176,7 @@ def build_html(
                 <a href="{link}" target="_blank"
                    style="display:inline-block;padding:17px 48px;color:{NAVY_DEEP};
                           text-decoration:none;font-size:20px;font-weight:800;border-radius:12px;">
-                  להשארת פרטים ›
+                  כן, אני רוצה מימון הוגן ›
                 </a>
               </td></tr>
             </table>
@@ -197,15 +201,17 @@ def build_text(
     """גרסת טקסט פשוט (fallback עבור לקוחות מייל ללא HTML)."""
     greeting = f"שלום {business_name}," if business_name else "שלום,"
     return (
-        f"נמאס לשלם הון ליועצי מימון?\n\n"
+        f"הבנקים אמרו לך לא?\n\n"
         f"{greeting}\n\n"
-        f"אנחנו ב{association_name} הקמנו קבוצה למימון לבעלי עסקים כמוך.\n\n"
-        f"ואנחנו דואגים בשבילך לכל השאר: הנחות אצל יועצי המימון, התנאים הטובים ביותר "
-        f"וליווי מלא לאורך הדרך, כדי שתקבל את המימון שהעסק שלך צריך בעלות נמוכה "
-        f"ובלי כאב ראש.\n\n"
+        f"אתה יודע בדיוק על מה אנחנו מדברים. פתחת עסק, שמת בו את כל כולך, ודווקא כשאתה "
+        f"הכי צריך גב, הבנקים מסתכלים עליך מלמעלה, מבקשים ערבויות שאין לך ומחזירים אותך "
+        f"ריק. כל יום בלי מימון הוא עוד לחץ, עוד חשבון ועוד לילה בלי שינה.\n\n"
+        f"אנחנו ב{association_name} מכירים את זה מקרוב, כי אנחנו מהמגזר שלך ובשבילך. "
+        f"לכן הקמנו קבוצה שנותנת לבעלי עסקים מתחילים בדיוק את מה שאף אחד אחר לא נותן: "
+        f"מימון אמיתי, בתנאים הוגנים, ומישהו שנלחם עליך במקום נגדך.\n\n"
         f"מה תקבלו בקבוצה:\n"
-        f"  • הנחות אצל יועצי מימון, במקום לשלם מחיר מלא\n"
-        f"  • אנחנו עושים בשבילך את העבודה מול היועצים\n"
-        f"  • תנאים ומקורות מימון טובים יותר\n\n"
-        f"להשארת פרטים, השיבו למייל הזה או שלחו הודעה אל: {contact_email}\n"
+        f"  • גב אמיתי, לא עוד \"לא\". נלחמים להשיג לך מימון גם כשהבנקים סירבו\n"
+        f"  • בלי הפתעות ובלי אותיות קטנות, תנאים הוגנים ושקופים\n"
+        f"  • מישהו מהצד שלך, ליווי אישי של אנשים שמבינים אותך\n\n"
+        f"רוצה מימון הוגן? השיבו למייל הזה או שלחו הודעה אל: {contact_email}\n"
     )
