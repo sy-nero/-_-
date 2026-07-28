@@ -28,6 +28,46 @@ CARD = "#ffffff"
 TEXT = "#111827"
 TEXT_2 = "#4b5563"
 
+# מיפוי סוג העסק (Google type) לשם עברי, לצורך פנייה אישית
+FIELD_NOUNS = {
+    "bakery": "מאפייה",
+    "restaurant": "מסעדה",
+    "cafe": "בית קפה",
+    "clothing_store": "חנות אופנה",
+    "grocery_store": "מכולת",
+    "convenience_store": "מרכול",
+    "hair_care": "מספרה",
+    "beauty_salon": "מכון יופי",
+    "book_store": "חנות ספרים",
+    "electronics_store": "חנות אלקטרוניקה",
+    "furniture_store": "חנות רהיטים",
+    "jewelry_store": "חנות תכשיטים",
+    "shoe_store": "חנות הנעלה",
+    "hardware_store": "חנות כלי עבודה",
+    "florist": "חנות פרחים",
+    "gift_shop": "חנות מתנות",
+    "pharmacy": "בית מרקחת",
+    "laundry": "מכבסה",
+}
+
+
+def field_noun(primary_type: str) -> str:
+    """שם עסק בעברית לפי סוג, או מחרוזת ריקה אם כללי/לא ידוע."""
+    return FIELD_NOUNS.get((primary_type or "").lower(), "")
+
+
+def _personal_intro(business_name: str, field: str = "", neighborhood: str = "") -> str:
+    """בונה משפט פתיחה אישי לפי הנתונים הקיימים על העסק (שם/סוג/שכונה)."""
+    biz = (business_name or "").strip()
+    lead_in = f"שמנו לב ל{biz}" if biz else "שמנו לב לעסק שלך"
+    tail = []
+    if field:
+        tail.append(field)
+    if neighborhood:
+        tail.append(f"מ{neighborhood}")
+    suffix = ", " + " ".join(tail) if tail else ""
+    return f"{lead_in}{suffix}, ופנינו אליך במיוחד."
+
 
 def build_subject(association_name: str, business_name: str = "") -> str:
     if business_name:
@@ -83,9 +123,12 @@ def build_html(
     unsubscribe_url: str = "",
     place_id: str = "",
     logo_src: str = "cid:logo",
+    field: str = "",
+    neighborhood: str = "",
 ) -> str:
     link = _mailto(contact_email, business_name)
     greeting = f"שלום {business_name}," if business_name else "שלום,"
+    intro = _personal_intro(business_name, field, neighborhood)
 
     benefits = (
         _benefit_row("₪", "גב אמיתי, לא עוד \"לא\"",
@@ -142,10 +185,11 @@ def build_html(
           <td dir="rtl" style="padding:32px 34px 4px;direction:rtl;text-align:right;">
             <p style="margin:0 0 16px;font-size:20px;font-weight:bold;color:{TEXT};">{greeting}</p>
             <p style="margin:0 0 12px;font-size:18px;line-height:1.8;color:{TEXT_2};">
-              אתה יודע בדיוק על מה אנחנו מדברים. פתחת עסק, שמת בו את כל כולך, ודווקא
-              כשאתה הכי צריך גב, הבנקים מסתכלים עליך מלמעלה, מבקשים ערבויות שאין לך
-              ומחזירים אותך ריק. <strong style="color:{TEXT};">כל יום בלי מימון הוא עוד לחץ,
-              עוד חשבון ועוד לילה בלי שינה.</strong>
+              {intro} אתה יודע בדיוק על מה אנחנו מדברים: פתחת עסק, שמת בו את כל כולך,
+              ודווקא כשאתה הכי צריך גב, הבנקים מסתכלים עליך מלמעלה, מבקשים ערבויות
+              שאין לך ומחזירים אותך ריק.
+              <strong style="color:{TEXT};">כל יום בלי מימון הוא עוד לחץ, עוד חשבון
+              ועוד לילה בלי שינה.</strong>
             </p>
             <p style="margin:0 0 12px;font-size:18px;line-height:1.8;color:{TEXT_2};">
               אנחנו ב<strong style="color:{TEXT};">איגוד העסקים החרדיים</strong> מכירים את זה
@@ -197,15 +241,18 @@ def build_text(
     contact_email: str,
     unsubscribe_url: str = "",
     place_id: str = "",
+    field: str = "",
+    neighborhood: str = "",
 ) -> str:
     """גרסת טקסט פשוט (fallback עבור לקוחות מייל ללא HTML)."""
     greeting = f"שלום {business_name}," if business_name else "שלום,"
+    intro = _personal_intro(business_name, field, neighborhood)
     return (
         f"הבנקים אמרו לך לא?\n\n"
         f"{greeting}\n\n"
-        f"אתה יודע בדיוק על מה אנחנו מדברים. פתחת עסק, שמת בו את כל כולך, ודווקא כשאתה "
-        f"הכי צריך גב, הבנקים מסתכלים עליך מלמעלה, מבקשים ערבויות שאין לך ומחזירים אותך "
-        f"ריק. כל יום בלי מימון הוא עוד לחץ, עוד חשבון ועוד לילה בלי שינה.\n\n"
+        f"{intro} אתה יודע בדיוק על מה אנחנו מדברים: פתחת עסק, שמת בו את כל כולך, ודווקא "
+        f"כשאתה הכי צריך גב, הבנקים מסתכלים עליך מלמעלה, מבקשים ערבויות שאין לך ומחזירים "
+        f"אותך ריק. כל יום בלי מימון הוא עוד לחץ, עוד חשבון ועוד לילה בלי שינה.\n\n"
         f"אנחנו ב{association_name} מכירים את זה מקרוב, כי אנחנו מהמגזר שלך ובשבילך. "
         f"לכן הקמנו קבוצה שנותנת לבעלי עסקים מתחילים בדיוק את מה שאף אחד אחר לא נותן: "
         f"מימון אמיתי, בתנאים הוגנים, ומישהו שנלחם עליך במקום נגדך.\n\n"
