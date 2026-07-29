@@ -93,6 +93,12 @@ def cmd_import(args) -> int:
     return 0
 
 
+def cmd_jobdebug(args) -> int:
+    from egud_bot import jobscan
+    jobscan.debug_drushim(args.query)
+    return 0
+
+
 def cmd_stats(args) -> int:
     storage = _storage(args)
     stats = storage.stats()
@@ -145,6 +151,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     _add_campaign(sub.add_parser("clean", help="הסרת מה שאינו חנות קמעונאית")).set_defaults(func=cmd_clean)
     _add_campaign(sub.add_parser("stats", help="הצגת סטטיסטיקות")).set_defaults(func=cmd_stats)
+
+    jd = sub.add_parser("jobdebug", help="אבחון מבנה דף הדרושים (לכוונון הסורק)")
+    jd.add_argument("--query", default="מוכר", help="מונח חיפוש בדרושים")
+    jd.set_defaults(func=cmd_jobdebug)
 
     ip = _add_campaign(sub.add_parser("import", help="ייבוא רשימת עסקים מ-CSV (name,email)"))
     ip.add_argument("path", help="נתיב קובץ ה-CSV")

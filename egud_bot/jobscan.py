@@ -117,6 +117,61 @@ def _scrape_drushim_companies(queries, max_companies: int, delay: float) -> list
     return companies
 
 
+def debug_drushim(query: str = "מוכר") -> None:
+    """כלי אבחון: טוען דף דרושים, מדפיס מבנה, ושומר HTML — לכוונון הסלקטור."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("Playwright לא מותקן."); return
+
+    with sync_playwright() as p:
+        page = p.chromium.launch(args=["--no-sandbox"]).new_page()
+        page.goto(DRUSHIM_SEARCH.format(q=query), timeout=60000, wait_until="domcontentloaded")
+        page.wait_for_timeout(9000)
+        for _ in range(3):
+            page.mouse.wheel(0, 4000); page.wait_for_timeout(1500)
+
+        html = page.content()
+        with open("data/drushim_debug.html", "w", encoding="utf-8") as f:
+            f.write(html)
+        body = page.inner_text("body")
+
+        print("=" * 60)
+        print("TITLE:", page.title())
+        print("URL  :", page.url)
+        print("BODY_LEN:", len(body), "| HTML_LEN:", len(html))
+        low = (body + html).lower()
+        challenge = any(w in low for w in
+                        ["cloudflare", "captcha", "אבטחה", "רובוט", "מאמת", "לא אנושי", "verify you are human"])
+        print("נראה כמו מסך אימות/חסימה?:", challenge)
+        print("BODY SNIPPET:", body[:300].replace("\n", " | "))
+
+        # ספירת מחלקות נפוצות (לזהות כרטיסי משרה)
+        classes = page.eval_on_selector_all(
+            "[class]", "els => els.map(e => e.className).filter(c => typeof c === 'string')")
+        from collections import Counter
+        tokens = Counter()
+        for c in classes:
+            for t in c.split():
+                tokens[t] += 1
+        print("\n15 שמות מחלקה נפוצים (name: count):")
+        for name, cnt in tokens.most_common(15):
+            print(f"   {name}: {cnt}")
+
+        # בדיקת סלקטורים אפשריים
+        print("\nספירת סלקטורים:")
+        for sel in ["a[href*='/company']", "a[href*='/job']", "[class*='company']",
+                    "[class*='Company']", "[class*='card']", "[class*='job']",
+                    "[data-testid]", "h2", "h3"]:
+            try:
+                n = len(page.query_selector_all(sel))
+            except Exception:
+                n = -1
+            print(f"   {sel}: {n}")
+        page.context.browser.close()
+    print("\nנשמר: data/drushim_debug.html")
+
+
 def scan_jobs(cfg: Config, storage: Storage, target_emails: int | None = None) -> dict:
     """
     סורק דרושים -> שם חברה -> אתר החברה -> מייל -> שמירה.
