@@ -168,6 +168,26 @@ def debug_drushim(query: str = "מוכר") -> None:
             except Exception:
                 n = -1
             print(f"   {sel}: {n}")
+
+        # דוגמאות קישורי משרה
+        print("\n5 קישורי משרה לדוגמה:")
+        for a in page.query_selector_all("a[href*='/job']")[:5]:
+            print("   ", (a.get_attribute("href") or "")[:80])
+
+        # טקסט של אלמנטי חברה
+        print("\nטקסט של אלמנטי [class*='company'] (5 ראשונים):")
+        for el in page.query_selector_all("[class*='company']")[:5]:
+            t = (el.inner_text() or "").strip().replace("\n", " ")
+            print("   >>", t[:80] if t else "(ריק)")
+
+        # HTML של כרטיס המשרה הראשון (ההורה ה-4 של קישור משרה)
+        print("\nHTML של כרטיס משרה ראשון:")
+        first = page.query_selector("a[href*='/job']")
+        if first:
+            card_html = first.evaluate(
+                "el => { let n=el; for(let i=0;i<5 && n.parentElement;i++) n=n.parentElement;"
+                " return n.outerHTML; }")
+            print(re.sub(r"\s+", " ", card_html)[:1800])
         page.context.browser.close()
     print("\nנשמר: data/drushim_debug.html")
 
