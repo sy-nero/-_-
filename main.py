@@ -95,7 +95,7 @@ def cmd_import(args) -> int:
 
 def cmd_jobdebug(args) -> int:
     from egud_bot import jobscan
-    jobscan.debug_drushim(args.query)
+    jobscan.debug_drushim(args.url)
     return 0
 
 
@@ -153,7 +153,8 @@ def build_parser() -> argparse.ArgumentParser:
     _add_campaign(sub.add_parser("stats", help="הצגת סטטיסטיקות")).set_defaults(func=cmd_stats)
 
     jd = sub.add_parser("jobdebug", help="אבחון מבנה דף הדרושים (לכוונון הסורק)")
-    jd.add_argument("--query", default="מוכר", help="מונח חיפוש בדרושים")
+    jd.add_argument("--url", default="https://www.drushim.co.il/jobs/cat32/",
+                    help="כתובת עמוד קטגוריה בדרושים")
     jd.set_defaults(func=cmd_jobdebug)
 
     ip = _add_campaign(sub.add_parser("import", help="ייבוא רשימת עסקים מ-CSV (name,email)"))

@@ -117,8 +117,8 @@ def _scrape_drushim_companies(queries, max_companies: int, delay: float) -> list
     return companies
 
 
-def debug_drushim(query: str = "מוכר") -> None:
-    """כלי אבחון: טוען דף דרושים, מדפיס מבנה, ושומר HTML — לכוונון הסלקטור."""
+def debug_drushim(url: str = "https://www.drushim.co.il/jobs/cat32/") -> None:
+    """כלי אבחון: טוען עמוד קטגוריית דרושים, מדפיס מבנה, ושומר HTML."""
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
@@ -126,10 +126,18 @@ def debug_drushim(query: str = "מוכר") -> None:
 
     with sync_playwright() as p:
         page = p.chromium.launch(args=["--no-sandbox"]).new_page()
-        page.goto(DRUSHIM_SEARCH.format(q=query), timeout=60000, wait_until="domcontentloaded")
+        page.goto(url, timeout=60000, wait_until="domcontentloaded")
         page.wait_for_timeout(9000)
-        for _ in range(3):
+        for _ in range(4):
             page.mouse.wheel(0, 4000); page.wait_for_timeout(1500)
+
+        # מיפוי כל הקטגוריות (לזיהוי קטגוריות קמעונאות)
+        print("כל הקטגוריות (cat / כותרת):")
+        cats = page.eval_on_selector_all(
+            "a[href*='/jobs/cat']",
+            "els => [...new Set(els.map(e => (e.getAttribute('href')||'')+' :: '+(e.getAttribute('title')||e.innerText||'').trim()))]")
+        for c in cats[:60]:
+            print("   ", c[:70])
 
         html = page.content()
         with open("data/drushim_debug.html", "w", encoding="utf-8") as f:
