@@ -61,9 +61,18 @@ RETAIL_STORE_TYPES = {
 }
 
 
-def is_retail_shop(primary_type: str) -> bool:
-    """האם הסוג הראשי הוא חנות קמעונאית (לפי רשימת ההיתר)."""
-    return (primary_type or "").lower() in RETAIL_STORE_TYPES
+def is_retail_shop(primary_type: str, types=()) -> bool:
+    """
+    חנות קמעונאית = יש לה סוג של חנות (מבין כל הסוגים, לא רק הראשי),
+    והסוג הראשי אינו שירות/הסעדה/חברה. ה-primary_type של ה-API הישן גנרי
+    לעיתים קרובות, ולכן בודקים את כל רשימת הסוגים.
+    """
+    pt = (primary_type or "").lower()
+    ts = {(t or "").lower() for t in (types or [])}
+    ts.add(pt)
+    if pt in NON_RETAIL_TYPES:          # שירות/הסעדה/חברה כסוג ראשי
+        return False
+    return bool(ts & RETAIL_STORE_TYPES)  # חייב להיות בין הסוגים סוג של חנות
 
 
 # סוגי מקום שאינם חנות קמעונאית (שירותים, אוכל מוכן, חברות, מקצועות) — נסננים
@@ -76,7 +85,8 @@ NON_RETAIL_TYPES = {
     "real_estate_agency", "general_contractor", "lawyer", "insurance_agency",
     "accounting", "moving_company", "storage", "travel_agency", "finance",
     "car_repair", "car_dealer", "car_wash", "electrician", "plumber",
-    "painter", "roofing_contractor", "car_rental",
+    "painter", "roofing_contractor", "car_rental", "gas_station",
+    "doctor", "dentist", "hospital", "physiotherapist", "veterinary_care",
 }
 
 # מילות מפתח בשם שמעידות על עסק שאינו חנות קמעונאית
@@ -153,8 +163,8 @@ def passes_filters(
         return False
     if lead.review_count > max_review_count:
         return False
-    # רשימת היתר: הסוג הראשי חייב להיות חנות קמעונאית (whitelist מדויק)
-    if not is_retail_shop(lead.primary_type):
+    # רק חנות קמעונאית: יש סוג של חנות והסוג הראשי אינו שירות/חברה
+    if not is_retail_shop(lead.primary_type, lead.types):
         return False
     # פסילה נוספת לפי מילות מפתח בשם (ישיבה, חברת הנדסה, סיטונאות, University וכו')
     if is_excluded_by_name(lead.name):

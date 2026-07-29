@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS leads (
     review_count    INTEGER,
     business_status TEXT,
     primary_type    TEXT,
+    types           TEXT,                   -- כל סוגי Google, מופרדים בפסיק
     status          TEXT DEFAULT 'found',   -- found | emailed | no_email | failed | skipped
     error           TEXT,
     found_at        TEXT,
@@ -53,6 +54,11 @@ class Storage:
         os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
         with self._conn() as conn:
             conn.executescript(SCHEMA)
+            # מיגרציה: הוספת עמודת types ל-DB ישן (אם חסרה)
+            try:
+                conn.execute("ALTER TABLE leads ADD COLUMN types TEXT")
+            except sqlite3.OperationalError:
+                pass  # העמודה כבר קיימת
 
     @contextmanager
     def _conn(self):
@@ -78,8 +84,8 @@ class Storage:
                 """
                 INSERT INTO leads (place_id, name, address, neighborhood, lat, lng,
                     phone, website, email, rating, review_count, business_status,
-                    primary_type, status, found_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    primary_type, types, status, found_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(place_id) DO UPDATE SET
                     email=excluded.email,
                     status=excluded.status
@@ -88,7 +94,7 @@ class Storage:
                     lead.place_id, lead.name, lead.address, lead.neighborhood,
                     lead.lat, lead.lng, lead.phone, lead.website, email,
                     lead.rating, lead.review_count, lead.business_status,
-                    lead.primary_type, status, _now(),
+                    lead.primary_type, ",".join(lead.types or []), status, _now(),
                 ),
             )
 
@@ -131,11 +137,12 @@ class Storage:
         removed = []
         with self._conn() as conn:
             rows = conn.execute(
-                "SELECT place_id, name, primary_type, email FROM leads"
+                "SELECT place_id, name, primary_type, types, email FROM leads"
             ).fetchall()
             for r in rows:
+                types = (r["types"] or "").split(",") if r["types"] else []
                 # שומרים רק חנות קמעונאית שאינה מוסד/ארגון
-                if (not is_retail_shop(r["primary_type"])
+                if (not is_retail_shop(r["primary_type"], types)
                         or is_excluded_by_name(r["name"])
                         or is_org_email(r["email"])):
                     conn.execute("DELETE FROM leads WHERE place_id=?", (r["place_id"],))
