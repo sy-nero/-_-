@@ -127,19 +127,16 @@ class Storage:
 
     def purge_non_business(self) -> list[str]:
         """מסיר מה-DB כל מה שאינו חנות קמעונאית (מוסד/שירות/חברה/ערבי), בלי סריקה מחדש."""
-        from egud_bot.filters import (
-            is_excluded_by_name, is_org_email, EXCLUDED_TYPES, NON_RETAIL_TYPES,
-        )
+        from egud_bot.filters import is_excluded_by_name, is_org_email, is_retail_shop
         removed = []
         with self._conn() as conn:
             rows = conn.execute(
                 "SELECT place_id, name, primary_type, email FROM leads"
             ).fetchall()
             for r in rows:
-                pt = r["primary_type"]
-                if (is_excluded_by_name(r["name"])
-                        or pt in EXCLUDED_TYPES
-                        or pt in NON_RETAIL_TYPES
+                # שומרים רק חנות קמעונאית שאינה מוסד/ארגון
+                if (not is_retail_shop(r["primary_type"])
+                        or is_excluded_by_name(r["name"])
                         or is_org_email(r["email"])):
                     conn.execute("DELETE FROM leads WHERE place_id=?", (r["place_id"],))
                     removed.append(r["name"])

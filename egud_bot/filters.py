@@ -43,7 +43,27 @@ EXCLUDED_NAME_KEYWORDS = (
     "מוסדות", "משטרה", "עירייה", "עיריית", "מתנ\"ס", "מתנס",
     "בית חולים", "קופת חולים", "בנק ", "לשכת", "מועצה דתית",
     "חסד", "ארגון", "גמח", 'גמ"ח', "תנועת נוער", "תנועת",
+    # מוסדות עם שם באנגלית
+    "University", "College", "Collage", "Orphanage", "Yeshiva", "Yeshivat",
+    "Kollel", "Seminary", "Academy", "Foundation", "Institute",
 )
+
+
+# רשימת היתר: רק אלה נחשבים חנות קמעונאית. הסוג הראשי (primary_type) של Google
+# חייב להיות אחד מאלה, אחרת העסק נפסל (whitelist — מדויק הרבה יותר מרשימת חסימה).
+RETAIL_STORE_TYPES = {
+    "store", "clothing_store", "shoe_store", "jewelry_store", "bakery",
+    "grocery_store", "convenience_store", "supermarket", "gift_shop",
+    "book_store", "florist", "electronics_store", "furniture_store",
+    "hardware_store", "pharmacy", "home_goods_store", "department_store",
+    "liquor_store", "pet_store", "bicycle_store", "food", "shopping_mall",
+    "toy_store", "cosmetics_store", "market",
+}
+
+
+def is_retail_shop(primary_type: str) -> bool:
+    """האם הסוג הראשי הוא חנות קמעונאית (לפי רשימת ההיתר)."""
+    return (primary_type or "").lower() in RETAIL_STORE_TYPES
 
 
 # סוגי מקום שאינם חנות קמעונאית (שירותים, אוכל מוכן, חברות, מקצועות) — נסננים
@@ -133,14 +153,10 @@ def passes_filters(
         return False
     if lead.review_count > max_review_count:
         return False
-    # פסילת מוסדות שאינם עסקים (בנקים, בתי ספר, משטרה, מוסדות דת וכו')
-    all_types = set(lead.types) | {lead.primary_type}
-    if all_types & EXCLUDED_TYPES:
+    # רשימת היתר: הסוג הראשי חייב להיות חנות קמעונאית (whitelist מדויק)
+    if not is_retail_shop(lead.primary_type):
         return False
-    # רק חנות קמעונאית: פסילת שירותים/הסעדה/חברות (מספרה, מסעדה, נדל"ן וכו')
-    if lead.primary_type in NON_RETAIL_TYPES:
-        return False
-    # פסילה נוספת לפי מילות מפתח בשם (ישיבה, חברת הנדסה, סיטונאות וכו')
+    # פסילה נוספת לפי מילות מפתח בשם (ישיבה, חברת הנדסה, סיטונאות, University וכו')
     if is_excluded_by_name(lead.name):
         return False
     return True
