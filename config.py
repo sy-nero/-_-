@@ -45,6 +45,8 @@ class Config:
     # שם ותפקיד השולח (למייל אישי חתום)
     sender_name: str = os.getenv("SENDER_NAME", "יוסף חיים וייס")
     sender_title: str = os.getenv("SENDER_TITLE", "מנהל קשרי לקוחות")
+    # קמפיין מ״א (משאבי אנוש): קישור הקורס
+    course_url: str = os.getenv("COURSE_URL", "https://egud.org.il/content/courses")
     landing_page_url: str = os.getenv("LANDING_PAGE_URL", "https://example.co.il/register")
     unsubscribe_url: str = os.getenv("UNSUBSCRIBE_URL", "https://example.co.il/unsubscribe")
     # נתיב לקובץ הלוגו של האיגוד (PNG/JPG) שיוטמע במייל

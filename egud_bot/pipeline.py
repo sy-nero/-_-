@@ -21,12 +21,27 @@ def scan(
     storage: Storage,
     neighborhoods: list[Neighborhood] | None = None,
     target_emails: int | None = None,
+    campaign: str = "funding",
 ) -> dict:
     """
-    סורק את השכונות, מסנן, מאתר מיילים ושומר לידים חדשים ב-DB.
-    עוצר מוקדם ברגע שנאספו `target_emails` מיילים חדשים (ברירת מחדל: cfg.target_emails).
-    מחזיר סיכום מספרי.
+    סורק מקור לפי הקמפיין ושומר לידים חדשים ב-DB.
+    funding — חנויות קמעונאיות דרך Google Places (לפי שכונות).
+    hr      — עסקים מאתרי דרושים (jobscan).
     """
+    if campaign == "hr":
+        from egud_bot.jobscan import scan_jobs
+        target = cfg.target_emails if target_emails is None else target_emails
+        return scan_jobs(cfg, storage, target_emails=target)
+    return scan_retail(cfg, storage, neighborhoods, target_emails)
+
+
+def scan_retail(
+    cfg: Config,
+    storage: Storage,
+    neighborhoods: list[Neighborhood] | None = None,
+    target_emails: int | None = None,
+) -> dict:
+    """סורק חנויות קמעונאיות דרך Google Places לפי שכונות (משמש גם את קמפיין מ״א)."""
     neighborhoods = neighborhoods or HAREDI_NEIGHBORHOODS
     target = cfg.target_emails if target_emails is None else target_emails
     client = make_client(cfg)
@@ -81,7 +96,8 @@ def scan(
     return summary
 
 
-def send_emails(cfg: Config, storage: Storage, dry_run: bool = False) -> dict:
+def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
+                campaign: str = "funding") -> dict:
     """
     שולח מייל ללידים חדשים שיש להם כתובת מייל (עד המכסה בהרצה).
     """
@@ -121,16 +137,17 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False) -> dict:
         logo_path="",                # מייל אישי, ללא לוגו
     ) as mailer:
         for lead in leads:
-            field = templates.field_noun(lead["primary_type"])
-            nb = lead["neighborhood"] or ""
-            subject = templates.build_subject(cfg.association_name, lead["name"])
-            html = templates.build_html(
-                lead["name"], cfg.association_name,
-                cfg.sender_name, cfg.sender_title, field=field, neighborhood=nb,
-            )
-            text = templates.build_text(
-                lead["name"], cfg.association_name,
-                cfg.sender_name, cfg.sender_title, field=field, neighborhood=nb,
+            subject, html, text = templates.render(
+                campaign,
+                business_name=lead["name"],
+                association_name=cfg.association_name,
+                sender_name=cfg.sender_name,
+                sender_title=cfg.sender_title,
+                contact_email=cfg.contact_email,
+                course_url=cfg.course_url,
+                place_id=lead["place_id"],
+                field=templates.field_noun(lead["primary_type"]),
+                neighborhood=lead["neighborhood"] or "",
             )
             try:
                 mailer.send(lead["email"], subject, html, text)

@@ -49,8 +49,9 @@ def _now() -> str:
 
 
 class Storage:
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str, campaign: str = "funding"):
         self.db_path = db_path
+        self.campaign = campaign
         os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
         with self._conn() as conn:
             conn.executescript(SCHEMA)
@@ -151,7 +152,9 @@ class Storage:
 
     # ---------- יומן שליחות קבוע (שורד מחיקת DB) ----------
     def _sent_log_path(self) -> str:
-        return os.path.join(os.path.dirname(self.db_path) or ".", "sent_emails.txt")
+        # יומן נפרד לכל קמפיין (funding שומר על השם ההיסטורי)
+        name = "sent_emails.txt" if self.campaign == "funding" else f"sent_{self.campaign}.txt"
+        return os.path.join(os.path.dirname(self.db_path) or ".", name)
 
     def already_sent_emails(self) -> set:
         """מחזיר את כל כתובות המייל שכבר נשלח אליהן אי־פעם (מיומן קבוע)."""
