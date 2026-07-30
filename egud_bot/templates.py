@@ -76,9 +76,6 @@ def _hr(business_name, association_name, sender_name, sender_title,
         contact_email="", course_url="", place_id="", **_):
     sep = "&" if "?" in course_url else "?"
     course_link = f"{course_url}{sep}ref={quote(place_id or '')}&src=hr"
-    conf_subject = "הרשמה לכנס גיוס העובדים"
-    conf_body = "שלום,\nאשמח להירשם לכנס.\n\nשם העסק: \nשם: \nטלפון: \n"
-    conf_link = f"mailto:{contact_email}?subject={quote(conf_subject)}&body={quote(conf_body)}"
 
     subject = (f"{business_name}, מחפשים עובד? יש לנו קורס וכנס"
                if business_name else "מחפשים עובד? קורס וכנס לבעלי עסקים")
@@ -90,7 +87,7 @@ def _hr(business_name, association_name, sender_name, sender_title,
         f"לכן ארגנו קורס וכנס לבעלי עסקים: איך למצוא, לגייס ולשמור עובדים טובים, "
         f"בלי לבזבז זמן וכסף.\n\n"
         f"לרכישת הקורס:\n{course_link}\n\n"
-        f"להרשמה לכנס, השיבו למייל הזה או שלחו הודעה אל: {contact_email}\n\n"
+        f"ולהרשמה לכנס, פשוט השיבו למייל הזה עם שם וטלפון ונחזור אליכם.\n\n"
         f"תודה,\n{sender_name}\n{association_name}\n"
     )
     p = "margin:0 0 14px;"
@@ -112,12 +109,8 @@ def _hr(business_name, association_name, sender_name, sender_title,
     <p style="margin:22px 0;">
       <a href="{course_link}" target="_blank"
          style="{btn}background:#1a2e4a;color:#ffffff;">לרכישת הקורס ›</a>
-      &nbsp;&nbsp;
-      <a href="{conf_link}"
-         style="{btn}background:#f4ea67;color:#1a2e4a;">להרשמה לכנס ›</a>
     </p>
-    <p style="{p}">להרשמה לכנס אפשר גם פשוט להשיב למייל הזה, או לשלוח הודעה אל
-      {contact_email}.</p>
+    <p style="{p}">ולהרשמה לכנס, פשוט השיבו למייל הזה עם שם וטלפון ונחזור אליכם.</p>
     <p style="margin:0 0 4px;">תודה,</p>
     <p style="margin:0;">{sender_name}<br>{association_name}</p>
   </div>
