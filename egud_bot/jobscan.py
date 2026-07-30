@@ -29,13 +29,22 @@ from egud_bot.storage import Storage
 
 logger = logging.getLogger(__name__)
 
-# קטגוריות קמעונאות בדרושים (אפשר לשנות/להוסיף מונחי חיפוש)
-DEFAULT_QUERIES = [
-    "מוכר", "מוכרת", "קופאי", "קופאית", "מכירות קמעונאות",
-    "עובד חנות", "מנהל חנות", "סדרן", "אחסנאי",
-]
+# קטגוריות דרושים רלוונטיות לקמעונאות
+DRUSHIM_CATEGORIES = ["cat33", "cat17", "cat32"]  # קמעונאות, מכירות, אופנה
+DRUSHIM_CAT_URL = "https://www.drushim.co.il/jobs/{cat}/?page={page}"
+DRUSHIM_SEARCH = "https://www.drushim.co.il/jobs/{q}/"  # לשימוש כלי האבחון
 
-DRUSHIM_SEARCH = "https://www.drushim.co.il/jobs/?q={q}"
+
+def _extract_company(card_text: str) -> str | None:
+    """שם החברה הוא השורה השנייה בכרטיס. מדלג על משרות חסויות/אנונימיות."""
+    lines = [l.strip() for l in (card_text or "").split("\n") if l.strip()]
+    if len(lines) < 2:
+        return None
+    comp = lines[1]
+    if ("חסוי" in comp or comp.startswith("-") or comp.startswith("|")
+            or len(comp) < 2 or len(comp) > 50 or "|" in comp):
+        return None
+    return comp
 
 # דומיינים של רשתות חברתיות/דרושים שאינם "אתר החברה"
 _SKIP_DOMAINS = (
@@ -70,8 +79,8 @@ def _find_company_website(company: str, delay: float = 1.0) -> str | None:
     return None
 
 
-def _scrape_drushim_companies(queries, max_companies: int, delay: float) -> list[str]:
-    """מרנדר את drushim ומחלץ שמות חברות מהמשרות. מחזיר רשימת שמות ייחודיים."""
+def _scrape_drushim_companies(max_companies: int, delay: float, max_pages: int = 5) -> list[str]:
+    """מרנדר קטגוריות קמעונאות בדרושים ומחלץ שמות חברות (שורה 2 בכל כרטיס)."""
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
@@ -83,34 +92,33 @@ def _scrape_drushim_companies(queries, max_companies: int, delay: float) -> list
     with sync_playwright() as p:
         browser = p.chromium.launch(args=["--no-sandbox"])
         page = browser.new_page()
-        for q in queries:
-            if len(companies) >= max_companies:
-                break
-            url = DRUSHIM_SEARCH.format(q=q)
-            logger.info("דרושים: מחפש '%s'", q)
-            try:
-                page.goto(url, timeout=45000, wait_until="domcontentloaded")
-                page.wait_for_timeout(6000)
-                # גלילה כדי לטעון עוד משרות
-                for _ in range(3):
-                    page.mouse.wheel(0, 4000)
-                    page.wait_for_timeout(1500)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("דרושים נכשל עבור '%s': %s", q, str(exc)[:120])
-                continue
+        for cat in DRUSHIM_CATEGORIES:
+            for pg in range(1, max_pages + 1):
+                if len(companies) >= max_companies:
+                    break
+                url = DRUSHIM_CAT_URL.format(cat=cat, page=pg)
+                logger.info("דרושים: %s עמוד %d (חברות עד כה: %d)", cat, pg, len(companies))
+                try:
+                    page.goto(url, timeout=45000, wait_until="domcontentloaded")
+                    page.wait_for_timeout(5000)
+                    for _ in range(3):
+                        page.mouse.wheel(0, 5000)
+                        page.wait_for_timeout(1200)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("דרושים נכשל עבור %s עמוד %d: %s", cat, pg, str(exc)[:100])
+                    continue
 
-            # חילוץ שמות חברה: drushim משתמש בקישורי /company/ וכן בשדות טקסט.
-            names = page.eval_on_selector_all(
-                "a[href*='/company'], [class*='company'], [class*='Company']",
-                "els => els.map(e => e.innerText).filter(Boolean)",
-            )
-            for name in names:
-                name = (name or "").strip()
-                if name and name not in seen and 2 < len(name) < 60:
-                    seen.add(name)
-                    companies.append(name)
-                    if len(companies) >= max_companies:
-                        break
+                texts = page.eval_on_selector_all(
+                    "div.job-item-main", "els => els.map(e => e.innerText)")
+                if not texts:
+                    break  # אין יותר משרות בקטגוריה
+                for t in texts:
+                    comp = _extract_company(t)
+                    if comp and comp not in seen:
+                        seen.add(comp)
+                        companies.append(comp)
+                        if len(companies) >= max_companies:
+                            break
         browser.close()
 
     logger.info("נמצאו %d שמות חברה בדרושים", len(companies))
@@ -223,7 +231,7 @@ def scan_jobs(cfg: Config, storage: Storage, target_emails: int | None = None) -
     delay = cfg.request_delay_seconds
     summary = {"companies": 0, "new": 0, "with_email": 0, "no_email": 0}
 
-    companies = _scrape_drushim_companies(DEFAULT_QUERIES, max_companies=target * 4, delay=delay)
+    companies = _scrape_drushim_companies(max_companies=target * 4, delay=delay)
     summary["companies"] = len(companies)
     if not companies:
         logger.warning("לא נמצאו שמות חברה בדרושים (ייתכן שהמבנה השתנה או שאין Playwright).")
