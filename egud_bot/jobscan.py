@@ -59,12 +59,15 @@ _UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) "
 
 def _find_company_website(company: str, delay: float = 1.0) -> str | None:
     """מחפש ב-DuckDuckGo את האתר הרשמי של החברה ומחזיר דומיין ראשון רלוונטי."""
+    time.sleep(4.0)  # האטה כדי לא להיחסם ע"י DuckDuckGo (202)
     try:
         r = requests.get(
             "https://html.duckduckgo.com/html/",
             params={"q": f"{company} אתר רשמי"}, headers=_UA, timeout=20,
         )
     except requests.RequestException:
+        return None
+    if r.status_code != 200:   # 202 = חסימת קצב; מדלגים בבטחה
         return None
     soup = BeautifulSoup(r.text, "html.parser")
     for a in soup.select("a.result__a"):
@@ -237,8 +240,12 @@ def scan_jobs(cfg: Config, storage: Storage, target_emails: int | None = None) -
         logger.warning("לא נמצאו שמות חברה בדרושים (ייתכן שהמבנה השתנה או שאין Playwright).")
         return summary
 
+    # סוכנויות השמה/כוח אדם — לא המעסיק האמיתי, מדלגים
+    staffing = ("השמה", "השמות", "כוח אדם", "כ״א", "מנפאואר", "manpower",
+                "רזומה", "staffing", "recruit", "job", "jobs", "אדם", "פלייסמנט")
     for company in companies:
-        if is_excluded_by_name(company):
+        low = company.lower()
+        if is_excluded_by_name(company) or any(k in low for k in staffing):
             continue
         pid = f"job_{company}"
         if storage.exists(pid):
