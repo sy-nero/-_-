@@ -57,29 +57,54 @@ _UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) "
                      "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"}
 
 
-def _find_company_website(company: str, delay: float = 1.0) -> str | None:
-    """מחפש ב-DuckDuckGo את האתר הרשמי של החברה ומחזיר דומיין ראשון רלוונטי."""
-    time.sleep(4.0)  # האטה כדי לא להיחסם ע"י DuckDuckGo (202)
-    try:
-        r = requests.get(
-            "https://html.duckduckgo.com/html/",
-            params={"q": f"{company} אתר רשמי"}, headers=_UA, timeout=20,
-        )
-    except requests.RequestException:
-        return None
-    if r.status_code != 200:   # 202 = חסימת קצב; מדלגים בבטחה
-        return None
-    soup = BeautifulSoup(r.text, "html.parser")
-    for a in soup.select("a.result__a"):
-        href = a.get("href") or ""
-        # DDG עוטף קישורים ב-/l/?uddg=<url>
-        if "uddg=" in href:
-            href = unquote(parse_qs(urlparse(href).query).get("uddg", [""])[0])
+def _first_good_host(urls) -> str | None:
+    for href in urls:
         host = (urlparse(href).netloc or "").lower()
         if host and not any(s in host for s in _SKIP_DOMAINS):
-            time.sleep(delay)
             return f"https://{host}"
     return None
+
+
+def _search_google(company: str, key: str, cx: str) -> str | None:
+    """Google Custom Search API — אמין, לא נחסם."""
+    try:
+        r = requests.get(
+            "https://www.googleapis.com/customsearch/v1",
+            params={"key": key, "cx": cx, "q": f"{company} אתר רשמי", "num": 5},
+            timeout=20,
+        )
+        items = r.json().get("items", []) if r.status_code == 200 else []
+    except (requests.RequestException, ValueError):
+        return None
+    return _first_good_host(it.get("link", "") for it in items)
+
+
+def _search_ddg(company: str) -> str | None:
+    """DuckDuckGo (חינמי, אך נחסם אחרי מספר חיפושים) — גיבוי בלבד."""
+    time.sleep(4.0)
+    try:
+        r = requests.get("https://html.duckduckgo.com/html/",
+                         params={"q": f"{company} אתר רשמי"}, headers=_UA, timeout=20)
+    except requests.RequestException:
+        return None
+    if r.status_code != 200:
+        return None
+    soup = BeautifulSoup(r.text, "html.parser")
+    urls = []
+    for a in soup.select("a.result__a"):
+        href = a.get("href") or ""
+        if "uddg=" in href:
+            href = unquote(parse_qs(urlparse(href).query).get("uddg", [""])[0])
+        urls.append(href)
+    return _first_good_host(urls)
+
+
+def _find_company_website(company: str, delay: float = 1.0,
+                          search_key: str = "", search_cx: str = "") -> str | None:
+    """מחפש את אתר החברה — דרך Google Custom Search אם מוגדר, אחרת DuckDuckGo."""
+    if search_key and search_cx:
+        return _search_google(company, search_key, search_cx)
+    return _search_ddg(company)
 
 
 def _scrape_drushim_companies(max_companies: int, delay: float, max_pages: int = 5) -> list[str]:
@@ -252,7 +277,8 @@ def scan_jobs(cfg: Config, storage: Storage, target_emails: int | None = None) -
             continue
         summary["new"] += 1
 
-        website = _find_company_website(company, delay)
+        website = _find_company_website(
+            company, delay, cfg.google_search_key, cfg.google_search_cx)
         email = find_email(website, delay) if website else None
         lead = BusinessLead(
             place_id=pid, name=company, address="", lat=0.0, lng=0.0, phone="",

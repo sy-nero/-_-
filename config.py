@@ -47,6 +47,9 @@ class Config:
     sender_title: str = os.getenv("SENDER_TITLE", "מנהל קשרי לקוחות")
     # קמפיין מ״א (משאבי אנוש): קישור הקורס
     course_url: str = os.getenv("COURSE_URL", "https://egud.org.il/content/courses")
+    # Google Custom Search (לחיפוש אתר החברה בקמפיין מ״א) — אמין, לא נחסם
+    google_search_key: str = os.getenv("GOOGLE_SEARCH_KEY", "")
+    google_search_cx: str = os.getenv("GOOGLE_SEARCH_CX", "")
     landing_page_url: str = os.getenv("LANDING_PAGE_URL", "https://example.co.il/register")
     unsubscribe_url: str = os.getenv("UNSUBSCRIBE_URL", "https://example.co.il/unsubscribe")
     # נתיב לקובץ הלוגו של האיגוד (PNG/JPG) שיוטמע במייל
