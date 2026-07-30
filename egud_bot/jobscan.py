@@ -188,14 +188,28 @@ def debug_drushim(url: str = "https://www.drushim.co.il/jobs/cat32/") -> None:
             t = (el.inner_text() or "").strip().replace("\n", " ")
             print("   >>", t[:80] if t else "(ריק)")
 
-        # HTML של כרטיס המשרה הראשון (ההורה ה-4 של קישור משרה)
-        print("\nHTML של כרטיס משרה ראשון:")
-        first = page.query_selector("a[href*='/job']")
-        if first:
-            card_html = first.evaluate(
-                "el => { let n=el; for(let i=0;i<5 && n.parentElement;i++) n=n.parentElement;"
-                " return n.outerHTML; }")
-            print(re.sub(r"\s+", " ", card_html)[:1800])
+        # כרטיסי משרה אמיתיים (href בפורמט /job/מספר)
+        cards = page.evaluate(r"""() => {
+          const links = [...document.querySelectorAll("a[href*='/job/']")]
+              .filter(x => /\/job\/\d+/.test(x.getAttribute('href')||''));
+          const seen = new Set(); const out = [];
+          for (const a of links) {
+            let n = a; for (let i=0;i<6 && n.parentElement;i++) n = n.parentElement;
+            if (seen.has(n)) continue; seen.add(n);
+            out.push({text: n.innerText, html: n.outerHTML});
+            if (out.length >= 3) break;
+          }
+          return out;
+        }""")
+        print(f"\nנמצאו {len(cards)} כרטיסי משרה אמיתיים. טקסט של 3 הראשונים:")
+        for i, c in enumerate(cards):
+            lines = [l.strip() for l in (c["text"] or "").split("\n") if l.strip()]
+            print(f"  --- כרטיס {i+1} ---")
+            for l in lines[:8]:
+                print("     ", l[:70])
+        if cards:
+            print("\nHTML של כרטיס משרה ראשון (לזיהוי הסלקטור של שם החברה):")
+            print(re.sub(r"\s+", " ", cards[0]["html"])[:2200])
         page.context.browser.close()
     print("\nנשמר: data/drushim_debug.html")
 
