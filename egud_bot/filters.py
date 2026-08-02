@@ -97,13 +97,51 @@ NON_RETAIL_KEYWORDS = (
     "סטודיו", "Studio", "studio",
     "שלטים", "דפוס", "מיתוג", "פרסום", " IT ", "IT Israel",
     "Solutions", "Systems", "טכנולוג", "מחשוב",
+    "לבניין", "בנייה", "יזמות", "אחזקות", "השקעות",
 )
+
+
+# רשתות ארציות גדולות / חברות ענק — לא קהל היעד (עסקים קטנים בלבד).
+# בדיקה לפי שם (substring). נכללות רק מילים ייחודיות שלא יתפסו עסק קטן בטעות.
+CHAIN_NAME_KEYWORDS = (
+    "ללין", "Laline", "נעמן", "Naaman", "רמי לוי", "שופרסל", "Shufersal",
+    "יינות ביתן", "ויקטורי", "אושר עד", "טיב טעם", "סופר פארם", "Super-Pharm",
+    "סופרפארם", "הום סנטר", "Home Center", "מקס סטוק", "Max Stock", "הולמס פלייס",
+    "Holmes Place", "קסטרו", "Castro", "רנואר", "Renuar", "פוקס", "Fox Home",
+    "H&M", "ZARA", "זארה", "מגה בעיר", "אייס", "ACE", "טרמינל איקס",
+    "גולף אנד קו", "אושרי", "מחסני חשמל", "באג", "K.S.P", "קרביץ",
+)
+
+# דומיינים חסומים: רשתות גדולות + כתובות טכניות (staging/פיתוח) שאינן מייל אמיתי.
+BLOCKED_EMAIL_DOMAINS = (
+    "laline.co.il", "naaman-vardinon.co.il", "rami-levy.co.il",
+    "holmesplace.co.il", "shufersal.co.il", "super-pharm.co.il",
+    "delekmotors.co.il", "radware.com", "azurewebsites.net",
+)
+
+# דפוסים בדומיין שמעידים על כתובת טכנית/לא-אמיתית (לא לשלוח אליהם)
+BLOCKED_DOMAIN_PATTERNS = ("staging", "azurewebsites.net", "herokuapp", "-dev.", ".test")
 
 
 def is_org_email(email: str) -> bool:
     """כתובת של ארגון (דומיין .org / .org.il) — לרוב לא חנות מסחרית."""
     e = (email or "").strip().lower()
     return e.endswith(".org") or e.endswith(".org.il")
+
+
+def is_blocked_email(email: str) -> bool:
+    """כתובת של רשת גדולה, ארגון, או דומיין טכני — לא לשלוח אליה."""
+    e = (email or "").strip().lower()
+    if not e or "@" not in e:
+        return True
+    domain = e.rsplit("@", 1)[1]
+    if is_org_email(e):
+        return True
+    if any(domain == d or domain.endswith("." + d) for d in BLOCKED_EMAIL_DOMAINS):
+        return True
+    if any(p in domain for p in BLOCKED_DOMAIN_PATTERNS):
+        return True
+    return False
 
 
 def is_excluded_by_name(name: str) -> bool:
@@ -114,6 +152,8 @@ def is_excluded_by_name(name: str) -> bool:
     if any(kw in n for kw in EXCLUDED_NAME_KEYWORDS):
         return True
     if any(kw in n for kw in NON_RETAIL_KEYWORDS):
+        return True
+    if any(kw in n for kw in CHAIN_NAME_KEYWORDS):  # רשת גדולה
         return True
     return False
 

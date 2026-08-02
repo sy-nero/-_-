@@ -7,7 +7,7 @@ import logging
 from config import Config
 from data.neighborhoods import HAREDI_NEIGHBORHOODS, Neighborhood
 from egud_bot.places import make_client
-from egud_bot.filters import BusinessLead, passes_filters
+from egud_bot.filters import BusinessLead, passes_filters, is_blocked_email
 from egud_bot.email_finder import find_email
 from egud_bot.storage import Storage
 from egud_bot.mailer import Mailer
@@ -70,6 +70,8 @@ def scan_retail(
             client.enrich_contact(lead)
 
             email = find_email(lead.website, cfg.request_delay_seconds) if lead.website else None
+            if email and is_blocked_email(email):  # רשת גדולה / ארגון / דומיין טכני
+                email = None
             if email:
                 summary["with_email"] += 1
                 storage.upsert_lead(lead, email, status="found")
@@ -104,12 +106,19 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
     # סינון לפי יומן שליחות קבוע: לעולם לא לשלוח שוב למי שכבר קיבל (גם אחרי מחיקת DB)
     sent_before = storage.already_sent_emails()
     all_candidates = storage.leads_to_email(10 ** 9)
-    skipped = [l for l in all_candidates if (l["email"] or "").lower() in sent_before]
-    leads = [l for l in all_candidates
+    # חסימת רשתות גדולות / ארגונים / דומיינים טכניים (הגנה גם אם נכנסו ל-DB בעבר)
+    blocked = [l for l in all_candidates if is_blocked_email(l["email"])]
+    remaining = [l for l in all_candidates if not is_blocked_email(l["email"])]
+    skipped = [l for l in remaining if (l["email"] or "").lower() in sent_before]
+    leads = [l for l in remaining
              if (l["email"] or "").lower() not in sent_before][:cfg.max_emails_per_run]
 
     summary = {"candidates": len(leads), "sent": 0, "failed": 0,
-               "skipped_already_sent": len(skipped)}
+               "skipped_already_sent": len(skipped),
+               "skipped_blocked": len(blocked)}
+    if blocked:
+        logger.info("דילוג על %d כתובות חסומות (רשת גדולה / ארגון / דומיין טכני).",
+                    len(blocked))
     if skipped:
         logger.info("דילוג על %d כתובות שכבר קיבלו מייל בעבר.", len(skipped))
 
