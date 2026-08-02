@@ -91,8 +91,6 @@ def _hr(business_name, association_name, sender_name, sender_title,
         f"תודה,\n{sender_name}\n{association_name}\n"
     )
     p = "margin:0 0 14px;"
-    btn = ("display:inline-block;padding:13px 30px;border-radius:8px;"
-           "text-decoration:none;font-weight:bold;font-size:16px;")
     html = f"""<!DOCTYPE html>
 <html lang="he" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"></head>
@@ -106,10 +104,9 @@ def _hr(business_name, association_name, sender_name, sender_title,
       מהמשימות הכי חשובות (והכי מתישות) לבעל עסק.</p>
     <p style="{p}">לכן ארגנו <strong>קורס וכנס</strong> לבעלי עסקים: איך למצוא,
       לגייס ולשמור עובדים טובים, בלי לבזבז זמן וכסף.</p>
-    <p style="margin:22px 0;">
+    <p style="{p}">לרכישת הקורס, היכנסו לקישור:<br>
       <a href="{course_link}" target="_blank"
-         style="{btn}background:#1a2e4a;color:#ffffff;">לרכישת הקורס ›</a>
-    </p>
+         style="color:#1a2e4a;">{course_url}</a></p>
     <p style="{p}">ולהרשמה לכנס, פשוט השיבו למייל הזה עם שם וטלפון ונחזור אליכם.</p>
     <p style="margin:0 0 4px;">תודה,</p>
     <p style="margin:0;">{sender_name}<br>{association_name}</p>
