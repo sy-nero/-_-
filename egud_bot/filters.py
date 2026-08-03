@@ -220,3 +220,62 @@ def passes_filters(
     if is_excluded_by_name(lead.name):
         return False
     return True
+
+
+# ============ קמפיין CRM: עסקי שירות ומקצוע (מנהלים לקוחות/לידים) ============
+# סוגי עסקי שירות שמתאימים ל-CRM (משרדים, סוכנויות, קליניקות, מוסכים וכו')
+SERVICE_BUSINESS_TYPES = {
+    "real_estate_agency", "insurance_agency", "lawyer", "accounting",
+    "travel_agency", "moving_company", "car_repair", "car_dealer", "car_wash",
+    "car_rental", "electrician", "plumber", "painter", "locksmith", "storage",
+    "dentist", "doctor", "physiotherapist", "veterinary_care",
+    "beauty_salon", "hair_care", "spa", "gym",
+}
+
+# מוסדות ציבור/דת/חינוך/ממשל שנפסלים גם בקמפיין CRM (בלי doctor/dentist שהם קליניקות פרטיות)
+SERVICE_EXCLUDED_TYPES = {
+    "school", "primary_school", "secondary_school", "university", "preschool",
+    "library", "bank", "atm", "local_government_office", "city_hall",
+    "courthouse", "police", "fire_station", "post_office", "embassy",
+    "government", "place_of_worship", "synagogue", "church", "mosque",
+    "hindu_temple", "cemetery", "funeral_home", "hospital", "transit_station",
+    "bus_station", "train_station", "subway_station", "airport", "parking",
+}
+
+
+def is_service_business(primary_type: str, types=()) -> bool:
+    """עסק שירות/מקצוע שמנהל לקוחות (מתאים ל-CRM), ואינו מוסד ציבורי."""
+    ts = {(t or "").lower() for t in (types or [])}
+    ts.add((primary_type or "").lower())
+    if ts & SERVICE_EXCLUDED_TYPES:
+        return False
+    return bool(ts & SERVICE_BUSINESS_TYPES)
+
+
+def is_excluded_by_name_service(name: str) -> bool:
+    """פסילת שם לקמפיין CRM: ערבית, מוסד, או רשת גדולה (בלי מילות ה'לא-קמעונאי')."""
+    n = name or ""
+    if ARABIC_RE.search(n):
+        return True
+    if any(kw in n for kw in EXCLUDED_NAME_KEYWORDS):
+        return True
+    if any(kw in n for kw in CHAIN_NAME_KEYWORDS):
+        return True
+    return False
+
+
+def passes_filters_service(
+    lead: BusinessLead,
+    max_review_count: int = 0,
+    require_operational: bool = True,
+) -> bool:
+    """קריטריונים לקמפיין CRM: עסק שירות/מקצוע פעיל, לא מוסד, לא רשת."""
+    if require_operational and lead.business_status not in ("", "OPERATIONAL"):
+        return False
+    if lead.review_count > max_review_count:
+        return False
+    if not is_service_business(lead.primary_type, lead.types):
+        return False
+    if is_excluded_by_name_service(lead.name):
+        return False
+    return True

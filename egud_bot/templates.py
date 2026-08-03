@@ -18,6 +18,14 @@ FIELD_NOUNS = {
     "jewelry_store": "חנות תכשיטים", "shoe_store": "חנות נעליים",
     "hardware_store": "חנות כלי עבודה", "florist": "חנות פרחים",
     "gift_shop": "חנות מתנות", "pharmacy": "בית מרקחת", "laundry": "מכבסה",
+    # עסקי שירות/מקצוע (קמפיין CRM)
+    "lawyer": "משרד עורכי דין", "accounting": "משרד רואי חשבון",
+    "real_estate_agency": "משרד תיווך", "insurance_agency": "סוכנות ביטוח",
+    "travel_agency": "סוכנות נסיעות", "moving_company": "חברת הובלות",
+    "dentist": "מרפאת שיניים", "doctor": "מרפאה",
+    "physiotherapist": "קליניקת פיזיותרפיה", "veterinary_care": "מרפאה וטרינרית",
+    "car_repair": "מוסך", "car_dealer": "סוכנות רכב", "spa": "ספא",
+    "gym": "חדר כושר", "locksmith": "מנעולן",
 }
 
 

@@ -6,8 +6,9 @@ import logging
 
 from config import Config
 from data.neighborhoods import HAREDI_NEIGHBORHOODS, Neighborhood, neighborhoods_for
-from egud_bot.places import make_client
-from egud_bot.filters import BusinessLead, passes_filters, is_blocked_email
+from egud_bot.places import make_client, SERVICE_BUSINESS_TYPES_QUERY
+from egud_bot.filters import (BusinessLead, passes_filters,
+                              passes_filters_service, is_blocked_email)
 from egud_bot.email_finder import find_email
 from egud_bot.storage import Storage
 from egud_bot.mailer import Mailer
@@ -35,7 +36,7 @@ def scan(
         return scan_jobs(cfg, storage, target_emails=target)
     if neighborhoods is None:
         neighborhoods = neighborhoods_for(city)
-    return scan_retail(cfg, storage, neighborhoods, target_emails)
+    return scan_retail(cfg, storage, neighborhoods, target_emails, campaign)
 
 
 def scan_retail(
@@ -43,25 +44,37 @@ def scan_retail(
     storage: Storage,
     neighborhoods: list[Neighborhood] | None = None,
     target_emails: int | None = None,
+    campaign: str = "funding",
 ) -> dict:
-    """סורק חנויות קמעונאיות דרך Google Places לפי שכונות (משמש גם את קמפיין מ״א)."""
+    """
+    סורק עסקים דרך Google Places לפי שכונות.
+    funding/hr — חנויות קמעונאיות. crm — עסקי שירות/מקצוע.
+    """
     neighborhoods = neighborhoods or HAREDI_NEIGHBORHOODS
     target = cfg.target_emails if target_emails is None else target_emails
     client = make_client(cfg)
+
+    # קמפיין CRM מכוון לעסקי שירות; שאר הקמפיינים לחנויות קמעונאיות
+    if campaign == "crm":
+        query_types = SERVICE_BUSINESS_TYPES_QUERY
+        passes = passes_filters_service
+    else:
+        query_types = None
+        passes = passes_filters
 
     summary = {"scanned": 0, "passed": 0, "new": 0, "with_email": 0, "no_email": 0}
 
     for nb in neighborhoods:
         logger.info("סורק שכונה: %s (מיילים שנאספו: %d/%d)",
                     nb.name, summary["with_email"], target)
-        places = client.scan_point(nb.lat, nb.lng, cfg.search_radius_meters)
+        places = client.scan_point(nb.lat, nb.lng, cfg.search_radius_meters, query_types)
         summary["scanned"] += len(places)
 
         for place in places.values():
             lead = BusinessLead.from_place(place, neighborhood=nb.name)
             if not lead.place_id:
                 continue
-            if not passes_filters(lead, cfg.max_review_count, cfg.require_operational):
+            if not passes(lead, cfg.max_review_count, cfg.require_operational):
                 continue
             summary["passed"] += 1
 

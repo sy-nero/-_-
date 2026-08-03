@@ -53,6 +53,15 @@ LOCAL_BUSINESS_TYPES = [
     "laundry",
 ]
 
+# סוגי עסקי שירות/מקצוע (לקמפיין CRM) — עסקים שמנהלים לקוחות ולידים.
+SERVICE_BUSINESS_TYPES_QUERY = [
+    "real_estate_agency", "insurance_agency", "lawyer", "accounting",
+    "travel_agency", "moving_company", "car_repair", "car_dealer",
+    "electrician", "plumber", "painter", "locksmith", "storage",
+    "dentist", "doctor", "physiotherapist", "veterinary_care",
+    "beauty_salon", "hair_care", "spa", "gym",
+]
+
 
 LEGACY_NEARBY_URL = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
 LEGACY_DETAILS_URL = "https://maps.googleapis.com/maps/api/place/details/json"
@@ -117,14 +126,15 @@ class PlacesClient:
         return resp.json().get("places", [])
 
     def scan_point(
-        self, lat: float, lng: float, radius_meters: float
+        self, lat: float, lng: float, radius_meters: float,
+        included_types: list[str] | None = None,
     ) -> dict[str, dict]:
         """
         סורק נקודה אחת על פני כל סוגי העסקים ומחזיר מילון {place_id: place}.
         פיצול לפי סוג עוקף את מגבלת 20 התוצאות לבקשה.
         """
         found: dict[str, dict] = {}
-        for biz_type in LOCAL_BUSINESS_TYPES:
+        for biz_type in (included_types or LOCAL_BUSINESS_TYPES):
             places = self.search_nearby(lat, lng, radius_meters, [biz_type])
             for place in places:
                 pid = place.get("id")
@@ -201,9 +211,10 @@ class LegacyPlacesClient:
             params = {"pagetoken": token, "key": self.api_key}
         return results
 
-    def scan_point(self, lat: float, lng: float, radius_meters: float) -> dict[str, dict]:
+    def scan_point(self, lat: float, lng: float, radius_meters: float,
+                   included_types: list[str] | None = None) -> dict[str, dict]:
         found: dict[str, dict] = {}
-        for biz_type in LOCAL_BUSINESS_TYPES:
+        for biz_type in (included_types or LOCAL_BUSINESS_TYPES):
             for result in self.search_nearby_type(lat, lng, radius_meters, biz_type):
                 pid = result.get("place_id")
                 if pid and pid not in found:
