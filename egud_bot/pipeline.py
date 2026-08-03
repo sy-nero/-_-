@@ -102,12 +102,16 @@ def scan_retail(
 
 
 def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
-                campaign: str = "funding") -> dict:
+                campaign: str = "funding", skip_contacted: bool = False) -> dict:
     """
     שולח מייל ללידים חדשים שיש להם כתובת מייל (עד המכסה בהרצה).
+    skip_contacted=True מדלג על כל מי שקיבל מייל באיזשהו קמפיין אחר
+    (כדי לא לשלוח לאותו עסק שתי פניות שונות).
     """
     # סינון לפי יומן שליחות קבוע: לעולם לא לשלוח שוב למי שכבר קיבל (גם אחרי מחיקת DB)
     sent_before = storage.already_sent_emails()
+    if skip_contacted:
+        sent_before = sent_before | storage.contacted_any_campaign()
     all_candidates = storage.leads_to_email(10 ** 9)
     # חסימת רשתות גדולות / ארגונים / דומיינים טכניים (הגנה גם אם נכנסו ל-DB בעבר)
     blocked = [l for l in all_candidates if is_blocked_email(l["email"])]

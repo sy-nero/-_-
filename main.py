@@ -61,7 +61,8 @@ def cmd_send(args) -> int:
             return 1
     storage = _storage(args)
     summary = pipeline.send_emails(config, storage, dry_run=args.dry_run,
-                                   campaign=_campaign(args))
+                                   campaign=_campaign(args),
+                                   skip_contacted=getattr(args, "skip_contacted", False))
     print("\n=== סיכום שליחה ===")
     for k, v in summary.items():
         print(f"  {k}: {v}")
@@ -151,6 +152,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = _add_campaign(sub.add_parser("send", help="שליחת מיילים"))
     sp.add_argument("--dry-run", action="store_true", help="בלי לשלוח בפועל")
+    sp.add_argument("--skip-contacted", action="store_true",
+                    help="דלג על כל מי שקיבל מייל בקמפיין אחר (לא לשלוח פעמיים לאותו עסק)")
     sp.set_defaults(func=cmd_send)
 
     rp = _add_city(_add_campaign(sub.add_parser("run", help="scan ואז send")))

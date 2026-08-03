@@ -164,6 +164,16 @@ class Storage:
         with open(path, encoding="utf-8") as f:
             return {line.strip().lower() for line in f if line.strip()}
 
+    def contacted_any_campaign(self) -> set:
+        """כל כתובת שקיבלה מייל באיזשהו קמפיין (איחוד כל קובצי sent_*.txt)."""
+        import glob
+        base = os.path.dirname(self.db_path) or "."
+        emails = set()
+        for path in glob.glob(os.path.join(base, "sent_*.txt")):
+            with open(path, encoding="utf-8") as f:
+                emails |= {line.strip().lower() for line in f if line.strip()}
+        return emails
+
     def record_sent(self, email: str) -> None:
         """רושם כתובת ביומן הקבוע כדי שלעולם לא תקבל מייל פעמיים."""
         email = (email or "").strip().lower()
