@@ -1,9 +1,11 @@
 """
-שכונות חרדיות בירושלים עם קואורדינטות מרכז משוערות.
+שכונות חרדיות (ירושלים ובני ברק) עם קואורדינטות מרכז משוערות.
 משמש כמרכזי חיפוש עבור Google Places Nearby Search.
 
 ניתן להוסיף/להסיר שכונות לפי הצורך. הקואורדינטות משוערות (מרכז שכונה),
 והרדיוס נקבע ב-.env (SEARCH_RADIUS_METERS).
+
+בחירת עיר בזמן ריצה: python main.py scan --city bnei-brak (ברירת מחדל: ירושלים).
 """
 from dataclasses import dataclass
 
@@ -16,7 +18,7 @@ class Neighborhood:
 
 
 # שכונות חרדיות מרכזיות בירושלים
-HAREDI_NEIGHBORHOODS: list[Neighborhood] = [
+JERUSALEM_NEIGHBORHOODS: list[Neighborhood] = [
     Neighborhood("מאה שערים", 31.7906, 35.2244),
     Neighborhood("גאולה", 31.7897, 35.2200),
     Neighborhood("בית ישראל", 31.7920, 35.2270),
@@ -50,3 +52,33 @@ HAREDI_NEIGHBORHOODS: list[Neighborhood] = [
     Neighborhood("נווה יעקב מזרח", 31.8480, 35.2450),
     Neighborhood("הר נוף מערב", 31.7900, 35.1700),
 ]
+
+
+# שכונות/אזורים חרדיים בבני ברק (עיר צפופה וקטנה — מספר נקודות מכסות אותה)
+BNEI_BRAK_NEIGHBORHOODS: list[Neighborhood] = [
+    Neighborhood("רבי עקיבא (מרכז מסחרי)", 32.0855, 34.8355),
+    Neighborhood("מרכז העיר", 32.0810, 34.8340),
+    Neighborhood("פרדס כץ", 32.0960, 34.8380),
+    Neighborhood("קרית הרצוג", 32.0975, 34.8310),
+    Neighborhood("שיכון ה'", 32.0820, 34.8270),
+    Neighborhood("שיכון ג'", 32.0785, 34.8320),
+    Neighborhood("זכרון מאיר", 32.0880, 34.8265),
+    Neighborhood("רמת אלחנן", 32.0755, 34.8410),
+    Neighborhood("קרית ויז'ניץ", 32.1010, 34.8345),
+    Neighborhood("נווה אחיעזר", 32.0900, 34.8420),
+]
+
+
+# מיפוי שם עיר -> רשימת שכונות (לבחירה עם --city)
+CITIES: dict[str, list[Neighborhood]] = {
+    "jerusalem": JERUSALEM_NEIGHBORHOODS,
+    "bnei-brak": BNEI_BRAK_NEIGHBORHOODS,
+}
+
+# תאימות לאחור: ברירת המחדל היא ירושלים
+HAREDI_NEIGHBORHOODS: list[Neighborhood] = JERUSALEM_NEIGHBORHOODS
+
+
+def neighborhoods_for(city: str) -> list[Neighborhood]:
+    """מחזיר את רשימת השכונות לעיר (ברירת מחדל: ירושלים)."""
+    return CITIES.get((city or "jerusalem").lower(), JERUSALEM_NEIGHBORHOODS)

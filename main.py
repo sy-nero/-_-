@@ -45,7 +45,8 @@ def cmd_scan(args) -> int:
         print("שגיאות קונפיגורציה:\n  - " + "\n  - ".join(errors))
         return 1
     storage = _storage(args)
-    summary = pipeline.scan(config, storage, campaign=_campaign(args))
+    summary = pipeline.scan(config, storage, campaign=_campaign(args),
+                            city=getattr(args, "city", "jerusalem"))
     print("\n=== סיכום סריקה ===")
     for k, v in summary.items():
         print(f"  {k}: {v}")
@@ -134,18 +135,24 @@ def _add_campaign(sp):
     return sp
 
 
+def _add_city(sp):
+    sp.add_argument("--city", choices=["jerusalem", "bnei-brak"], default="jerusalem",
+                    help="עיר לסריקה: jerusalem (ברירת מחדל) / bnei-brak")
+    return sp
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="בוט האיגוד — סריקת עסקים ושליחת מיילים")
     p.add_argument("-v", "--verbose", action="store_true", help="לוג מפורט")
     sub = p.add_subparsers(dest="command", required=True)
 
-    _add_campaign(sub.add_parser("scan", help="סריקה + איתור מיילים")).set_defaults(func=cmd_scan)
+    _add_city(_add_campaign(sub.add_parser("scan", help="סריקה + איתור מיילים"))).set_defaults(func=cmd_scan)
 
     sp = _add_campaign(sub.add_parser("send", help="שליחת מיילים"))
     sp.add_argument("--dry-run", action="store_true", help="בלי לשלוח בפועל")
     sp.set_defaults(func=cmd_send)
 
-    rp = _add_campaign(sub.add_parser("run", help="scan ואז send"))
+    rp = _add_city(_add_campaign(sub.add_parser("run", help="scan ואז send")))
     rp.add_argument("--dry-run", action="store_true", help="בלי לשלוח בפועל")
     rp.set_defaults(func=cmd_run)
 

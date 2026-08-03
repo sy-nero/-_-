@@ -5,7 +5,7 @@ import time
 import logging
 
 from config import Config
-from data.neighborhoods import HAREDI_NEIGHBORHOODS, Neighborhood
+from data.neighborhoods import HAREDI_NEIGHBORHOODS, Neighborhood, neighborhoods_for
 from egud_bot.places import make_client
 from egud_bot.filters import BusinessLead, passes_filters, is_blocked_email
 from egud_bot.email_finder import find_email
@@ -22,16 +22,19 @@ def scan(
     neighborhoods: list[Neighborhood] | None = None,
     target_emails: int | None = None,
     campaign: str = "funding",
+    city: str = "jerusalem",
 ) -> dict:
     """
     סורק מקור לפי הקמפיין ושומר לידים חדשים ב-DB.
-    funding — חנויות קמעונאיות דרך Google Places (לפי שכונות).
+    funding — חנויות קמעונאיות דרך Google Places (לפי שכונות העיר שנבחרה).
     hr      — עסקים מאתרי דרושים (jobscan).
     """
     if campaign == "hr":
         from egud_bot.jobscan import scan_jobs
         target = cfg.target_emails if target_emails is None else target_emails
         return scan_jobs(cfg, storage, target_emails=target)
+    if neighborhoods is None:
+        neighborhoods = neighborhoods_for(city)
     return scan_retail(cfg, storage, neighborhoods, target_emails)
 
 
