@@ -110,6 +110,10 @@ CHAIN_NAME_KEYWORDS = (
     "Holmes Place", "קסטרו", "Castro", "רנואר", "Renuar", "פוקס", "Fox Home",
     "H&M", "ZARA", "זארה", "מגה בעיר", "אייס", "ACE", "טרמינל איקס",
     "גולף אנד קו", "אושרי", "מחסני חשמל", "באג", "K.S.P", "קרביץ",
+    # מותגים/רשתות חילוניים ארציים — לא מהמגזר החרדי
+    "וולט", "Wolt", "טבע נאות", "Teva Naot", "ריפבליק", "Republic",
+    "הודיז", "Hoodies", "ING", "מובילי", "Mobili", "מיסטר דונאטס",
+    "Mr Donuts", "Mr. Donuts", "בורסה", "Bursa",
 )
 
 # דומיינים חסומים: רשתות גדולות + כתובות טכניות (staging/פיתוח) שאינן מייל אמיתי.
@@ -117,6 +121,10 @@ BLOCKED_EMAIL_DOMAINS = (
     "laline.co.il", "naaman-vardinon.co.il", "rami-levy.co.il",
     "holmesplace.co.il", "shufersal.co.il", "super-pharm.co.il",
     "delekmotors.co.il", "radware.com", "azurewebsites.net",
+    # מותגים/רשתות חילוניים + חברות שאינן קמעונאיות חרדיות
+    "wolt.com", "teva-naot.co.il", "republic-store.com", "ingsport.co.il",
+    "hoodies.co.il", "mobili.co.il", "mr-donuts.co.il", "thebursa.co.il",
+    "adrtech.co.il", "usys.co.il", "brillind.co.il", "poenta.vip", "arvana.co",
 )
 
 # דפוסים בדומיין שמעידים על כתובת טכנית/לא-אמיתית (לא לשלוח אליהם)
