@@ -115,7 +115,51 @@ def _hr(business_name, association_name, sender_name, sender_title,
     return subject, html, text
 
 
-CAMPAIGNS = {"funding": _funding, "hr": _hr}
+# ------------------------- קמפיין: מערכת CRM -------------------------
+# מחירי הקבוצה (ניתן לעדכן כאן). "רגיל" מול "בתנאי האיגוד".
+CRM_REGULAR = "3,500 ש\"ח הקמה + 150 ש\"ח לחודש"
+CRM_DEAL = "1,500 ש\"ח הקמה + 50 ש\"ח לחודש"
+
+
+def _crm(business_name, association_name, sender_name, sender_title,
+         field="", neighborhood="", **_):
+    saw = _saw_clause(field, neighborhood)
+    subject = (f"{business_name}, מערכת CRM לעסק בתנאי האיגוד" if business_name
+               else "מערכת CRM לעסק בתנאי האיגוד")
+    text = (
+        f"שלום,\n\n"
+        f"שמי {sender_name}, מ{association_name}.\n\n"
+        f"אנחנו מארגנים עכשיו קבוצה של בעלי עסקים מהמגזר להקמת מערכת CRM לניהול "
+        f"לקוחות, לידים ומכירות{saw}\n\n"
+        f"בזכות הכמות השגנו תנאים מיוחדים למצטרפים דרך האיגוד: במקום {CRM_REGULAR}, "
+        f"רק {CRM_DEAL}.\n\n"
+        f"אם זה מתאים לעסק שלכם, תשיבו לי לכאן עם שם וטלפון ואחזור אליכם עם כל הפרטים.\n\n"
+        f"תודה,\n{sender_name}\n{association_name}\n"
+    )
+    p = "margin:0 0 14px;"
+    html = f"""<!DOCTYPE html>
+<html lang="he" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#ffffff;">
+  <div dir="rtl" style="direction:rtl;text-align:right;max-width:600px;margin:0 auto;
+       padding:22px 20px;font-family:Arial,Helvetica,sans-serif;font-size:16px;
+       line-height:1.75;color:#222222;">
+    <p style="{p}">שלום,</p>
+    <p style="{p}">שמי {sender_name}, מ{association_name}.</p>
+    <p style="{p}">אנחנו מארגנים עכשיו קבוצה של בעלי עסקים מהמגזר להקמת מערכת
+      <strong>CRM</strong> לניהול לקוחות, לידים ומכירות{saw}</p>
+    <p style="{p}">בזכות הכמות השגנו תנאים מיוחדים למצטרפים דרך האיגוד:
+      במקום {CRM_REGULAR}, רק <strong>{CRM_DEAL}</strong>.</p>
+    <p style="{p}">אם זה מתאים לעסק שלכם, תשיבו לי לכאן עם שם וטלפון ואחזור אליכם
+      עם כל הפרטים.</p>
+    <p style="margin:0 0 4px;">תודה,</p>
+    <p style="margin:0;">{sender_name}<br>{association_name}</p>
+  </div>
+</body></html>"""
+    return subject, html, text
+
+
+CAMPAIGNS = {"funding": _funding, "hr": _hr, "crm": _crm}
 
 
 def render(campaign, **ctx):

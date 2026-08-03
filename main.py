@@ -35,7 +35,7 @@ def _campaign(args) -> str:
 
 def _storage(args) -> Storage:
     c = _campaign(args)
-    path = config.db_path if c == "funding" else "data/leads_hr.db"
+    path = config.db_path if c == "funding" else f"data/leads_{c}.db"
     return Storage(path, campaign=c)
 
 
@@ -112,7 +112,8 @@ def cmd_stats(args) -> int:
 
 
 def cmd_export(args) -> int:
-    db_path = config.db_path if _campaign(args) == "funding" else "data/leads_hr.db"
+    c = _campaign(args)
+    db_path = config.db_path if c == "funding" else f"data/leads_{c}.db"
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     rows = conn.execute("SELECT * FROM leads ORDER BY found_at").fetchall()
@@ -130,8 +131,8 @@ def cmd_export(args) -> int:
 
 
 def _add_campaign(sp):
-    sp.add_argument("--campaign", choices=["funding", "hr"], default="funding",
-                    help="funding=מימון (ברירת מחדל), hr=משאבי אנוש (קורס וכנס)")
+    sp.add_argument("--campaign", choices=["funding", "hr", "crm"], default="funding",
+                    help="funding=מימון (ברירת מחדל), hr=משאבי אנוש, crm=מערכת CRM")
     return sp
 
 
