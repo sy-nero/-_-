@@ -91,12 +91,18 @@ class Config:
             errors.append("חסר GOOGLE_MAPS_API_KEY")
         return errors
 
-    def validate_for_email(self) -> list[str]:
-        """מחזיר רשימת שגיאות קונפיגורציה עבור שליחת מייל."""
+    def validate_for_email(self, campaign: str = "funding") -> list[str]:
+        """מחזיר רשימת שגיאות קונפיגורציה עבור שליחת מייל (לפי שולח הקמפיין)."""
+        from_email, _, smtp_user, smtp_password = self.sender_for(campaign)
         errors = []
-        for key in ("smtp_host", "smtp_user", "smtp_password", "from_email"):
-            if not getattr(self, key):
-                errors.append(f"חסר ערך SMTP: {key}")
+        if not self.smtp_host:
+            errors.append("חסר ערך SMTP: smtp_host")
+        if not smtp_user:
+            errors.append("חסר ערך SMTP: smtp_user (GRANT_SMTP_USER בקמפיין מענק)")
+        if not smtp_password:
+            errors.append("חסר ערך SMTP: smtp_password (GRANT_SMTP_PASSWORD בקמפיין מענק)")
+        if not from_email:
+            errors.append("חסר ערך SMTP: from_email (GRANT_FROM_EMAIL בקמפיין מענק)")
         return errors
 
 

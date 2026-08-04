@@ -55,7 +55,7 @@ def cmd_scan(args) -> int:
 
 def cmd_send(args) -> int:
     if not args.dry_run:
-        errors = config.validate_for_email()
+        errors = config.validate_for_email(_campaign(args))
         if errors:
             print("שגיאות קונפיגורציה:\n  - " + "\n  - ".join(errors))
             return 1
