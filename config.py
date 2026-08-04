@@ -50,6 +50,12 @@ class Config:
     # Google Custom Search (לחיפוש אתר החברה בקמפיין מ״א) — אמין, לא נחסם
     google_search_key: str = os.getenv("GOOGLE_SEARCH_KEY", "")
     google_search_cx: str = os.getenv("GOOGLE_SEARCH_CX", "")
+    # קמפיין מענק (grant): שולח נפרד (המייל האישי של מירי) — SMTP של Gmail
+    grant_from_email: str = os.getenv("GRANT_FROM_EMAIL", "")
+    grant_from_name: str = os.getenv("GRANT_FROM_NAME", "מירי בר לב")
+    grant_smtp_user: str = os.getenv("GRANT_SMTP_USER", "")
+    # סיסמת אפליקציה של Gmail (רווחים מוסרים אוטומטית)
+    grant_smtp_password: str = os.getenv("GRANT_SMTP_PASSWORD", "").replace(" ", "")
     landing_page_url: str = os.getenv("LANDING_PAGE_URL", "https://example.co.il/register")
     unsubscribe_url: str = os.getenv("UNSUBSCRIBE_URL", "https://example.co.il/unsubscribe")
     # נתיב לקובץ הלוגו של האיגוד (PNG/JPG) שיוטמע במייל
@@ -68,6 +74,15 @@ class Config:
     # Landing
     flask_secret_key: str = os.getenv("FLASK_SECRET_KEY", "change-me")
     landing_port: int = int(os.getenv("LANDING_PORT", "5000"))
+
+    def sender_for(self, campaign: str) -> tuple[str, str, str, str]:
+        """מחזיר (from_email, from_name, smtp_user, smtp_password) לפי הקמפיין.
+        קמפיין grant נשלח מהמייל האישי של מירי; שאר הקמפיינים מכתובת האיגוד."""
+        if campaign == "grant" and self.grant_smtp_user:
+            return (self.grant_from_email or self.grant_smtp_user,
+                    self.grant_from_name, self.grant_smtp_user,
+                    self.grant_smtp_password)
+        return (self.from_email, self.sender_name, self.smtp_user, self.smtp_password)
 
     def validate_for_scan(self) -> list[str]:
         """מחזיר רשימת שגיאות קונפיגורציה עבור סריקה."""

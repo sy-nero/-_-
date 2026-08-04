@@ -62,6 +62,11 @@ SERVICE_BUSINESS_TYPES_QUERY = [
     "beauty_salon", "hair_care", "spa", "gym",
 ]
 
+# קמפיין מענק 4.56 (תעשייה/מסחר/שירותים) — עסקים מבוססים משני הסוגים
+GRANT_BUSINESS_TYPES_QUERY = list(dict.fromkeys(
+    LOCAL_BUSINESS_TYPES + SERVICE_BUSINESS_TYPES_QUERY
+))
+
 
 LEGACY_NEARBY_URL = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
 LEGACY_DETAILS_URL = "https://maps.googleapis.com/maps/api/place/details/json"

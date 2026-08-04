@@ -167,7 +167,64 @@ def _crm(business_name, association_name, sender_name, sender_title,
     return subject, html, text
 
 
-CAMPAIGNS = {"funding": _funding, "hr": _hr, "crm": _crm}
+# ------------------------- קמפיין: מענק מחשוב 4.56 -------------------------
+GRANT_NAME = 'הוראת מנכ"ל 4.56'
+GRANT_DEADLINE = "25 באוגוסט"
+
+
+def _grant(business_name, association_name, sender_name,
+           field="", neighborhood="", **_):
+    if field and neighborhood:
+        personal = f"ראיתי שיש לך {field} ב{neighborhood}, וחשבתי שזה יכול להתאים לך במיוחד."
+    elif field:
+        personal = f"ראיתי שיש לך {field}, וחשבתי שזה יכול להתאים לך במיוחד."
+    elif neighborhood:
+        personal = f"ראיתי שהעסק שלך ב{neighborhood}, וחשבתי שזה יכול להתאים לך."
+    else:
+        personal = "חשבתי שזה יכול להתאים לך במיוחד."
+    hi = f"היי {business_name}," if business_name else "היי,"
+    subject = (f"{business_name}, שאלה קטנה אליך" if business_name
+               else "שאלה קטנה אליך")
+    text = (
+        f"{hi}\n"
+        f"אני מירי, גם לי יש עסק.\n\n"
+        f"{personal}\n\n"
+        f"יש עכשיו מענק ממשלתי חדש למחשוב ואוטומציה בעסקים ({GRANT_NAME} של משרד "
+        f"הכלכלה). המדינה מחזירה עד 35 אחוז מהעלות, עד 350 אלף שקל, על מערכות ניהול, "
+        f"מכירות, מלאי, תוכנה וציוד.\n\n"
+        f"כבר יש לי קבוצה של בעלי עסקים שמגישים יחד דרך {association_name}, וככל "
+        f"שהקבוצה גדולה יותר, כך התנאים והליווי שכולנו מקבלים טובים יותר. לכן אני "
+        f"מרחיבה אותה ומחפשת עוד עסקים מתאימים.\n\n"
+        f"המועד האחרון להגשה הוא {GRANT_DEADLINE}, אז נשאר מעט זמן. אם בא לך להצטרף, "
+        f"תכתוב לי חזרה ואספר לך יותר.\n\n"
+        f"{sender_name}\n"
+    )
+    p = "margin:0 0 14px;"
+    html = f"""<!DOCTYPE html>
+<html lang="he" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#ffffff;">
+  <div dir="rtl" style="direction:rtl;text-align:right;max-width:600px;margin:0 auto;
+       padding:22px 20px;font-family:Arial,Helvetica,sans-serif;font-size:16px;
+       line-height:1.75;color:#222222;">
+    <p style="{p}">{hi}</p>
+    <p style="{p}">אני מירי, גם לי יש עסק.</p>
+    <p style="{p}">{personal}</p>
+    <p style="{p}">יש עכשיו מענק ממשלתי חדש למחשוב ואוטומציה בעסקים ({GRANT_NAME}
+      של משרד הכלכלה). המדינה מחזירה עד 35 אחוז מהעלות, עד 350 אלף שקל, על מערכות
+      ניהול, מכירות, מלאי, תוכנה וציוד.</p>
+    <p style="{p}">כבר יש לי קבוצה של בעלי עסקים שמגישים יחד דרך {association_name},
+      וככל שהקבוצה גדולה יותר, כך התנאים והליווי שכולנו מקבלים טובים יותר. לכן אני
+      מרחיבה אותה ומחפשת עוד עסקים מתאימים.</p>
+    <p style="{p}">המועד האחרון להגשה הוא {GRANT_DEADLINE}, אז נשאר מעט זמן. אם בא
+      לך להצטרף, תכתוב לי חזרה ואספר לך יותר.</p>
+    <p style="margin:0;">{sender_name}</p>
+  </div>
+</body></html>"""
+    return subject, html, text
+
+
+CAMPAIGNS = {"funding": _funding, "hr": _hr, "crm": _crm, "grant": _grant}
 
 
 def render(campaign, **ctx):

@@ -132,8 +132,9 @@ def cmd_export(args) -> int:
 
 
 def _add_campaign(sp):
-    sp.add_argument("--campaign", choices=["funding", "hr", "crm"], default="funding",
-                    help="funding=מימון (ברירת מחדל), hr=משאבי אנוש, crm=מערכת CRM")
+    sp.add_argument("--campaign", choices=["funding", "hr", "crm", "grant"],
+                    default="funding",
+                    help="funding=מימון, hr=משאבי אנוש, crm=מערכת CRM, grant=מענק מחשוב 4.56")
     return sp
 
 

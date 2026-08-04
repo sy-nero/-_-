@@ -6,9 +6,11 @@ import logging
 
 from config import Config
 from data.neighborhoods import HAREDI_NEIGHBORHOODS, Neighborhood, neighborhoods_for
-from egud_bot.places import make_client, SERVICE_BUSINESS_TYPES_QUERY
+from egud_bot.places import (make_client, SERVICE_BUSINESS_TYPES_QUERY,
+                             GRANT_BUSINESS_TYPES_QUERY)
 from egud_bot.filters import (BusinessLead, passes_filters,
-                              passes_filters_service, is_blocked_email)
+                              passes_filters_service, passes_filters_grant,
+                              is_blocked_email)
 from egud_bot.email_finder import find_email
 from egud_bot.storage import Storage
 from egud_bot.mailer import Mailer
@@ -54,10 +56,13 @@ def scan_retail(
     target = cfg.target_emails if target_emails is None else target_emails
     client = make_client(cfg)
 
-    # קמפיין CRM מכוון לעסקי שירות; שאר הקמפיינים לחנויות קמעונאיות
+    # בחירת סוגי חיפוש ומסנן לפי הקמפיין
     if campaign == "crm":
         query_types = SERVICE_BUSINESS_TYPES_QUERY
         passes = passes_filters_service
+    elif campaign == "grant":
+        query_types = GRANT_BUSINESS_TYPES_QUERY
+        passes = passes_filters_grant
     else:
         query_types = None
         passes = passes_filters
@@ -154,14 +159,16 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
         logger.info("זו תצוגה מקדימה (DRY-RUN) — לא נשלח אף מייל בפועל.")
         return summary
 
+    # שולח לפי קמפיין (grant נשלח מהמייל האישי של מירי; אחרים מכתובת האיגוד)
+    from_email, from_name, smtp_user, smtp_password = cfg.sender_for(campaign)
     with Mailer(
         host=cfg.smtp_host,
         port=cfg.smtp_port,
-        user=cfg.smtp_user,
-        password=cfg.smtp_password,
-        from_email=cfg.from_email,
-        from_name=cfg.sender_name,   # שם השולח האישי, כדי שייראה כמו מייל מאדם
-        reply_to=cfg.reply_to,
+        user=smtp_user,
+        password=smtp_password,
+        from_email=from_email,
+        from_name=from_name,         # שם השולח האישי, כדי שייראה כמו מייל מאדם
+        reply_to=from_email,         # תשובות חוזרות לשולח עצמו
         use_ssl=cfg.smtp_use_ssl,
         logo_path="",                # מייל אישי, ללא לוגו
     ) as mailer:
@@ -170,7 +177,7 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
                 campaign,
                 business_name=lead["name"],
                 association_name=cfg.association_name,
-                sender_name=cfg.sender_name,
+                sender_name=from_name,
                 sender_title=cfg.sender_title,
                 contact_email=cfg.contact_email,
                 course_url=cfg.course_url,
