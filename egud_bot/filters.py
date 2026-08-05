@@ -125,6 +125,8 @@ BLOCKED_EMAIL_DOMAINS = (
     "wolt.com", "teva-naot.co.il", "republic-store.com", "ingsport.co.il",
     "hoodies.co.il", "mobili.co.il", "mr-donuts.co.il", "thebursa.co.il",
     "adrtech.co.il", "usys.co.il", "brillind.co.il", "poenta.vip", "arvana.co",
+    # כתובות זבל/ברירת מחדל + חברות ענק + רשתות (חוזרות בסריקות)
+    "google.com", "ourdomain.com", "hazorfim.co.il", "kpmg.com", "orcam.com",
 )
 
 # דפוסים בדומיין שמעידים על כתובת טכנית/לא-אמיתית (לא לשלוח אליהם)
