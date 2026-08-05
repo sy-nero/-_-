@@ -185,7 +185,7 @@ def _grant(business_name, association_name, sender_name,
     subject = "שאלה קטנה אליך"
     text = (
         f"{hi}\n"
-        f"אני מירי, גם לי יש עסק.\n\n"
+        f"אני מירי, בעלת עסק בעצמי, ותמיד שמחה לחבר בעלי עסקים להזדמנויות טובות.\n\n"
         f"{personal}\n\n"
         f"יש עכשיו מענק ממשלתי חדש למחשוב ואוטומציה בעסקים ({GRANT_NAME} של משרד "
         f"הכלכלה). המדינה מחזירה עד 35 אחוז מהעלות, עד 350 אלף שקל, על מערכות ניהול, "
@@ -206,7 +206,7 @@ def _grant(business_name, association_name, sender_name,
        padding:22px 20px;font-family:Arial,Helvetica,sans-serif;font-size:16px;
        line-height:1.75;color:#222222;">
     <p style="{p}">{hi}</p>
-    <p style="{p}">אני מירי, גם לי יש עסק.</p>
+    <p style="{p}">אני מירי, בעלת עסק בעצמי, ותמיד שמחה לחבר בעלי עסקים להזדמנויות טובות.</p>
     <p style="{p}">{personal}</p>
     <p style="{p}">יש עכשיו מענק ממשלתי חדש למחשוב ואוטומציה בעסקים ({GRANT_NAME}
       של משרד הכלכלה). המדינה מחזירה עד 35 אחוז מהעלות, עד 350 אלף שקל, על מערכות
