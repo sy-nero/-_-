@@ -174,17 +174,15 @@ GRANT_DEADLINE = "25 באוגוסט"
 
 def _grant(business_name, association_name, sender_name,
            field="", neighborhood="", **_):
-    if field and neighborhood:
-        personal = f"ראיתי שיש לך {field} ב{neighborhood}, וחשבתי שזה יכול להתאים לך במיוחד."
-    elif field:
-        personal = f"ראיתי שיש לך {field}, וחשבתי שזה יכול להתאים לך במיוחד."
-    elif neighborhood:
-        personal = f"ראיתי שהעסק שלך ב{neighborhood}, וחשבתי שזה יכול להתאים לך."
+    # פנייה אישית בלי שם בעלים: מזכירים את שם העסק כהתייחסות, לא כפנייה
+    where = f" ב{neighborhood}" if neighborhood else ""
+    if business_name:
+        personal = (f"נתקלתי ב{business_name}{where}, וחשבתי שמשהו שמצאתי "
+                    f"ממש יכול להתאים לך.")
     else:
-        personal = "חשבתי שזה יכול להתאים לך במיוחד."
-    hi = f"היי {business_name}," if business_name else "היי,"
-    subject = (f"{business_name}, שאלה קטנה אליך" if business_name
-               else "שאלה קטנה אליך")
+        personal = "חשבתי שמשהו שמצאתי ממש יכול להתאים לך."
+    hi = "היי,"
+    subject = "שאלה קטנה אליך"
     text = (
         f"{hi}\n"
         f"אני מירי, גם לי יש עסק.\n\n"
