@@ -177,7 +177,7 @@ def _grant(business_name, association_name, sender_name,
     # פנייה אישית בלי שם בעלים: מזכירים את שם העסק כהתייחסות, לא כפנייה
     where = f" ב{neighborhood}" if neighborhood else ""
     if business_name:
-        personal = (f"נתקלתי ב{business_name}{where}, וחשבתי שמשהו שמצאתי "
+        personal = (f"ראיתי את {business_name}{where}, וחשבתי שמשהו שמצאתי "
                     f"ממש יכול להתאים לך.")
     else:
         personal = "חשבתי שמשהו שמצאתי ממש יכול להתאים לך."
