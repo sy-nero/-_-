@@ -77,11 +77,7 @@ class Config:
 
     def sender_for(self, campaign: str) -> tuple[str, str, str, str]:
         """מחזיר (from_email, from_name, smtp_user, smtp_password) לפי הקמפיין.
-        קמפיין grant נשלח מהמייל האישי של מירי; שאר הקמפיינים מכתובת האיגוד."""
-        if campaign == "grant" and self.grant_smtp_user:
-            return (self.grant_from_email or self.grant_smtp_user,
-                    self.grant_from_name, self.grant_smtp_user,
-                    self.grant_smtp_password)
+        כל הקמפיינים (כולל grant) נשלחים כעת מכתובת האיגוד."""
         return (self.from_email, self.sender_name, self.smtp_user, self.smtp_password)
 
     def validate_for_scan(self) -> list[str]:
