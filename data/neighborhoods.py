@@ -69,11 +69,69 @@ BNEI_BRAK_NEIGHBORHOODS: list[Neighborhood] = [
 ]
 
 
+# ביתר עילית
+BEITAR_NEIGHBORHOODS: list[Neighborhood] = [
+    Neighborhood("ביתר עילית מרכז", 31.6997, 35.1207),
+    Neighborhood("ביתר גבעה A", 31.6960, 35.1170),
+    Neighborhood("ביתר גבעה B", 31.7035, 35.1240),
+    Neighborhood("ביתר גבעה C", 31.6930, 35.1225),
+]
+
+# מודיעין עילית (קרית ספר)
+MODIIN_ILLIT_NEIGHBORHOODS: list[Neighborhood] = [
+    Neighborhood("קרית ספר מרכז", 31.9330, 35.0407),
+    Neighborhood("ברכפלד", 31.9380, 35.0455),
+    Neighborhood("אחוזת ברכפלד", 31.9300, 35.0350),
+    Neighborhood("גרין פארק", 31.9350, 35.0500),
+]
+
+# אלעד
+ELAD_NEIGHBORHOODS: list[Neighborhood] = [
+    Neighborhood("אלעד מרכז", 32.0522, 34.9519),
+    Neighborhood("אלעד מזרח", 32.0555, 34.9565),
+    Neighborhood("אלעד מערב", 32.0490, 34.9475),
+]
+
+# בית שמש (כולל רמת בית שמש)
+BEIT_SHEMESH_NEIGHBORHOODS: list[Neighborhood] = [
+    Neighborhood("רמת בית שמש א'", 31.7430, 34.9950),
+    Neighborhood("רמת בית שמש ב'", 31.7360, 35.0030),
+    Neighborhood("רמת בית שמש ג'", 31.7290, 34.9970),
+    Neighborhood("בית שמש קרית הרצוג", 31.7497, 34.9887),
+]
+
+# אשדוד (אזורים חרדיים)
+ASHDOD_NEIGHBORHOODS: list[Neighborhood] = [
+    Neighborhood("אשדוד רובע ז'", 31.8090, 34.6560),
+    Neighborhood("אשדוד רובע ג'", 31.7920, 34.6420),
+]
+
+# ערים חרדיות נוספות
+OTHER_HAREDI_NEIGHBORHOODS: list[Neighborhood] = [
+    Neighborhood("רכסים", 32.7407, 35.0700),
+    Neighborhood("עמנואל", 32.1607, 35.1330),
+    Neighborhood("צפת (העיר העתיקה)", 32.9646, 35.4960),
+    Neighborhood("כפר חב\"ד", 31.9930, 34.8520),
+]
+
+
 # מיפוי שם עיר -> רשימת שכונות (לבחירה עם --city)
 CITIES: dict[str, list[Neighborhood]] = {
     "jerusalem": JERUSALEM_NEIGHBORHOODS,
     "bnei-brak": BNEI_BRAK_NEIGHBORHOODS,
+    "beitar": BEITAR_NEIGHBORHOODS,
+    "modiin-illit": MODIIN_ILLIT_NEIGHBORHOODS,
+    "elad": ELAD_NEIGHBORHOODS,
+    "beit-shemesh": BEIT_SHEMESH_NEIGHBORHOODS,
+    "ashdod": ASHDOD_NEIGHBORHOODS,
+    "other": OTHER_HAREDI_NEIGHBORHOODS,
 }
+
+# כל הערים החרדיות יחד (--city all)
+ALL_HAREDI_NEIGHBORHOODS: list[Neighborhood] = [
+    nb for city in CITIES.values() for nb in city
+]
+CITIES["all"] = ALL_HAREDI_NEIGHBORHOODS
 
 # תאימות לאחור: ברירת המחדל היא ירושלים
 HAREDI_NEIGHBORHOODS: list[Neighborhood] = JERUSALEM_NEIGHBORHOODS

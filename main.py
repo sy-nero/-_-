@@ -139,8 +139,12 @@ def _add_campaign(sp):
 
 
 def _add_city(sp):
-    sp.add_argument("--city", choices=["jerusalem", "bnei-brak"], default="jerusalem",
-                    help="עיר לסריקה: jerusalem (ברירת מחדל) / bnei-brak")
+    sp.add_argument(
+        "--city",
+        choices=["jerusalem", "bnei-brak", "beitar", "modiin-illit", "elad",
+                 "beit-shemesh", "ashdod", "other", "all"],
+        default="jerusalem",
+        help="עיר לסריקה (ברירת מחדל jerusalem). all = כל הערים החרדיות")
     return sp
 
 
