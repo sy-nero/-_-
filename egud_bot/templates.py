@@ -175,33 +175,34 @@ GRANT_BOT_URL = "https://egud.org.il/grant-456"
 
 def _grant(business_name, association_name, sender_name,
            field="", neighborhood="", place_id="", **_):
-    # פתיח אישי: מתייחסים לעסק שלהם ראשון, ואז "פונה אליכם אישית"
+    # פתיח: מזכירים את העסק שלהם, ואז ישר לעניין (כיוון ממוקד-כסף)
     if field and neighborhood:
-        opener = f"ראיתי שיש לכם {field} ב{neighborhood}, ורציתי לפנות אליכם אישית"
+        seen = f"ראיתי שיש לכם {field} ב{neighborhood}"
     elif field:
-        opener = f"ראיתי שיש לכם {field}, ורציתי לפנות אליכם אישית"
+        seen = f"ראיתי שיש לכם {field}"
     elif neighborhood:
-        opener = f"ראיתי שהעסק שלכם ב{neighborhood}, ורציתי לפנות אליכם אישית"
+        seen = f"ראיתי שהעסק שלכם ב{neighborhood}"
     else:
-        opener = "רציתי לפנות אליכם אישית"
+        seen = ""
+    intro = (f"{seen}, ורציתי שלא תפספסו הזדמנות ששווה כסף אמיתי."
+             if seen else "רציתי שלא תפספסו הזדמנות ששווה כסף אמיתי.")
     sep = "&" if "?" in GRANT_BOT_URL else "?"
     bot_link = f"{GRANT_BOT_URL}{sep}ref={quote(place_id or '')}&src=grant"
-    subject = (f"{business_name}, החזר על שדרוג טכנולוגי בעסק" if business_name
-               else "החזר על שדרוג טכנולוגי בעסק")
+    subject = (f"{business_name}, עד חצי מעלות השדרוג הדיגיטלי חוזר אליכם"
+               if business_name else "עד חצי מעלות השדרוג הדיגיטלי חוזר אליכם")
     text = (
         f"שלום,\n\n"
-        f"שמי {sender_name}, מ{association_name}.\n\n"
-        f"{opener}, כי יש כאן הזדמנות ששווה לכם.\n\n"
-        f"כל בעל עסק שרוכש עכשיו מערכות טכנולוגיות, תוכנה או ציוד לשדרוג העסק, יכול "
-        f"לקבל עד 35 אחוז החזר מטעם המדינה (מענק המחשוב {GRANT_NAME} של משרד הכלכלה).\n\n"
-        f"ואצלנו באיגוד יש עוד שתי הטבות בלעדיות:\n"
-        f"• החזר של 15 אחוז נוספים מהאיגוד, גם אם אינכם זכאים למענק של משרד הכלכלה.\n"
-        f"• פתיחת התיק להגשת המענק דרך נותני השירות שלנו, בהנחה של 50 אחוז.\n\n"
-        f"המענק של משרד הכלכלה מוגש עד {GRANT_DEADLINE}, אז שווה להזדרז.\n\n"
-        f"כדי לבדוק אם אתם זכאים ולהתחיל, מלאו את בדיקת הזכאות הקצרה של האיגוד כאן:\n"
-        f"{bot_link}\n\n"
-        f"אפשר גם פשוט להשיב למייל הזה עם שם וטלפון ונחזור אליכם.\n\n"
-        f"בהצלחה רבה,\n{sender_name}\n{association_name}\n"
+        f"כאן {sender_name} מ{association_name}.\n\n"
+        f"{intro}\n\n"
+        f"בקיצור: על כל שקל שתשקיעו עכשיו בשדרוג דיגיטלי לעסק (מערכות ניהול, מכירות, "
+        f"מלאי, תוכנה או ציוד), חלק גדול חוזר אליכם:\n"
+        f"• עד 35 אחוז החזר מהמדינה (מענק {GRANT_NAME} של משרד הכלכלה).\n"
+        f"• ועוד 15 אחוז מהאיגוד, גם אם אינכם זכאים למענק הממשלתי.\n"
+        f"• פתיחת התיק דרך נותני השירות שלנו בחצי מחיר.\n\n"
+        f"יחד זה יכול להגיע עד חצי מהעלות. ההגשה למדינה היא עד {GRANT_DEADLINE}.\n\n"
+        f"כדי לבדוק כמה מגיע לכם, כנסו לבדיקה הקצרה:\n{bot_link}\n\n"
+        f"או השיבו לי לכאן עם שם וטלפון ואחזור אליכם.\n\n"
+        f"בהצלחה,\n{sender_name}\n{association_name}\n"
     )
     p = "margin:0 0 14px;"
     html = f"""<!DOCTYPE html>
@@ -212,22 +213,22 @@ def _grant(business_name, association_name, sender_name,
        padding:22px 20px;font-family:Arial,Helvetica,sans-serif;font-size:16px;
        line-height:1.75;color:#222222;">
     <p style="{p}">שלום,</p>
-    <p style="{p}">שמי {sender_name}, מ{association_name}.</p>
-    <p style="{p}">{opener}, כי יש כאן הזדמנות ששווה לכם.</p>
-    <p style="{p}">כל בעל עסק שרוכש עכשיו מערכות טכנולוגיות, תוכנה או ציוד לשדרוג
-      העסק, יכול לקבל <strong>עד 35 אחוז החזר מטעם המדינה</strong> (מענק המחשוב
-      {GRANT_NAME} של משרד הכלכלה).</p>
-    <p style="margin:0 0 6px;">ואצלנו באיגוד יש עוד שתי הטבות בלעדיות:</p>
-    <p style="margin:0 0 6px;padding-right:6px;">• <strong>החזר של 15 אחוז נוספים
-      מהאיגוד</strong>, גם אם אינכם זכאים למענק של משרד הכלכלה.</p>
-    <p style="margin:0 0 14px;padding-right:6px;">• פתיחת התיק להגשת המענק דרך נותני
-      השירות שלנו, <strong>בהנחה של 50 אחוז</strong>.</p>
-    <p style="{p}">המענק של משרד הכלכלה מוגש עד {GRANT_DEADLINE}, אז שווה להזדרז.</p>
-    <p style="{p}">כדי לבדוק אם אתם זכאים ולהתחיל, מלאו את בדיקת הזכאות הקצרה
-      של האיגוד כאן:<br>
+    <p style="{p}">כאן {sender_name} מ{association_name}.</p>
+    <p style="{p}">{intro}</p>
+    <p style="margin:0 0 6px;">בקיצור: על כל שקל שתשקיעו עכשיו בשדרוג דיגיטלי לעסק
+      (מערכות ניהול, מכירות, מלאי, תוכנה או ציוד), חלק גדול חוזר אליכם:</p>
+    <p style="margin:0 0 6px;padding-right:6px;">• <strong>עד 35 אחוז החזר
+      מהמדינה</strong> (מענק {GRANT_NAME} של משרד הכלכלה).</p>
+    <p style="margin:0 0 6px;padding-right:6px;">• ועוד <strong>15 אחוז
+      מהאיגוד</strong>, גם אם אינכם זכאים למענק הממשלתי.</p>
+    <p style="margin:0 0 14px;padding-right:6px;">• פתיחת התיק דרך נותני השירות שלנו
+      <strong>בחצי מחיר</strong>.</p>
+    <p style="{p}">יחד זה יכול להגיע <strong>עד חצי מהעלות</strong>. ההגשה למדינה
+      היא עד {GRANT_DEADLINE}.</p>
+    <p style="{p}">כדי לבדוק כמה מגיע לכם, כנסו לבדיקה הקצרה:<br>
       <a href="{bot_link}" target="_blank" style="color:#1a2e4a;">{GRANT_BOT_URL}</a></p>
-    <p style="{p}">אפשר גם פשוט להשיב למייל הזה עם שם וטלפון ונחזור אליכם.</p>
-    <p style="margin:0 0 4px;">בהצלחה רבה,</p>
+    <p style="{p}">או השיבו לי לכאן עם שם וטלפון ואחזור אליכם.</p>
+    <p style="margin:0 0 4px;">בהצלחה,</p>
     <p style="margin:0;">{sender_name}<br>{association_name}</p>
   </div>
 </body></html>"""
