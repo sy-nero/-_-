@@ -204,8 +204,6 @@ def _grant(business_name, association_name, sender_name,
         f"בהצלחה רבה,\n{sender_name}\n{association_name}\n"
     )
     p = "margin:0 0 14px;"
-    btn = ("display:inline-block;padding:13px 30px;border-radius:8px;"
-           "text-decoration:none;font-weight:bold;font-size:16px;")
     html = f"""<!DOCTYPE html>
 <html lang="he" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"></head>
@@ -226,11 +224,8 @@ def _grant(business_name, association_name, sender_name,
       השירות שלנו, <strong>בהנחה של 50 אחוז</strong>.</p>
     <p style="{p}">המענק של משרד הכלכלה מוגש עד {GRANT_DEADLINE}, אז שווה להזדרז.</p>
     <p style="{p}">כדי לבדוק אם אתם זכאים ולהתחיל, מלאו את בדיקת הזכאות הקצרה
-      של האיגוד:</p>
-    <p style="margin:22px 0;">
-      <a href="{bot_link}" target="_blank"
-         style="{btn}background:#1a2e4a;color:#ffffff;">בדיקת זכאות ›</a>
-    </p>
+      של האיגוד כאן:<br>
+      <a href="{bot_link}" target="_blank" style="color:#1a2e4a;">{GRANT_BOT_URL}</a></p>
     <p style="{p}">אפשר גם פשוט להשיב למייל הזה עם שם וטלפון ונחזור אליכם.</p>
     <p style="margin:0 0 4px;">בהצלחה רבה,</p>
     <p style="margin:0;">{sender_name}<br>{association_name}</p>
