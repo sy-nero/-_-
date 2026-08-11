@@ -170,10 +170,11 @@ def _crm(business_name, association_name, sender_name, sender_title,
 # ------------------------- קמפיין: מענק מחשוב 4.56 -------------------------
 GRANT_NAME = 'הוראת מנכ"ל 4.56'
 GRANT_DEADLINE = "25 באוגוסט"
+GRANT_BOT_URL = "https://egud.org.il/grant-456"
 
 
 def _grant(business_name, association_name, sender_name,
-           field="", neighborhood="", **_):
+           field="", neighborhood="", place_id="", **_):
     # פתיח אישי: מתייחסים לעסק שלהם ראשון, ואז "פונה אליכם אישית"
     if field and neighborhood:
         opener = f"ראיתי שיש לכם {field} ב{neighborhood}, ורציתי לפנות אליכם אישית"
@@ -183,6 +184,8 @@ def _grant(business_name, association_name, sender_name,
         opener = f"ראיתי שהעסק שלכם ב{neighborhood}, ורציתי לפנות אליכם אישית"
     else:
         opener = "רציתי לפנות אליכם אישית"
+    sep = "&" if "?" in GRANT_BOT_URL else "?"
+    bot_link = f"{GRANT_BOT_URL}{sep}ref={quote(place_id or '')}&src=grant"
     subject = (f"{business_name}, החזר על שדרוג טכנולוגי בעסק" if business_name
                else "החזר על שדרוג טכנולוגי בעסק")
     text = (
@@ -195,11 +198,14 @@ def _grant(business_name, association_name, sender_name,
         f"• החזר של 15 אחוז נוספים מהאיגוד, גם אם אינכם זכאים למענק של משרד הכלכלה.\n"
         f"• פתיחת התיק להגשת המענק דרך נותני השירות שלנו, בהנחה של 50 אחוז.\n\n"
         f"המענק של משרד הכלכלה מוגש עד {GRANT_DEADLINE}, אז שווה להזדרז.\n\n"
-        f"אם בא לכם לשדרג את העסק בהשתתפות האיגוד והמדינה, השיבו לי לכאן עם שם "
-        f"וטלפון, ונבדוק יחד אם אתם זכאים ואיך להתקדם.\n\n"
+        f"כדי לבדוק אם אתם זכאים ולהתחיל, מלאו את בדיקת הזכאות הקצרה של האיגוד כאן:\n"
+        f"{bot_link}\n\n"
+        f"אפשר גם פשוט להשיב למייל הזה עם שם וטלפון ונחזור אליכם.\n\n"
         f"בהצלחה רבה,\n{sender_name}\n{association_name}\n"
     )
     p = "margin:0 0 14px;"
+    btn = ("display:inline-block;padding:13px 30px;border-radius:8px;"
+           "text-decoration:none;font-weight:bold;font-size:16px;")
     html = f"""<!DOCTYPE html>
 <html lang="he" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"></head>
@@ -219,8 +225,13 @@ def _grant(business_name, association_name, sender_name,
     <p style="margin:0 0 14px;padding-right:6px;">• פתיחת התיק להגשת המענק דרך נותני
       השירות שלנו, <strong>בהנחה של 50 אחוז</strong>.</p>
     <p style="{p}">המענק של משרד הכלכלה מוגש עד {GRANT_DEADLINE}, אז שווה להזדרז.</p>
-    <p style="{p}">אם בא לכם לשדרג את העסק בהשתתפות האיגוד והמדינה, השיבו לי לכאן
-      עם שם וטלפון, ונבדוק יחד אם אתם זכאים ואיך להתקדם.</p>
+    <p style="{p}">כדי לבדוק אם אתם זכאים ולהתחיל, מלאו את בדיקת הזכאות הקצרה
+      של האיגוד:</p>
+    <p style="margin:22px 0;">
+      <a href="{bot_link}" target="_blank"
+         style="{btn}background:#1a2e4a;color:#ffffff;">בדיקת זכאות ›</a>
+    </p>
+    <p style="{p}">אפשר גם פשוט להשיב למייל הזה עם שם וטלפון ונחזור אליכם.</p>
     <p style="margin:0 0 4px;">בהצלחה רבה,</p>
     <p style="margin:0;">{sender_name}<br>{association_name}</p>
   </div>
