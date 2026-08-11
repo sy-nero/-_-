@@ -127,6 +127,7 @@ BLOCKED_EMAIL_DOMAINS = (
     "adrtech.co.il", "usys.co.il", "brillind.co.il", "poenta.vip", "arvana.co",
     # כתובות זבל/ברירת מחדל + חברות ענק + רשתות (חוזרות בסריקות)
     "google.com", "ourdomain.com", "hazorfim.co.il", "kpmg.com", "orcam.com",
+    "mysite.com", "example.com", "domain.com", "wixsite.com",
 )
 
 # דפוסים בדומיין שמעידים על כתובת טכנית/לא-אמיתית (לא לשלוח אליהם)
