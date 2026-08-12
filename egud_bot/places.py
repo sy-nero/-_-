@@ -62,9 +62,10 @@ SERVICE_BUSINESS_TYPES_QUERY = [
     "beauty_salon", "hair_care", "spa", "gym",
 ]
 
-# קמפיין מענק 4.56 (תעשייה/מסחר/שירותים) — עסקים מבוססים משני הסוגים
+# קמפיין מענק 4.56 — כל הענפים הזכאים (מסחר, שירותים, אירוח ואוכל, תחבורה, תיקונים)
+GRANT_EXTRA_QUERY = ["lodging", "meal_takeaway", "meal_delivery", "supermarket"]
 GRANT_BUSINESS_TYPES_QUERY = list(dict.fromkeys(
-    LOCAL_BUSINESS_TYPES + SERVICE_BUSINESS_TYPES_QUERY
+    LOCAL_BUSINESS_TYPES + SERVICE_BUSINESS_TYPES_QUERY + GRANT_EXTRA_QUERY
 ))
 
 

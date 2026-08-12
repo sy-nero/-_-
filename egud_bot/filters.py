@@ -284,20 +284,41 @@ def passes_filters_service(
     return True
 
 
+# ענפי הכלכלה הזכאים למענק 4.56 לפי הסיווג האחיד של הלמ"ס:
+# תעשייה מסורתית + סדרים G (מסחר ותיקון רכב), H (תחבורה/אחסנה),
+# I (אירוח ואוכל), N (ניהול ותמיכה), וענפים 95/96 מסדר S (תיקונים ושירותים אישיים).
+GRANT_ELIGIBLE_TYPES = (
+    RETAIL_STORE_TYPES            # G: מסחר קמעונאי/סיטונאי
+    | SERVICE_BUSINESS_TYPES     # N, 95, 96 ומקצועות: שירותים, מוסכים, קליניקות, יופי
+    | {
+        # I: שירותי אירוח ואוכל
+        "restaurant", "cafe", "meal_takeaway", "meal_delivery", "bakery",
+        "food", "catering", "lodging",
+        # H: תחבורה, אחסנה, שילוח
+        "moving_company", "storage",
+        # 95/96: תיקונים ושירותים אישיים
+        "laundry",
+    }
+)
+
+
 def passes_filters_grant(
     lead: BusinessLead,
     max_review_count: int = 0,
     require_operational: bool = True,
 ) -> bool:
     """
-    קריטריונים למענק 4.56 (תעשייה/מסחר/שירותים): עסק אמיתי (חנות או שירות)
-    ולא מוסד/רשת. אין סינון לפי מספר ביקורות — המענק דורש עסק מבוסס (שנתיים ותק),
-    כלומר דווקא עסקים ותיקים רלוונטיים (לא רק "חדשים").
+    קריטריונים למענק 4.56: עסק מענף כלכלה זכאי (תעשייה מסורתית / מסחר / תחבורה /
+    אירוח ואוכל / שירותים / תיקונים), ולא מוסד ציבורי או רשת. אין סינון לפי מספר
+    ביקורות (המענק דורש עסק מבוסס עם ותק, לא דווקא חדש).
     """
     if require_operational and lead.business_status not in ("", "OPERATIONAL"):
         return False
-    if not (is_retail_shop(lead.primary_type, lead.types)
-            or is_service_business(lead.primary_type, lead.types)):
+    ts = {(t or "").lower() for t in (lead.types or [])}
+    ts.add((lead.primary_type or "").lower())
+    if ts & SERVICE_EXCLUDED_TYPES:          # מוסד ציבור/דת/חינוך/ממשל/בריאות ציבורי
+        return False
+    if not (ts & GRANT_ELIGIBLE_TYPES):
         return False
     if is_excluded_by_name_service(lead.name):
         return False
