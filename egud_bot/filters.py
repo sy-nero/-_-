@@ -128,6 +128,10 @@ BLOCKED_EMAIL_DOMAINS = (
     # כתובות זבל/ברירת מחדל + חברות ענק + רשתות (חוזרות בסריקות)
     "google.com", "ourdomain.com", "hazorfim.co.il", "kpmg.com", "orcam.com",
     "mysite.com", "example.com", "domain.com", "wixsite.com",
+    # פלטפורמות/בוני-אתרים (כתובת שגויה שנגרדת מאתר העסק) + מלונות ענק/לא-מגזר
+    "web3d.co.il", "vio.com", "dvhl.de", "danhotels.com", "amcol.co.il",
+    "olivetreehotel.co.il", "grandbeach.co.il", "ambassadorcollection.com",
+    "holyestates.com",
 )
 
 # דפוסים בדומיין שמעידים על כתובת טכנית/לא-אמיתית (לא לשלוח אליהם)
@@ -291,9 +295,10 @@ GRANT_ELIGIBLE_TYPES = (
     RETAIL_STORE_TYPES            # G: מסחר קמעונאי/סיטונאי
     | SERVICE_BUSINESS_TYPES     # N, 95, 96 ומקצועות: שירותים, מוסכים, קליניקות, יופי
     | {
-        # I: שירותי אירוח ואוכל
+        # I: שירותי אוכל (מסעדות/קפה/קייטרינג). מלונות (lodging) הוצאו בכוונה —
+        # הם הכניסו רשתות גדולות ומלונות שאינם מהמגזר.
         "restaurant", "cafe", "meal_takeaway", "meal_delivery", "bakery",
-        "food", "catering", "lodging",
+        "food", "catering",
         # H: תחבורה, אחסנה, שילוח
         "moving_company", "storage",
         # 95/96: תיקונים ושירותים אישיים
