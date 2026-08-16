@@ -174,39 +174,20 @@ GRANT_BOT_URL = "https://egud.org.il/grant-456"
 
 
 def _grant(business_name, association_name, sender_name,
-           field="", neighborhood="", place_id="", **_):
-    # פתיח: מזכירים את העסק שלהם, ואז ישר לעניין (כיוון ממוקד-כסף)
-    if field and neighborhood:
-        seen = f"ראיתי שיש לכם {field} ב{neighborhood}"
-    elif field:
-        seen = f"ראיתי שיש לכם {field}"
-    elif neighborhood:
-        seen = f"ראיתי שהעסק שלכם ב{neighborhood}"
-    else:
-        seen = ""
-    intro = (f"{seen}, ורציתי לספר לכם על הזדמנות ששווה לכם הרבה כסף."
-             if seen else "רציתי לספר לכם על הזדמנות ששווה לכם הרבה כסף.")
-    sep = "&" if "?" in GRANT_BOT_URL else "?"
-    bot_link = f"{GRANT_BOT_URL}{sep}ref={quote(place_id or '')}&src=grant"
-    subject = (f"{business_name}, מענק ממשלתי לשדרוג דיגיטלי בעסק"
-               if business_name else "מענק ממשלתי לשדרוג דיגיטלי בעסק")
+           field="", neighborhood="", **_):
+    # סגנון המימון המנצח: קצר, אישי, בקשה להשיב עם שם וטלפון (בלי קישור/בוט)
+    saw = _saw_clause(field, neighborhood)
+    subject = (f"{business_name}, לגבי מענק לשדרוג העסק" if business_name
+               else "לגבי מענק לשדרוג העסק")
     text = (
         f"שלום,\n\n"
         f"שמי {sender_name}, מ{association_name}.\n\n"
-        f"{intro}\n\n"
-        f"משרד הכלכלה נותן עכשיו מענק לעסקים שרוצים לשדרג את הצד הדיגיטלי שלהם. "
-        f"כלומר, אם אתם קונים או מקימים מערכת לניהול העסק, לניהול מלאי וספקים, מערכת "
-        f"מכירות (כולל אתר או חנות אונליין), מערכות אוטומציה, או תוכנה וציוד מחשוב, "
-        f"המדינה מחזירה לכם עד 35 אחוז מהעלות (עד 350 אלף שקל). זה נקרא מענק "
-        f"{GRANT_NAME} של משרד הכלכלה.\n\n"
-        f"ומה שמייחד אותנו באיגוד, שתי הטבות נוספות:\n"
-        f"• גם אם לא תהיו זכאים למענק של המדינה, אצלנו תקבלו החזר של 15 אחוז.\n"
-        f"• את פתיחת התיק וההגשה אנחנו עושים לכם דרך נותני השירות שלנו בחצי מחיר.\n\n"
-        f"ההגשה למענק של משרד הכלכלה היא עד {GRANT_DEADLINE}.\n\n"
-        f"הדרך הכי פשוטה לבדוק אם אתם זכאים ולכמה כסף היא בדיקה קצרה של דקה כאן:\n"
-        f"{bot_link}\n\n"
-        f"או פשוט תשיבו לי עם שם וטלפון ואסביר לכם הכל.\n\n"
-        f"בהצלחה,\n{sender_name}\n{association_name}\n"
+        f"יש עכשיו מענק ממשלתי חדש לשדרוג דיגיטלי וטכנולוגי בעסק, והמדינה מחזירה עד "
+        f"35 אחוז מהעלות{saw}\n\n"
+        f"ואצלנו באיגוד אפשר לקבל עוד 15 אחוז מעבר לזה. ההגשה עד {GRANT_DEADLINE}.\n\n"
+        f"רוצים לבדוק אם זה מתאים לכם? תשיבו לי לכאן עם שם וטלפון ואחזור אליכם עם כל "
+        f"הפרטים.\n\n"
+        f"תודה,\n{sender_name}\n{association_name}\n"
     )
     p = "margin:0 0 14px;"
     html = f"""<!DOCTYPE html>
@@ -218,23 +199,13 @@ def _grant(business_name, association_name, sender_name,
        line-height:1.75;color:#222222;">
     <p style="{p}">שלום,</p>
     <p style="{p}">שמי {sender_name}, מ{association_name}.</p>
-    <p style="{p}">{intro}</p>
-    <p style="{p}">משרד הכלכלה נותן עכשיו מענק לעסקים שרוצים לשדרג את הצד הדיגיטלי
-      שלהם. כלומר, אם אתם קונים או מקימים מערכת לניהול העסק, לניהול מלאי וספקים,
-      מערכת מכירות (כולל אתר או חנות אונליין), מערכות אוטומציה, או תוכנה וציוד
-      מחשוב, <strong>המדינה מחזירה לכם עד 35 אחוז מהעלות</strong> (עד 350 אלף שקל).
-      זה נקרא מענק {GRANT_NAME} של משרד הכלכלה.</p>
-    <p style="margin:0 0 6px;">ומה שמייחד אותנו באיגוד, שתי הטבות נוספות:</p>
-    <p style="margin:0 0 6px;padding-right:6px;">• גם אם לא תהיו זכאים למענק של
-      המדינה, אצלנו תקבלו <strong>החזר של 15 אחוז</strong>.</p>
-    <p style="margin:0 0 14px;padding-right:6px;">• את פתיחת התיק וההגשה אנחנו עושים
-      לכם דרך נותני השירות שלנו <strong>בחצי מחיר</strong>.</p>
-    <p style="{p}">ההגשה למענק של משרד הכלכלה היא עד {GRANT_DEADLINE}.</p>
-    <p style="{p}">הדרך הכי פשוטה לבדוק אם אתם זכאים ולכמה כסף היא בדיקה קצרה של
-      דקה כאן:<br>
-      <a href="{bot_link}" target="_blank" style="color:#1a2e4a;">{GRANT_BOT_URL}</a></p>
-    <p style="{p}">או פשוט תשיבו לי עם שם וטלפון ואסביר לכם הכל.</p>
-    <p style="margin:0 0 4px;">בהצלחה,</p>
+    <p style="{p}">יש עכשיו מענק ממשלתי חדש לשדרוג דיגיטלי וטכנולוגי בעסק, והמדינה
+      מחזירה עד <strong>35 אחוז מהעלות</strong>{saw}</p>
+    <p style="{p}">ואצלנו באיגוד אפשר לקבל עוד <strong>15 אחוז</strong> מעבר לזה.
+      ההגשה עד {GRANT_DEADLINE}.</p>
+    <p style="{p}">רוצים לבדוק אם זה מתאים לכם? תשיבו לי לכאן עם שם וטלפון ואחזור
+      אליכם עם כל הפרטים.</p>
+    <p style="margin:0 0 4px;">תודה,</p>
     <p style="margin:0;">{sender_name}<br>{association_name}</p>
   </div>
 </body></html>"""
