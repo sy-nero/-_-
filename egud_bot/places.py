@@ -62,10 +62,28 @@ SERVICE_BUSINESS_TYPES_QUERY = [
     "beauty_salon", "hair_care", "spa", "gym",
 ]
 
-# קמפיין מענק 4.56 — כל הענפים הזכאים (מסחר, שירותים, אירוח ואוכל, תחבורה, תיקונים)
+# קמפיין מענק 4.56 — כל הענפים הזכאים, בתעדוף לסקטורים שהכי צורכים שדרוג טכנולוגי.
+# הסורק עוצר ב-50 מיילים, לכן הסוגים עתירי-הטכנולוגיה מופיעים ראשונים ונאספים קודם.
+GRANT_PRIORITY_TYPES = [
+    # קמעונאות עתירת-מלאי (POS, ניהול מלאי, מכירות אונליין)
+    "electronics_store", "furniture_store", "hardware_store", "home_goods_store",
+    "jewelry_store", "department_store", "supermarket", "clothing_store",
+    "shoe_store", "book_store", "pharmacy", "bicycle_store", "pet_store",
+    "toy_store",
+    # רכב (מוסכים, סוכנויות)
+    "car_dealer", "car_repair",
+    # שירותים עם ניהול לקוחות (CRM, תיקים, זימון תורים)
+    "real_estate_agency", "insurance_agency", "lawyer", "accounting",
+    "travel_agency",
+    # קליניקות עם מערכות וציוד
+    "dentist", "doctor", "physiotherapist", "veterinary_care",
+    # לוגיסטיקה ואחסנה
+    "moving_company", "storage",
+]
 GRANT_EXTRA_QUERY = ["meal_takeaway", "meal_delivery", "supermarket"]
 GRANT_BUSINESS_TYPES_QUERY = list(dict.fromkeys(
-    LOCAL_BUSINESS_TYPES + SERVICE_BUSINESS_TYPES_QUERY + GRANT_EXTRA_QUERY
+    GRANT_PRIORITY_TYPES
+    + LOCAL_BUSINESS_TYPES + SERVICE_BUSINESS_TYPES_QUERY + GRANT_EXTRA_QUERY
 ))
 
 
