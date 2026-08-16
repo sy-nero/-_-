@@ -144,6 +144,33 @@ def is_org_email(email: str) -> bool:
     return e.endswith(".org") or e.endswith(".org.il")
 
 
+# ספקי מייל חינמיים/אישיים — סימן לעסק זעיר (לא חברה מבוססת)
+FREE_EMAIL_DOMAINS = {
+    "gmail.com", "googlemail.com", "walla.com", "walla.co.il", "hotmail.com",
+    "hotmail.co.il", "outlook.com", "outlook.co.il", "yahoo.com", "ymail.com",
+    "icloud.com", "live.com", "aol.com", "bezeqint.net", "013.net", "013net.co.il",
+    "013.net.il", "inter.net.il", "netvision.net.il", "zahav.net.il", "012.net.il",
+}
+
+# סימני חברה רשומה בשם (בע"מ / Ltd) — לרוב יש דוחות מבוקרים (תנאי סף למענק)
+LTD_MARKERS = ('בע"מ', "בע”מ", "בע'מ", "בעמ", " Ltd", " LTD", " ltd", "Inc")
+
+
+def is_free_email(email: str) -> bool:
+    e = (email or "").strip().lower()
+    if "@" not in e:
+        return True
+    return e.rsplit("@", 1)[1] in FREE_EMAIL_DOMAINS
+
+
+def looks_established(name: str, email: str) -> bool:
+    """הערכה גסה של 'חברה מבוססת' (לא עסק זעיר) לקמפיין המענק:
+    דומיין מייל עסקי משלה, או 'בע"מ'/Ltd בשם."""
+    if not is_free_email(email):
+        return True
+    return any(m in (name or "") for m in LTD_MARKERS)
+
+
 def is_blocked_email(email: str) -> bool:
     """כתובת של רשת גדולה, ארגון, או דומיין טכני — לא לשלוח אליה."""
     e = (email or "").strip().lower()

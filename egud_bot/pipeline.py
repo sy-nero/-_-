@@ -10,7 +10,7 @@ from egud_bot.places import (make_client, SERVICE_BUSINESS_TYPES_QUERY,
                              GRANT_BUSINESS_TYPES_QUERY)
 from egud_bot.filters import (BusinessLead, passes_filters,
                               passes_filters_service, passes_filters_grant,
-                              is_blocked_email)
+                              is_blocked_email, looks_established)
 from egud_bot.email_finder import find_email
 from egud_bot.storage import Storage
 from egud_bot.mailer import Mailer
@@ -93,6 +93,9 @@ def scan_retail(
             email = find_email(lead.website, cfg.request_delay_seconds) if lead.website else None
             if email and is_blocked_email(email):  # רשת גדולה / ארגון / דומיין טכני
                 email = None
+            # קמפיין מענק: רק חברות מבוססות (לא עסק זעיר עם gmail ובלי בע"מ)
+            if email and campaign == "grant" and not looks_established(lead.name, email):
+                email = None
             if email:
                 summary["with_email"] += 1
                 storage.upsert_lead(lead, email, status="found")
@@ -134,6 +137,11 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
     # חסימת רשתות גדולות / ארגונים / דומיינים טכניים (הגנה גם אם נכנסו ל-DB בעבר)
     blocked = [l for l in all_candidates if is_blocked_email(l["email"])]
     remaining = [l for l in all_candidates if not is_blocked_email(l["email"])]
+    # קמפיין מענק: לדלג על עסקים זעירים (gmail ובלי בע"מ) — רק חברות מבוססות
+    small = []
+    if campaign == "grant":
+        small = [l for l in remaining if not looks_established(l["name"], l["email"])]
+        remaining = [l for l in remaining if looks_established(l["name"], l["email"])]
     skipped = [l for l in remaining if (l["email"] or "").lower() in sent_before]
     leads = [l for l in remaining
              if (l["email"] or "").lower() not in sent_before][:cfg.max_emails_per_run]
@@ -141,6 +149,9 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
     summary = {"candidates": len(leads), "sent": 0, "failed": 0,
                "skipped_already_sent": len(skipped),
                "skipped_blocked": len(blocked)}
+    if small:
+        summary["skipped_small"] = len(small)
+        logger.info("דילוג על %d עסקים זעירים (מענק: רק חברות מבוססות).", len(small))
     if blocked:
         logger.info("דילוג על %d כתובות חסומות (רשת גדולה / ארגון / דומיין טכני).",
                     len(blocked))
