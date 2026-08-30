@@ -47,7 +47,8 @@ def cmd_scan(args) -> int:
         return 1
     storage = _storage(args)
     summary = pipeline.scan(config, storage, campaign=_campaign(args),
-                            city=getattr(args, "city", "jerusalem"))
+                            city=getattr(args, "city", "jerusalem"),
+                            target_emails=getattr(args, "target", None))
     print("\n=== סיכום סריקה ===")
     for k, v in summary.items():
         print(f"  {k}: {v}")
@@ -250,6 +251,13 @@ def _add_campaign(sp):
     return sp
 
 
+def _add_target(sp):
+    sp.add_argument("--target", type=int, default=None,
+                    help="כמה מיילים לאסוף לפני שהסריקה נעצרת "
+                         "(ברירת מחדל TARGET_EMAILS מ-.env). מקטין זמן ועלות API")
+    return sp
+
+
 def _add_city(sp):
     sp.add_argument(
         "--city",
@@ -265,7 +273,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-v", "--verbose", action="store_true", help="לוג מפורט")
     sub = p.add_subparsers(dest="command", required=True)
 
-    _add_city(_add_campaign(sub.add_parser("scan", help="סריקה + איתור מיילים"))).set_defaults(func=cmd_scan)
+    _add_target(_add_city(_add_campaign(
+        sub.add_parser("scan", help="סריקה + איתור מיילים")))).set_defaults(func=cmd_scan)
 
     sp = _add_campaign(sub.add_parser("send", help="שליחת מיילים"))
     sp.add_argument("--dry-run", action="store_true", help="בלי לשלוח בפועל")
@@ -277,7 +286,7 @@ def build_parser() -> argparse.ArgumentParser:
                     help="להציג כל מייל בטרמינל ולשאול לפני שליחה")
     sp.set_defaults(func=cmd_send)
 
-    rp = _add_city(_add_campaign(sub.add_parser("run", help="scan ואז send")))
+    rp = _add_target(_add_city(_add_campaign(sub.add_parser("run", help="scan ואז send"))))
     rp.add_argument("--dry-run", action="store_true", help="בלי לשלוח בפועל")
     rp.set_defaults(func=cmd_run)
 
