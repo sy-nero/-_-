@@ -5,11 +5,38 @@
 תוצאות לבקשה וללא עימוד, לכן אנחנו מפצלים את הסריקה לפי סוגי עסקים (types)
 כדי להגדיל את הכיסוי, ומאחדים לפי place id.
 """
+import re
 import time
 import logging
 import requests
 
 logger = logging.getLogger(__name__)
+
+# מפתח ה-API מופיע ב-URL של ה-API הישן, וכל שגיאת רשת מכילה את ה-URL המלא.
+# בלי צנזור המפתח נכתב ללוגים ומודבק בטעות לצ'אטים ולתקלות.
+_KEY_RE = re.compile(r"(key=)[^&\s'\"]+|AIza[0-9A-Za-z_\-]{10,}")
+
+# רמז ה-SSL מוצג פעם אחת בלבד, לא לכל שכונה
+_ssl_hint_shown = False
+
+
+def _redact(text) -> str:
+    """מסתיר מפתחות API בהודעות שגיאה לפני שהן נכתבות ללוג."""
+    return _KEY_RE.sub(lambda m: (m.group(1) + "***") if m.group(1) else "AIza***",
+                       str(text))
+
+
+def _log_request_error(exc, api_name: str) -> None:
+    """מדווח על כשל רשת בלי לחשוף את המפתח, ומזהה בעיית תעודות מקומית."""
+    global _ssl_hint_shown
+    logger.warning("בקשת %s נכשלה: %s", api_name, _redact(exc))
+    if isinstance(exc, requests.exceptions.SSLError) and not _ssl_hint_shown:
+        _ssl_hint_shown = True
+        logger.error(
+            "נראה שהתקלה היא בתעודות ה-SSL של פייתון במחשב הזה — לא ב-Google. "
+            "נסו: pip install --upgrade certifi, ובדקו ש-SSL_CERT_FILE ו-"
+            "REQUESTS_CA_BUNDLE לא מצביעים על קובץ חסר או ריק."
+        )
 
 PLACES_NEARBY_URL = "https://places.googleapis.com/v1/places:searchNearby"
 
@@ -151,13 +178,12 @@ class PlacesClient:
                 PLACES_NEARBY_URL, headers=self._headers(), json=body, timeout=30
             )
         except requests.RequestException as exc:
-            logger.warning("בקשת Places נכשלה: %s", exc)
+            _log_request_error(exc, "Places")
             return []
 
         if resp.status_code != 200:
-            logger.warning(
-                "Places החזיר קוד %s: %s", resp.status_code, resp.text[:300]
-            )
+            logger.warning("Places החזיר קוד %s: %s", resp.status_code,
+                           _redact(resp.text[:300]))
             return []
 
         return resp.json().get("places", [])
@@ -232,13 +258,13 @@ class LegacyPlacesClient:
                 resp = self.session.get(LEGACY_NEARBY_URL, params=params, timeout=30)
                 data = resp.json()
             except (requests.RequestException, ValueError) as exc:
-                logger.warning("בקשת Places (legacy) נכשלה: %s", exc)
+                _log_request_error(exc, "Places (legacy)")
                 break
 
             status = data.get("status")
             if status not in ("OK", "ZERO_RESULTS"):
                 logger.warning("Places (legacy) status=%s: %s", status,
-                               data.get("error_message", ""))
+                               _redact(data.get("error_message", "")))
                 break
             results.extend(data.get("results", []))
 
@@ -277,7 +303,8 @@ class LegacyPlacesClient:
         try:
             data = self.session.get(LEGACY_DETAILS_URL, params=params, timeout=30).json()
         except (requests.RequestException, ValueError) as exc:
-            logger.debug("Details (legacy) נכשל עבור %s: %s", lead.place_id, exc)
+            logger.debug("Details (legacy) נכשל עבור %s: %s", lead.place_id,
+                         _redact(exc))
             return
         result = data.get("result", {}) or {}
         if result.get("website"):
@@ -310,7 +337,8 @@ def _new_api_available(api_key: str) -> bool:
             },
             timeout=20,
         )
-    except requests.RequestException:
+    except requests.RequestException as exc:
+        _log_request_error(exc, "בדיקת Places API (New)")
         return False
     return resp.status_code == 200
 
@@ -336,7 +364,8 @@ def make_client(cfg, include_reviews: bool = False):
         logger.info("Places API (New) זמין — משתמש ב-API החדש")
         return PlacesClient(cfg.google_api_key, cfg.request_delay_seconds,
                             include_reviews)
-    logger.info("Places API (New) חסום — נופל ל-API הישן (legacy)")
+    logger.info("Places API (New) לא זמין (חסום בפרויקט או תקלת רשת/תעודות) — "
+                "נופל ל-API הישן (legacy)")
     return LegacyPlacesClient(
         cfg.google_api_key, cfg.request_delay_seconds, cfg.max_pages_per_type,
         include_reviews
