@@ -27,6 +27,10 @@ source .venv/bin/activate        # ב-Windows:  .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+ההתקנה הזאת קלה ומהירה. `playwright` (הורדה של מאות מגה-בייט) הוצא לקובץ
+נפרד ונדרש **רק** לקמפיין הדרושים (`hr`):
+`pip install -r requirements-hr.txt`
+
 ## שלב 4 — יצירת קובץ .env
 
 צרו קובץ בשם `.env` בתיקיית הפרויקט, והדביקו בו את ההגדרות

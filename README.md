@@ -28,7 +28,7 @@
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt   # playwright נפרד: requirements-hr.txt (רק לקמפיין hr)
 cp .env.example .env      # ואז ערכו את .env עם הערכים שלכם
 ```
 

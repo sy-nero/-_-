@@ -2,6 +2,3 @@ requests>=2.31.0
 beautifulsoup4>=4.12.0
 python-dotenv>=1.0.0
 Flask>=3.0.0
-
-# לקמפיין מ״א (סריקת דרושים) בלבד:
-playwright>=1.40.0
