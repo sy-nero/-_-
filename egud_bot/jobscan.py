@@ -319,6 +319,10 @@ def import_csv(storage: Storage, path: str, email_col: str = "email",
                 lat=0.0, lng=0.0, phone=(row.get("phone") or "").strip(), website="",
                 rating=None, review_count=0, business_status="OPERATIONAL",
                 primary_type="", neighborhood="", types=[],
+                # שדות אישיים לקמפיין הסוכנים (אופציונליים ב-CSV)
+                first_name=(row.get("first_name") or "").strip(),
+                intro_how=(row.get("how") or "").strip(),
+                intro_fact=(row.get("fact") or "").strip(),
             )
             storage.upsert_lead(lead, email, status="found")
             added += 1

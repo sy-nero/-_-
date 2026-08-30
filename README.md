@@ -46,6 +46,7 @@ python main.py send              # שליחת המיילים בפועל
 python main.py run               # scan ואז send ברצף
 python main.py stats             # סטטוס הלידים ב-DB
 python main.py export leads.csv  # ייצוא כל הלידים (כולל no_email) ל-CSV
+python main.py preview --campaign agent   # תצוגת נוסח המייל של קמפיין
 ```
 
 ### דף הנחיתה
@@ -84,10 +85,31 @@ gunicorn -w 2 -b 0.0.0.0:5000 landing.app:app
 │   ├── mailer.py           # שליחת SMTP
 │   ├── templates.py        # תבנית המייל (עברית, RTL)
 │   └── pipeline.py         # תזמור התהליך המלא
-└── landing/
-    ├── app.py              # שרת Flask לדף הנחיתה
-    └── templates/          # index.html + thanks.html
+├── landing/
+│   ├── app.py              # שרת Flask לדף הנחיתה
+│   └── templates/          # index.html + thanks.html
+└── docs/
+    └── agents.md           # פרופיל הסוכנים הממליצים + נוסח מייל הגיוס
 ```
+
+## גיוס סוכנים ממליצים (קמפיין `agent`)
+
+מעבר לפניות לבעלי עסקים, יש קמפיין נפרד לגיוס **סוכנים ממליצים** — רואי חשבון,
+מאמנים עסקיים ובעלי מקצוע שכבר יש להם יחסי אמון עם בעלי עסקים מה-ICP שלנו.
+פרופיל הסוכן המתאים, נוסח מייל הגיוס והמשתנים האישיים שבו מתועדים ב-
+**[docs/agents.md](docs/agents.md)**.
+
+```bash
+python main.py preview --campaign agent            # תצוגת הנוסח
+python main.py preview --campaign agent --whatsapp # אותו נוסח לוואטסאפ
+python main.py scan   --campaign agent --city bnei-brak
+python main.py import --campaign agent agents.csv  # רשימה ידנית (מאמנים וכו')
+python main.py send   --campaign agent --dry-run
+```
+
+בניגוד לשאר הקמפיינים, כאן מחפשים משרד **ותיק** ולא חדש: הסינון דורש
+מספר ביקורות **מעל** `AGENT_MIN_REVIEWS` (ברירת מחדל 3), והמייל נשלח אישית
+בשם מירי מסינרו (`AGENT_FROM_EMAIL`) ולא בשם האיגוד.
 
 ## הערה משפטית (חשוב)
 

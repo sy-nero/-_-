@@ -87,6 +87,12 @@ GRANT_BUSINESS_TYPES_QUERY = list(dict.fromkeys(
 ))
 
 
+# קמפיין גיוס סוכנים (agent) — בעלי מקצוע שיש להם יחסי אמון עם בעלי עסקים.
+# ל-Google Places יש סוג מקום רק ל"משרד רואי חשבון" (accounting); מאמנים
+# עסקיים, מטפלים ובעלי עסקים מהקהילה אין להם סוג מקום — אותם מייבאים מ-CSV
+# (python main.py import --campaign agent agents.csv). ראו docs/agents.md.
+AGENT_BUSINESS_TYPES_QUERY = ["accounting"]
+
 LEGACY_NEARBY_URL = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
 LEGACY_DETAILS_URL = "https://maps.googleapis.com/maps/api/place/details/json"
 

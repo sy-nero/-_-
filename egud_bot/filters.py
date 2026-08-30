@@ -215,6 +215,10 @@ class BusinessLead:
     primary_type: str
     neighborhood: str = ""
     types: list = field(default_factory=list)
+    # שדות אישיים לקמפיין הסוכנים (מגיעים מייבוא CSV ידני, לא מ-Google)
+    first_name: str = ""
+    intro_how: str = ""      # {{איך_הגעתי_אליו}}
+    intro_fact: str = ""     # {{עובדה_קונקרטית_עליו}}
 
     @classmethod
     def from_place(cls, place: dict, neighborhood: str = "") -> "BusinessLead":
@@ -351,6 +355,40 @@ def passes_filters_grant(
     if ts & SERVICE_EXCLUDED_TYPES:          # מוסד ציבור/דת/חינוך/ממשל/בריאות ציבורי
         return False
     if not (ts & GRANT_ELIGIBLE_TYPES):
+        return False
+    if is_excluded_by_name_service(lead.name):
+        return False
+    return True
+
+
+# ============ קמפיין agent: גיוס סוכנים ממליצים ============
+# מי שיש לו כבר יחסי אמון עם בעלי עסקים מה-ICP שלנו. ראו docs/agents.md.
+# מ-Google אפשר לסרוק רק משרדי רואי חשבון; שאר הקטגוריות מיובאות מ-CSV.
+AGENT_TYPES = {"accounting"}
+
+# ותק ויציבות עסקית: ל-Places אין שנת ייסוד, ולכן הפרוקסי לוותק הוא מספר
+# ביקורות מינימלי (הפוך משאר הקמפיינים, שמחפשים דווקא עסק חדש).
+AGENT_MIN_REVIEWS = 3
+
+
+def passes_filters_agent(
+    lead: BusinessLead,
+    min_review_count: int = AGENT_MIN_REVIEWS,
+    require_operational: bool = True,
+) -> bool:
+    """
+    קריטריונים לסוכן ממליץ: משרד פעיל מהקטגוריות המתאימות, עם ותק
+    (מספר ביקורות מעל הסף), שאינו מוסד ציבורי, רשת גדולה או מהמגזר הערבי.
+    """
+    if require_operational and lead.business_status not in ("", "OPERATIONAL"):
+        return False
+    if lead.review_count < min_review_count:      # משרד חדש מדי — אין לו עדיין ותק
+        return False
+    ts = {(t or "").lower() for t in (lead.types or [])}
+    ts.add((lead.primary_type or "").lower())
+    if ts & SERVICE_EXCLUDED_TYPES:
+        return False
+    if not (ts & AGENT_TYPES):
         return False
     if is_excluded_by_name_service(lead.name):
         return False

@@ -9,6 +9,7 @@
     python main.py run             # scan ואז send ברצף
     python main.py stats           # הצגת סטטיסטיקות מה-DB
     python main.py export leads.csv  # ייצוא כל הלידים ל-CSV
+    python main.py preview --campaign agent   # תצוגת נוסח המייל
 """
 import sys
 import csv
@@ -101,6 +102,30 @@ def cmd_jobdebug(args) -> int:
     return 0
 
 
+def cmd_preview(args) -> int:
+    """מדפיס את נוסח המייל של הקמפיין (בלי DB ובלי שליחה) — לבדיקת הנוסח."""
+    from egud_bot import templates
+    campaign = _campaign(args)
+    lead = {
+        "name": args.name,
+        "place_id": "preview",
+        "primary_type": args.type,
+        "neighborhood": args.neighborhood,
+        "first_name": args.first_name,
+        "intro_how": args.how,
+        "intro_fact": args.fact,
+    }
+    subject, html, text = templates.render(
+        campaign, **pipeline.build_ctx(config, campaign, lead))
+    if args.html:
+        print(html)
+        return 0
+    if not args.whatsapp:          # בוואטסאפ אין שורת נושא
+        print(f"נושא: {subject}\n")
+    print(text)
+    return 0
+
+
 def cmd_stats(args) -> int:
     storage = _storage(args)
     stats = storage.stats()
@@ -132,9 +157,11 @@ def cmd_export(args) -> int:
 
 
 def _add_campaign(sp):
-    sp.add_argument("--campaign", choices=["funding", "hr", "crm", "grant"],
+    sp.add_argument("--campaign",
+                    choices=["funding", "hr", "crm", "grant", "agent"],
                     default="funding",
-                    help="funding=מימון, hr=משאבי אנוש, crm=מערכת CRM, grant=מענק מחשוב 4.56")
+                    help="funding=מימון, hr=משאבי אנוש, crm=מערכת CRM, "
+                         "grant=מענק מחשוב 4.56, agent=גיוס סוכנים ממליצים")
     return sp
 
 
@@ -164,6 +191,21 @@ def build_parser() -> argparse.ArgumentParser:
     rp = _add_city(_add_campaign(sub.add_parser("run", help="scan ואז send")))
     rp.add_argument("--dry-run", action="store_true", help="בלי לשלוח בפועל")
     rp.set_defaults(func=cmd_run)
+
+    pv = _add_campaign(sub.add_parser("preview", help="תצוגת נוסח המייל של הקמפיין"))
+    pv.add_argument("--name", default="", help="שם העסק/הסוכן (לדוגמה בתצוגה)")
+    pv.add_argument("--first-name", dest="first_name", default="",
+                    help="שם פרטי לפנייה (אחרת נגזר מהשם, ואם לא — 'שלום,')")
+    pv.add_argument("--neighborhood", default="", help="שכונה/עיר")
+    pv.add_argument("--type", default="", help="סוג העסק ב-Google (למשל accounting)")
+    pv.add_argument("--how", default="",
+                    help="קמפיין סוכנים: {{איך_הגעתי_אליו}}")
+    pv.add_argument("--fact", default="",
+                    help="קמפיין סוכנים: {{עובדה_קונקרטית_עליו}}")
+    pv.add_argument("--whatsapp", action="store_true",
+                    help="נוסח לוואטסאפ (בלי שורת נושא)")
+    pv.add_argument("--html", action="store_true", help="הדפסת ה-HTML של המייל")
+    pv.set_defaults(func=cmd_preview)
 
     _add_campaign(sub.add_parser("clean", help="הסרת מה שאינו חנות קמעונאית")).set_defaults(func=cmd_clean)
     _add_campaign(sub.add_parser("stats", help="הצגת סטטיסטיקות")).set_defaults(func=cmd_stats)

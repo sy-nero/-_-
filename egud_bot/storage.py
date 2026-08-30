@@ -24,6 +24,9 @@ CREATE TABLE IF NOT EXISTS leads (
     business_status TEXT,
     primary_type    TEXT,
     types           TEXT,                   -- כל סוגי Google, מופרדים בפסיק
+    first_name      TEXT,                   -- שם פרטי לפנייה אישית (קמפיין agent)
+    intro_how       TEXT,                   -- {{איך_הגעתי_אליו}} (קמפיין agent)
+    intro_fact      TEXT,                   -- {{עובדה_קונקרטית_עליו}} (קמפיין agent)
     status          TEXT DEFAULT 'found',   -- found | emailed | no_email | failed | skipped
     error           TEXT,
     found_at        TEXT,
@@ -55,11 +58,12 @@ class Storage:
         os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
         with self._conn() as conn:
             conn.executescript(SCHEMA)
-            # מיגרציה: הוספת עמודת types ל-DB ישן (אם חסרה)
-            try:
-                conn.execute("ALTER TABLE leads ADD COLUMN types TEXT")
-            except sqlite3.OperationalError:
-                pass  # העמודה כבר קיימת
+            # מיגרציה: הוספת עמודות ל-DB ישן (אם חסרות)
+            for column in ("types", "first_name", "intro_how", "intro_fact"):
+                try:
+                    conn.execute(f"ALTER TABLE leads ADD COLUMN {column} TEXT")
+                except sqlite3.OperationalError:
+                    pass  # העמודה כבר קיימת
 
     @contextmanager
     def _conn(self):
@@ -85,8 +89,9 @@ class Storage:
                 """
                 INSERT INTO leads (place_id, name, address, neighborhood, lat, lng,
                     phone, website, email, rating, review_count, business_status,
-                    primary_type, types, status, found_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    primary_type, types, first_name, intro_how, intro_fact,
+                    status, found_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(place_id) DO UPDATE SET
                     email=excluded.email,
                     status=excluded.status
@@ -95,7 +100,8 @@ class Storage:
                     lead.place_id, lead.name, lead.address, lead.neighborhood,
                     lead.lat, lead.lng, lead.phone, lead.website, email,
                     lead.rating, lead.review_count, lead.business_status,
-                    lead.primary_type, ",".join(lead.types or []), status, _now(),
+                    lead.primary_type, ",".join(lead.types or []),
+                    lead.first_name, lead.intro_how, lead.intro_fact, status, _now(),
                 ),
             )
 

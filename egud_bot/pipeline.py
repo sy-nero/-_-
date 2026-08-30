@@ -7,9 +7,11 @@ import logging
 from config import Config
 from data.neighborhoods import HAREDI_NEIGHBORHOODS, Neighborhood, neighborhoods_for
 from egud_bot.places import (make_client, SERVICE_BUSINESS_TYPES_QUERY,
-                             GRANT_BUSINESS_TYPES_QUERY)
+                             GRANT_BUSINESS_TYPES_QUERY,
+                             AGENT_BUSINESS_TYPES_QUERY)
 from egud_bot.filters import (BusinessLead, passes_filters,
                               passes_filters_service, passes_filters_grant,
+                              passes_filters_agent,
                               is_blocked_email, looks_established)
 from egud_bot.email_finder import find_email
 from egud_bot.storage import Storage
@@ -17,6 +19,40 @@ from egud_bot.mailer import Mailer
 from egud_bot import templates
 
 logger = logging.getLogger(__name__)
+
+
+def _col(row, name: str) -> str:
+    """קריאת עמודה מ-sqlite3.Row שאולי חסרה (DB ישן לפני המיגרציה)."""
+    try:
+        return (row[name] or "").strip()
+    except (IndexError, KeyError):
+        return ""
+
+
+def build_ctx(cfg: Config, campaign: str, lead) -> dict:
+    """מרכיב את משתני התבנית מליד (שורת DB או מילון) לפי הקמפיין."""
+    from_email, from_name, _, _ = cfg.sender_for(campaign)
+    ctx = dict(
+        business_name=_col(lead, "name"),
+        association_name=cfg.association_name,
+        sender_name=from_name,
+        sender_title=cfg.sender_title,
+        contact_email=cfg.contact_email,
+        course_url=cfg.course_url,
+        place_id=_col(lead, "place_id"),
+        field=templates.field_noun(_col(lead, "primary_type")),
+        neighborhood=_col(lead, "neighborhood"),
+        first_name=_col(lead, "first_name"),
+        intro_how=_col(lead, "intro_how"),
+        intro_fact=_col(lead, "intro_fact"),
+    )
+    if campaign == "agent":
+        # מייל הסוכנים חתום אישית בשם מירי מסינרו, ולא בשם האיגוד
+        ctx.update(sender_title=cfg.agent_sender_title,
+                   company=cfg.agent_company,
+                   sender_phone=cfg.agent_sender_phone,
+                   contact_email=from_email)
+    return ctx
 
 
 def scan(
@@ -31,6 +67,7 @@ def scan(
     סורק מקור לפי הקמפיין ושומר לידים חדשים ב-DB.
     funding — חנויות קמעונאיות דרך Google Places (לפי שכונות העיר שנבחרה).
     hr      — עסקים מאתרי דרושים (jobscan).
+    agent   — משרדי רו"ח (סוכנים ממליצים) דרך Google Places.
     """
     if campaign == "hr":
         from egud_bot.jobscan import scan_jobs
@@ -51,6 +88,7 @@ def scan_retail(
     """
     סורק עסקים דרך Google Places לפי שכונות.
     funding/hr — חנויות קמעונאיות. crm — עסקי שירות/מקצוע.
+    agent — משרדי רו"ח ותיקים (סוכנים ממליצים).
     """
     neighborhoods = neighborhoods or HAREDI_NEIGHBORHOODS
     target = cfg.target_emails if target_emails is None else target_emails
@@ -63,6 +101,13 @@ def scan_retail(
     elif campaign == "grant":
         query_types = GRANT_BUSINESS_TYPES_QUERY
         passes = passes_filters_grant
+    elif campaign == "agent":
+        query_types = AGENT_BUSINESS_TYPES_QUERY
+
+        # כאן הסף הוא מינימום ותק (ולא מקסימום "חדשוּת" כמו בשאר הקמפיינים)
+        def passes(lead, _max_reviews, require_operational):
+            return passes_filters_agent(lead, cfg.agent_min_reviews,
+                                        require_operational)
     else:
         query_types = None
         passes = passes_filters
@@ -185,17 +230,7 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
     ) as mailer:
         for lead in leads:
             subject, html, text = templates.render(
-                campaign,
-                business_name=lead["name"],
-                association_name=cfg.association_name,
-                sender_name=from_name,
-                sender_title=cfg.sender_title,
-                contact_email=cfg.contact_email,
-                course_url=cfg.course_url,
-                place_id=lead["place_id"],
-                field=templates.field_noun(lead["primary_type"]),
-                neighborhood=lead["neighborhood"] or "",
-            )
+                campaign, **build_ctx(cfg, campaign, lead))
             try:
                 mailer.send(lead["email"], subject, html, text)
                 storage.mark_emailed(lead["place_id"], success=True)

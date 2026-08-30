@@ -2,10 +2,14 @@
 תבניות המייל, לפי קמפיין:
   funding — מימון (פנייה אישית לחנות קמעונאית).
   hr      — משאבי אנוש (קורס וכנס לגיוס עובדים).
+  crm     — מערכת CRM בתנאי האיגוד.
+  grant   — מענק מחשוב 4.56.
+  agent   — גיוס סוכנים ממליצים (רו"ח, מאמנים עסקיים) — ראו docs/agents.md.
 
-הגישה בשני המקרים: מייל קצר ואנושי, בלי עיצוב כבד. ל-hr יש שני כפתורים
+הגישה בכל המקרים: מייל קצר ואנושי, בלי עיצוב כבד. ל-hr יש שני כפתורים
 (רכישת הקורס + הרשמה לכנס במייל).
 """
+import re
 from urllib.parse import quote
 
 # מיפוי סוג העסק (Google type) לשם עברי (לקמפיין המימון)
@@ -212,10 +216,136 @@ def _grant(business_name, association_name, sender_name,
     return subject, html, text
 
 
-CAMPAIGNS = {"funding": _funding, "hr": _hr, "crm": _crm, "grant": _grant}
+# ------------------ קמפיין: גיוס סוכנים ממליצים (agent) ------------------
+# המטרה היחידה של המייל: שהסוכן ישאיר טלפון. אין בו עמלה, אחוזים או בקשת פגישה.
+# הנוסח והפרופיל של "מי מתאים להיות סוכן" מתועדים ב-docs/agents.md.
+
+# תארים מקצועיים שמופיעים לפני שם של אדם ("רו״ח משה כהן")
+PERSON_TITLES = ('רו"ח', "רו״ח", 'עו"ד', "עו״ד", "יועץ מס", "יועצת מס",
+                 'ד"ר', "ד״ר", "דר'", "מר", "גב'")
+
+# סימנים לכך שהשם הוא של משרד/חברה ולא של אדם
+FIRM_MARKERS = ("משרד", "ושות", 'בע"מ', "בע״מ", "בעמ", "חברת", "קבוצת",
+                "&", "Ltd", "LTD", "Inc")
+
+_HEB_WORD_RE = re.compile(r"[\u0590-\u05EA'\u05F3\u05F4-]{2,}")
+
+
+def person_first_name(name: str) -> str:
+    """
+    מחזיר שם פרטי רק כשברור שהשם הוא של אדם (למשל "רו״ח משה כהן" → "משה").
+    בכל מקרה אחר מחזיר מחרוזת ריקה — עדיף "שלום," בלי שם מאשר לפנות בשם שגוי.
+    """
+    n = (name or "").strip()
+    for title in PERSON_TITLES:
+        if n.startswith(title):
+            n = n[len(title):].strip(" -–,")
+            break
+    if not n or any(m in n for m in FIRM_MARKERS):
+        return ""
+    words = n.split()
+    if len(words) != 2 or not all(_HEB_WORD_RE.fullmatch(w) for w in words):
+        return ""
+    return words[0]
+
+
+def agent_fact(fact: str = "", field: str = "", neighborhood: str = "") -> str:
+    """
+    העובדה הקונקרטית שנכנסת ל"וראיתי ש...". מעדיפים עובדה שהוזנה ידנית;
+    אחרת בונים רק ממה שידוע באמת מהסריקה (תחום + שכונה). לא ממציאים כלום.
+    """
+    if fact:
+        return fact
+    if field and neighborhood:
+        return f"יש לך {field} ב{neighborhood}"
+    if field:
+        return f"יש לך {field}"
+    if neighborhood:
+        return f"אתה פעיל ב{neighborhood}"
+    return ""
+
+
+def _agent_intro(how: str, fact: str) -> str:
+    """שורת הפתיחה האישית. אם אין שום מידע אמיתי — מחזיר ריק והשורה יורדת."""
+    if how and fact:
+        return f"{how}, וראיתי ש{fact}."
+    if how:
+        return f"{how}."
+    if fact:
+        return f"ראיתי ש{fact}."
+    return ""
+
+
+def _department_of(sender_title: str) -> str:
+    """'מנהלת מחלקת הטכנולוגיה' → 'מחלקת הטכנולוגיה' (לשורת החתימה)."""
+    t = (sender_title or "").strip()
+    for prefix in ("מנהלת ", "מנהל ", "ראש "):
+        if t.startswith(prefix):
+            return t[len(prefix):]
+    return t
+
+
+def _agent(business_name="", sender_name="מירי בר לב",
+           sender_title="מנהלת מחלקת הטכנולוגיה", company="סינרו",
+           department="", sender_phone="", contact_email="",
+           first_name="", intro_how="", intro_fact="",
+           field="", neighborhood="", **_):
+    first_name = (first_name or person_first_name(business_name)).strip()
+    intro = _agent_intro(intro_how.strip(),
+                         agent_fact(intro_fact.strip(), field, neighborhood))
+    department = department or _department_of(sender_title)
+    sign_role = f"{department}, {company}" if department else company
+
+    subject = (f"{first_name}, רציתי לכתוב לך אישית" if first_name
+               else "רציתי לכתוב לך אישית")
+    greeting = f"שלום {first_name}," if first_name else "שלום,"
+
+    lines = [
+        greeting,
+        f"זאת {sender_name}, {sender_title} ב{company}.",
+    ]
+    if intro:
+        lines.append(intro)
+    lines += [
+        "יש לי רעיון לשיתוף פעולה קטן, ואשמח לספר לך עליו בקצרה.",
+        "אם זה מעניין אותך, תשאיר לי כאן טלפון ואני אתקשר אליך בעצמי.",
+    ]
+    sign = [sender_name, sign_role]
+    if sender_phone:
+        sign.append(sender_phone)
+    if contact_email:
+        sign.append(contact_email)
+
+    text = "\n\n".join(lines) + "\n\nיום טוב,\n" + "\n".join(sign) + "\n"
+
+    p = "margin:0 0 14px;"
+    body = "\n".join(f'    <p style="{p}">{line}</p>' for line in lines)
+    sign_html = "<br>".join(sign)
+    html = f"""<!DOCTYPE html>
+<html lang="he" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#ffffff;">
+  <div dir="rtl" style="direction:rtl;text-align:right;max-width:600px;margin:0 auto;
+       padding:22px 20px;font-family:Arial,Helvetica,sans-serif;font-size:16px;
+       line-height:1.75;color:#222222;">
+{body}
+    <p style="margin:0 0 4px;">יום טוב,</p>
+    <p style="margin:0;">{sign_html}</p>
+  </div>
+</body></html>"""
+    return subject, html, text
+
+
+CAMPAIGNS = {"funding": _funding, "hr": _hr, "crm": _crm, "grant": _grant,
+             "agent": _agent}
 
 
 def render(campaign, **ctx):
     """מחזיר (subject, html, text) לפי הקמפיין."""
     fn = CAMPAIGNS.get(campaign, _funding)
     return fn(**ctx)
+
+
+def whatsapp_text(campaign, **ctx):
+    """אותו נוסח כהודעת וואטסאפ — גוף הטקסט בלבד, בלי שורת הנושא."""
+    return render(campaign, **ctx)[2]
