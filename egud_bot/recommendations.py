@@ -35,7 +35,18 @@ OWNER_HINTS = (
     'בע"מ', "מחזור", "ספקים", "חשבוניות",
     # בהמלצה על רו"ח, אזכור "העסק" הוא כמעט תמיד העסק של הממליץ עצמו
     "את העסק", "העסק", "לעסק", "עסק שלי", "עסק שלנו",
+    "החברה של", "לחברה", "הנהלת חשבונות", "דוחות", "דוח שנתי", 'מע"מ',
+    "שכר לעובדים", "עובדים שלי", "עוסק מורשה", "עוסק פטור",
 )
+
+
+def is_business_relevant(text: str) -> bool:
+    """
+    האם ההמלצה נוגעת לעסק. אנחנו פונים לרו"ח בתור מי שמלווה בעלי עסקים,
+    ולכן ציטוט על עניין פרטי (החזרי מס לשכיר, קצבאות, תביעה אישית) לא רק
+    שאינו עוזר — הוא מסגיר שהפנייה אוטומטית. כזה ציטוט לא ייכנס למייל.
+    """
+    return any(h in (text or "") for h in OWNER_HINTS)
 # ליווי שוטף (ולא דוח שנתי חד-פעמי) — סימן ליחסי אמון מתמשכים
 ONGOING_HINTS = (
     "ליווי", "מלווה", "ליווה", "זמין", "זמינות", "שוטף", "לאורך השנים",
@@ -83,11 +94,16 @@ def _clean(text: str) -> str:
 
 
 def _shorten(text: str, limit: int = MAX_QUOTE_CHARS) -> str:
+    """מקצר ציטוט. עדיפות לסיום בגבול משפט — ציטוט שנקטע באמצע משפט
+    ("...אנחנו…") נראה גרוע במייל."""
     text = _clean(text).strip('"״”“')
     if len(text) <= limit:
         return text
-    cut = text[:limit].rsplit(" ", 1)[0]
-    return cut.rstrip(",.;:־-") + "…"
+    head = text[:limit]
+    sentence_end = max(head.rfind(". "), head.rfind("! "), head.rfind("? "))
+    if sentence_end >= MIN_QUOTE_CHARS:
+        return head[:sentence_end + 1]
+    return head.rsplit(" ", 1)[0].rstrip(",.;:־-") + "…"
 
 
 # ---------------------- זיהוי "למה דווקא הוא" ----------------------
@@ -136,11 +152,12 @@ def _pick_review(reviews: list) -> dict | None:
             continue
         if rating is not None and rating < 4:
             continue
-        candidates.append((any(h in text for h in OWNER_HINTS), len(text), review))
+        if not is_business_relevant(text):   # המלצה על עניין פרטי — לא לציטוט
+            continue
+        candidates.append((len(text), review))
     if not candidates:
         return None
-    # קודם המלצה של בעל עסק, ובתוך זה הארוכה ביותר (יש בה יותר מידע אמיתי)
-    return max(candidates, key=lambda c: (c[0], c[1]))[2]
+    return max(candidates, key=lambda c: c[0])[1]
 
 
 def from_place(place_id: str, reviews: list, rating=None,
@@ -242,7 +259,7 @@ def _quote_from_html(html: str) -> str:
 
     for text, structural in candidates:
         text = _strip_label(text)
-        if looks_like_testimonial(text, structural):
+        if looks_like_testimonial(text, structural) and is_business_relevant(text):
             return text
     return ""
 

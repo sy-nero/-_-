@@ -12,6 +12,8 @@
 import re
 from urllib.parse import quote
 
+from egud_bot import recommendations
+
 # מיפוי סוג העסק (Google type) לשם עברי (לקמפיין המימון)
 FIELD_NOUNS = {
     "bakery": "מאפייה", "restaurant": "מסעדה", "cafe": "בית קפה",
@@ -265,6 +267,17 @@ def agent_fact(fact: str = "", field: str = "", neighborhood: str = "") -> str:
     return ""
 
 
+def usable_quote(rec) -> str:
+    """
+    הציטוט שמותר להיכנס למייל: רק כזה שנוגע לעסק. המלצה אמיתית על עניין
+    פרטי (קצבאות, החזר מס לשכיר) מסגירה שהפנייה אוטומטית, ולכן במקרה כזה
+    לא מצטטים כלום ונשענים על מסת ההמלצות בלבד. הבדיקה נעשית גם כאן ולא
+    רק בסריקה, כדי שגם לידים שנסרקו לפני התיקון יטופלו נכון.
+    """
+    text = ((rec or {}).get("quote") or "").strip()
+    return text if recommendations.is_business_relevant(text) else ""
+
+
 def agent_seen_line(rec=None, fact: str = "", field: str = "",
                     neighborhood: str = "") -> str:
     """
@@ -274,7 +287,7 @@ def agent_seen_line(rec=None, fact: str = "", field: str = "",
     """
     seen = ""
     if rec:
-        quote = (rec.get("quote") or "").strip()
+        quote = usable_quote(rec)
         source = rec.get("source") or ""
         count = int(rec.get("count") or 0)
         rating = rec.get("rating")
@@ -307,7 +320,10 @@ def agent_why_line(rec=None, field: str = "", neighborhood: str = "") -> str:
     האם הממליצים הם בעלי עסקים, והאם מדובר בליווי שוטף. בלי המלצות נשאר
     הנימוק האמיתי של הסינון עצמו: ותק + לקוחות שהם בעלי עסקים.
     """
-    signals = list((rec or {}).get("signals") or [])
+    # הנימוק נגזר רק ממה שכתוב בציטוט שמוצג במייל. סימנים שהגיעו מהמלצות
+    # אחרות היו יוצרים טענה שלא נובעת מהמשפט שמעליה.
+    quote = usable_quote(rec)
+    signals = recommendations.detect_signals([quote]) if quote else []
     if "owners" in signals and "ongoing" in signals:
         return ("פניתי דווקא אליך כי ההמלצות עליך הן מבעלי עסקים, ורואים בהן "
                 "שאתה מלווה אותם לאורך זמן ולא רק מגיש דוח פעם בשנה.")
