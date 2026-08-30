@@ -39,7 +39,7 @@ OWNER_HINTS = (
 # ליווי שוטף (ולא דוח שנתי חד-פעמי) — סימן ליחסי אמון מתמשכים
 ONGOING_HINTS = (
     "ליווי", "מלווה", "ליווה", "זמין", "זמינות", "שוטף", "לאורך השנים",
-    "כל שנה", "כבר שנים", "ייעוץ", "יעוץ", "צמיחה", "מענה", "סבלנות",
+    "כל שנה", "כבר שנים", "ייעוץ", "יעוץ", "צמיחה",
 )
 # ותק
 VETERAN_HINTS = ("שנים", "ותק", "ותיק", "מזה")
@@ -166,21 +166,84 @@ def from_place(place_id: str, reviews: list, rating=None,
 
 
 # ---------------------- מקור 2: עמוד המלצות באתר ----------------------
+# קול של לקוח (גוף ראשון) — בלי זה זה טקסט שיווקי של המשרד, לא המלצה
+CUSTOMER_VOICE = (
+    "אני ", "לי ", "שלי", "אותי", "אלי", "עבורי", "הגעתי", "פניתי", "קיבלתי",
+    "עברתי", "ממליץ", "ממליצה", "המליץ", "תודה", "אנחנו כלקוח", "העסק שלי",
+    "החברה שלי", "שלנו כלקוחות",
+)
+# קול של המשרד עצמו — טקסט שיווקי, לא המלצה של לקוח
+FIRM_VOICE = ("אנו ", "אנחנו מ", "המשרד שלנו", "צוות המשרד", "השירותים שלנו",
+              "מתמחים ב", "אנו מתמחים", "המשרד מעניק", "אנו מציעים")
+
+# שפה של חוות דעת (גם בגוף שלישי) — מספיקה כשהמבנה באתר כבר מעיד על המלצה
+REVIEW_VOICE = ("מרוצה", "ממליץ", "ממליצה", "המלצה", "מצוין", "מעולה", "אדיב",
+                "יחס", "תודה", "הוא ", "היא ", "עזר", "טיפל", "שירותי", "זמין")
+
+# מרכאות שאינן ראשי תיבות עבריים: לפני/אחרי המרכאה לא עומדת אות
+# (זה מה שמבדיל בין ציטוט לבין בע"מ / רו"ח / מע"מ שמפצלים את הטקסט)
+_QUOTED_RE = re.compile(
+    r'(?<![א-תA-Za-z])["״“]([^"״”“]{%d,300})["״”](?![א-תA-Za-z])' % MIN_QUOTE_CHARS
+)
+# מזהה אזורי המלצות באתר לפי class/id
+_TESTIMONIAL_ATTR_RE = re.compile(r"testimonial|review|recommend|המלצ", re.I)
+
+
+def looks_like_testimonial(text: str, structural: bool = False) -> bool:
+    """
+    האם זה באמת ציטוט של לקוח ולא טקסט שיווקי של המשרד. חשוב: ציטוט שבור
+    או פסקת שיווק שתיכנס למייל כ"אחד הלקוחות כתב" הורסת את כל הפנייה.
+
+    structural=True כשהטקסט הגיע ממקום שמסומן באתר כחוות דעת (blockquote /
+    אזור המלצות) — שם המבנה כבר מעיד, ולכן מספיקה שפה של חוות דעת. בטקסט
+    חופשי שנמצא במרכאות דורשים סימן מפורש של גוף ראשון.
+    """
+    text = _clean(text)
+    if len(text) < MIN_QUOTE_CHARS:
+        return False
+    if not text[0].isalpha():          # התחיל באמצע מילה/סימן — ציטוט שבור
+        return False
+    if any(v in text for v in FIRM_VOICE):
+        return False
+    if any(v in text for v in CUSTOMER_VOICE):
+        return True
+    # רוב חוות הדעת בעברית כתובות בגוף שלישי ("הוא היה מקצועי, היה מצוין")
+    return structural and any(v in text for v in REVIEW_VOICE)
+
+
+# תוויות שמופיעות לפני גוף חוות הדעת באתרי דירוג
+_LABEL_RE = re.compile(r"^.*?(?:חוות דעת|המלצה|ביקורת)\s*:\s*")
+
+
+def _strip_label(text: str) -> str:
+    """מסיר תווית כמו 'תיאור השירות: ... חוות דעת:' ומשאיר את גוף ההמלצה."""
+    return _LABEL_RE.sub("", _clean(text), count=1).strip()
+
+
 def _quote_from_html(html: str) -> str:
-    """מחלץ ציטוט מעמוד המלצות: blockquote, ואם אין — פסקה בתוך מרכאות."""
+    """
+    מחלץ ציטוט של לקוח מעמוד המלצות, לפי סדר: blockquote, אזור שמסומן
+    כ"המלצות", ורק בסוף טקסט במרכאות. כל מועמד עובר בדיקת "קול של לקוח".
+    """
     soup = BeautifulSoup(html, "html.parser")
     for tag in soup(["script", "style", "nav", "footer", "header"]):
         tag.decompose()
 
-    for block in soup.find_all(["blockquote", "q"]):
-        text = _clean(block.get_text(" "))
-        if len(text) >= MIN_QUOTE_CHARS:
-            return text
+    # (טקסט, האם הגיע ממבנה שמסומן באתר כחוות דעת)
+    candidates = [(_clean(b.get_text(" ")), True)
+                  for b in soup.find_all(["blockquote", "q"])]
 
-    quoted = re.findall(r'["״“]([^"״”“]{40,300})["״”]', soup.get_text(" "))
-    for text in quoted:
-        if _clean(text):
-            return _clean(text)
+    for block in soup.find_all(attrs={"class": _TESTIMONIAL_ATTR_RE}):
+        candidates += [(_clean(p.get_text(" ")), True)
+                       for p in block.find_all(["p", "li"])]
+        candidates.append((_clean(block.get_text(" ")), True))
+
+    candidates += [(_clean(m), False) for m in _QUOTED_RE.findall(soup.get_text(" "))]
+
+    for text, structural in candidates:
+        text = _strip_label(text)
+        if looks_like_testimonial(text, structural):
+            return text
     return ""
 
 
@@ -251,7 +314,7 @@ def from_web_search(name: str, search_key: str, search_cx: str
             continue
         snippet = _clean(item.get("snippet", ""))
         # רק תוצאה שבאמת מדברת על המלצות, ולא סתם הזכירה את השם
-        if len(snippet) < MIN_QUOTE_CHARS or not any(
+        if not looks_like_testimonial(snippet) or not any(
                 w in snippet + item.get("title", "") for w in TESTIMONIAL_WORDS):
             continue
         return Recommendation(source="web", quote=_shorten(snippet), url=link,
