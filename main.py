@@ -202,6 +202,26 @@ def cmd_check(args) -> int:
         print(f"  טלפון בחתימה: {config.agent_sender_phone}")
         print(f"  ותק מינימלי לסוכן: {config.agent_min_reviews} ביקורות")
 
+    # בדיקת חיבור מאובטח: תקלת תעודות במחשב מפילה כל בקשה עוד לפני Google
+    print("\n  חיבור מאובטח (SSL) לשרתי Google:")
+    try:
+        import requests
+        resp = requests.get(
+            "https://maps.googleapis.com/maps/api/place/nearbysearch/json",
+            timeout=15)          # בלי מפתח — רק בדיקה שהחיבור עצמו נסגר
+        print(f"  [✓] תקין (השרת ענה {resp.status_code})")
+    except Exception as exc:     # noqa: BLE001
+        print(f"  [✗] {type(exc).__name__}")
+        try:
+            import certifi
+            path = certifi.where()
+            size = os.path.getsize(path) if os.path.exists(path) else 0
+            print(f"      קובץ התעודות: {path} ({size} בייטים)")
+        except ImportError:
+            print("      certifi לא מותקן")
+        print("      תיקון: pip install --upgrade --force-reinstall certifi")
+        print("      ואם מדובר בפייתון של Homebrew: brew reinstall ca-certificates")
+
     scan_errors = config.validate_for_scan()
     send_errors = config.validate_for_email(campaign)
     print("\n  סריקה: " + ("מוכנה" if not scan_errors else "חסר — " + ", ".join(scan_errors)))
