@@ -105,7 +105,12 @@ python main.py preview --campaign agent --whatsapp # אותו נוסח לווא�
 python main.py scan   --campaign agent --city bnei-brak
 python main.py import --campaign agent agents.csv  # רשימה ידנית (מאמנים וכו')
 python main.py send   --campaign agent --dry-run
+python main.py send   --campaign agent --limit 5 --confirm   # אישור לכל מייל
 ```
+
+`--confirm` מדפיס כל מייל במלואו בטרמינל (כולל קישור לאימות ההמלצה) ושואל
+`y` / `n` / `q` לפני שליחה. נשלחים רק המיילים שאושרו; `--limit` קובע כמה
+מיילים ייכנסו להרצה. אם אין קלט (הרצה לא אינטראקטיבית) או Ctrl-C — לא נשלח כלום.
 
 בניגוד לשאר הקמפיינים, כאן מחפשים משרד **ותיק** ולא חדש: הסינון דורש
 מספר ביקורות **מעל** `AGENT_MIN_REVIEWS` (ברירת מחדל 3), והמייל נשלח אישית

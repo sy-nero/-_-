@@ -54,6 +54,35 @@ def cmd_scan(args) -> int:
     return 0
 
 
+def _ask_before_send(lead, subject, text, index, total, rec=None) -> str:
+    """מדפיס את המייל המלא בטרמינל ושואל אם לשלוח אותו."""
+    print("\n" + "=" * 72)
+    print(f"מייל {index} מתוך {total}")
+    print(f"אל:    {lead['name']} <{lead['email']}>")
+    print(f"נושא:  {subject}")
+    print("-" * 72)
+    print(text)
+    if rec and rec.get("url"):
+        print(f"[מקור ההמלצה: {rec.get('source')} | לאימות: {rec['url']}]")
+    print("-" * 72)
+    while True:
+        try:
+            answer = input("לשלוח את המייל הזה? [y=כן / n=דלג / q=עצור הכול]: ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            # אין קלט (הרצה לא אינטראקטיבית) או Ctrl-C — עוצרים ולא שולחים
+            print("\n  → הופסק. לא נשלח שום מייל שלא אושר.")
+            return "quit"
+        if answer in ("y", "yes", "כן", "כ"):
+            return "yes"
+        if answer in ("n", "no", "לא", "ל"):
+            print("  → מדלג. הליד נשאר ב-DB וניתן לשלוח אליו בהרצה אחרת.")
+            return "no"
+        if answer in ("q", "quit", "עצור", "ע"):
+            print("  → עוצר. לא יישלח שום מייל שלא אושר.")
+            return "quit"
+        print("  תשובה לא ברורה. הקלד y / n / q.")
+
+
 def cmd_send(args) -> int:
     if not args.dry_run:
         errors = config.validate_for_email(_campaign(args))
@@ -61,9 +90,14 @@ def cmd_send(args) -> int:
             print("שגיאות קונפיגורציה:\n  - " + "\n  - ".join(errors))
             return 1
     storage = _storage(args)
+    confirm = _ask_before_send if getattr(args, "confirm", False) else None
+    if confirm and not args.dry_run:
+        print("\nכל מייל יוצג כאן לפני השליחה. נשלחים רק המיילים שתאשר.")
     summary = pipeline.send_emails(config, storage, dry_run=args.dry_run,
                                    campaign=_campaign(args),
-                                   skip_contacted=getattr(args, "skip_contacted", False))
+                                   skip_contacted=getattr(args, "skip_contacted", False),
+                                   limit=getattr(args, "limit", None),
+                                   confirm=confirm)
     print("\n=== סיכום שליחה ===")
     for k, v in summary.items():
         print(f"  {k}: {v}")
@@ -204,6 +238,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--dry-run", action="store_true", help="בלי לשלוח בפועל")
     sp.add_argument("--skip-contacted", action="store_true",
                     help="דלג על כל מי שקיבל מייל בקמפיין אחר (לא לשלוח פעמיים לאותו עסק)")
+    sp.add_argument("--limit", type=int, default=None,
+                    help="כמה מיילים לשלוח בהרצה הזאת (למשל 5)")
+    sp.add_argument("--confirm", action="store_true",
+                    help="להציג כל מייל בטרמינל ולשאול לפני שליחה")
     sp.set_defaults(func=cmd_send)
 
     rp = _add_city(_add_campaign(sub.add_parser("run", help="scan ואז send")))

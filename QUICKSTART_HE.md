@@ -55,6 +55,23 @@ python main.py stats             # כמה לידים נאספו ומה הסטט�
 python main.py export leads.csv  # ייצוא כל הלידים (כולל בלי מייל) ל-CSV
 ```
 
+## קמפיין גיוס סוכנים (agent) — שליחה עם אישור
+
+```bash
+# 1. סריקה: מוצא משרדי רו"ח ותיקים, מאתר מייל, ומחפש המלצה אמיתית על כל אחד
+python main.py scan --campaign agent --city bnei-brak
+
+# 2. מה נאסף
+python main.py stats  --campaign agent
+python main.py export --campaign agent agents.csv   # לבדוק את ההמלצות בעיניים
+
+# 3. שליחה: כל מייל מוצג בטרמינל, ונשלח רק אחרי אישור
+python main.py send --campaign agent --limit 5 --confirm
+```
+
+בשלב 3 לכל מייל: `y` לשלוח, `n` לדלג, `q` לעצור הכול. מי שדולג נשאר ב-DB
+וניתן לשלוח אליו בהרצה אחרת. לפני הכול אפשר תמיד `--dry-run` בלי לשלוח דבר.
+
 ## כמה טיפים חשובים
 
 - **התחילו בקטן**: הריצו `python main.py send --dry-run` תחילה כדי לראות למי יישלח.

@@ -194,11 +194,16 @@ def scan_retail(
 
 
 def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
-                campaign: str = "funding", skip_contacted: bool = False) -> dict:
+                campaign: str = "funding", skip_contacted: bool = False,
+                limit: int | None = None, confirm=None) -> dict:
     """
     שולח מייל ללידים חדשים שיש להם כתובת מייל (עד המכסה בהרצה).
     skip_contacted=True מדלג על כל מי שקיבל מייל באיזשהו קמפיין אחר
     (כדי לא לשלוח לאותו עסק שתי פניות שונות).
+    limit — כמה מיילים לשלוח בהרצה הזאת (במקום MAX_EMAILS_PER_RUN).
+    confirm — פונקציית אישור אינטראקטיבית. מקבלת את המייל המוכן ומחזירה
+    "yes" / "no" / "quit". קודם עוברים על כל המיילים לאישור, ורק המאושרים
+    נשלחים בפועל — כדי לא להחזיק חיבור SMTP פתוח בזמן הקריאה.
     """
     # סינון לפי יומן שליחות קבוע: לעולם לא לשלוח שוב למי שכבר קיבל (גם אחרי מחיקת DB)
     sent_before = storage.already_sent_emails()
@@ -214,8 +219,9 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
         small = [l for l in remaining if not looks_established(l["name"], l["email"])]
         remaining = [l for l in remaining if looks_established(l["name"], l["email"])]
     skipped = [l for l in remaining if (l["email"] or "").lower() in sent_before]
+    max_this_run = limit if limit else cfg.max_emails_per_run
     leads = [l for l in remaining
-             if (l["email"] or "").lower() not in sent_before][:cfg.max_emails_per_run]
+             if (l["email"] or "").lower() not in sent_before][:max_this_run]
 
     summary = {"candidates": len(leads), "sent": 0, "failed": 0,
                "skipped_already_sent": len(skipped),
@@ -232,6 +238,27 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
     if not leads:
         logger.info("אין לידים חדשים לשליחה (כולם כבר קיבלו או שאין מיילים).")
         return summary
+
+    # אישור אנושי לפני שליחה: מציגים כל מייל ושואלים
+    if confirm and not dry_run:
+        approved, stopped = [], False
+        for index, lead in enumerate(leads, 1):
+            ctx = build_ctx(cfg, campaign, lead)
+            subject, _html, text = templates.render(campaign, **ctx)
+            answer = confirm(lead, subject, text, index, len(leads), ctx.get("rec"))
+            if answer == "quit":
+                stopped = True
+                break
+            if answer == "yes":
+                approved.append(lead)
+        summary["declined"] = len(leads) - len(approved)
+        if stopped:
+            summary["stopped_by_user"] = True
+        leads = approved
+        summary["candidates"] = len(leads)
+        if not leads:
+            logger.info("לא אושר אף מייל — לא נשלח דבר.")
+            return summary
 
     if dry_run:
         for lead in leads:

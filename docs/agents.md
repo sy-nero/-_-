@@ -119,8 +119,19 @@ python main.py preview --campaign agent            # תצוגת הנוסח (מי
 python main.py preview --campaign agent --whatsapp # אותו נוסח כהודעת וואטסאפ
 python main.py scan   --campaign agent --city bnei-brak
 python main.py send   --campaign agent --dry-run
-python main.py send   --campaign agent
+python main.py send   --campaign agent --limit 5 --confirm
 ```
+
+### שליחה עם אישור לכל מייל
+
+`--confirm` היא הדרך המומלצת לשלוח בקמפיין הזה: כל מייל מוצג במלואו
+בטרמינל — הנמען, הנושא, גוף המייל, ו**קישור לאימות ההמלצה** שצוטטה — ורק
+אחרי `y` הוא נכנס לרשימת השליחה. `n` מדלג (הליד נשאר ב-DB להרצה אחרת),
+`q` עוצר הכול.
+
+תחילה עוברים על כל המיילים לאישור, ורק בסוף נשלחים המאושרים — כדי לא
+להחזיק חיבור SMTP פתוח בזמן הקריאה. אם אין קלט (הרצה לא אינטראקטיבית)
+או Ctrl-C — לא נשלח דבר.
 
 ### מה הסריקה האוטומטית מוצאת — ומה לא
 
