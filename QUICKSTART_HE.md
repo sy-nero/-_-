@@ -14,9 +14,9 @@ python3 --version
 ## שלב 2 — הורדת הקוד
 
 ```bash
-git clone https://github.com/egudgpt-ai/-_-.git egud-bot
+git clone https://github.com/sy-nero/-_-.git egud-bot
 cd egud-bot
-git checkout claude/new-bot-s467j3
+git checkout claude/agent-profile-recruitment-bykccn
 ```
 
 ## שלב 3 — התקנת תלויות
@@ -58,16 +58,19 @@ python main.py export leads.csv  # ייצוא כל הלידים (כולל בלי
 ## קמפיין גיוס סוכנים (agent) — שליחה עם אישור
 
 ```bash
-# 1. סריקה: מוצא משרדי רו"ח ותיקים, מאתר מייל, ומחפש המלצה אמיתית על כל אחד
-python main.py scan --campaign agent --city bnei-brak
-
-# 2. מה נאסף
+python main.py scan   --campaign agent --city bnei-brak
 python main.py stats  --campaign agent
-python main.py export --campaign agent agents.csv   # לבדוק את ההמלצות בעיניים
-
-# 3. שליחה: כל מייל מוצג בטרמינל, ונשלח רק אחרי אישור
-python main.py send --campaign agent --limit 5 --confirm
+python main.py export --campaign agent agents.csv
+python main.py send   --campaign agent --limit 5 --confirm
 ```
+
+1. `scan` — מוצא משרדים ותיקים, מאתר מייל, ומחפש המלצה אמיתית על כל אחד.
+2. `stats` / `export` — מה נאסף, ולבדוק את ההמלצות בעיניים לפני שליחה.
+3. `send --confirm` — כל מייל מוצג בטרמינל ונשלח רק אחרי אישור.
+
+> שימו לב: אל תדביקו לטרמינל שורות הערה שיש בהן מרכאה בודדת (למשל `רו"ח`) —
+> ב-zsh המרכאה פותחת מחרוזת והטרמינל נתקע ב-`dquote>`. הבלוקים כאן נקיים
+> ממרכאות בכוונה, כדי שאפשר יהיה להדביק אותם כמו שהם.
 
 בשלב 3 לכל מייל: `y` לשלוח, `n` לדלג, `q` לעצור הכול. מי שדולג נשאר ב-DB
 וניתן לשלוח אליו בהרצה אחרת. לפני הכול אפשר תמיד `--dry-run` בלי לשלוח דבר.
