@@ -2,6 +2,7 @@
 אחסון לידים ב-SQLite: מניעת כפילויות ומעקב אחר סטטוס שליחה.
 """
 import os
+import json
 import sqlite3
 from datetime import datetime, timezone
 from contextlib import contextmanager
@@ -27,6 +28,8 @@ CREATE TABLE IF NOT EXISTS leads (
     first_name      TEXT,                   -- שם פרטי לפנייה אישית (קמפיין agent)
     intro_how       TEXT,                   -- {{איך_הגעתי_אליו}} (קמפיין agent)
     intro_fact      TEXT,                   -- {{עובדה_קונקרטית_עליו}} (קמפיין agent)
+    intro_why       TEXT,                   -- {{למה_דווקא_הוא}} (קמפיין agent)
+    rec_json        TEXT,                   -- ההמלצה שנמצאה עליו + קישור לאימות
     status          TEXT DEFAULT 'found',   -- found | emailed | no_email | failed | skipped
     error           TEXT,
     found_at        TEXT,
@@ -59,7 +62,8 @@ class Storage:
         with self._conn() as conn:
             conn.executescript(SCHEMA)
             # מיגרציה: הוספת עמודות ל-DB ישן (אם חסרות)
-            for column in ("types", "first_name", "intro_how", "intro_fact"):
+            for column in ("types", "first_name", "intro_how", "intro_fact",
+                           "intro_why", "rec_json"):
                 try:
                     conn.execute(f"ALTER TABLE leads ADD COLUMN {column} TEXT")
                 except sqlite3.OperationalError:
@@ -90,8 +94,8 @@ class Storage:
                 INSERT INTO leads (place_id, name, address, neighborhood, lat, lng,
                     phone, website, email, rating, review_count, business_status,
                     primary_type, types, first_name, intro_how, intro_fact,
-                    status, found_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    intro_why, rec_json, status, found_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(place_id) DO UPDATE SET
                     email=excluded.email,
                     status=excluded.status
@@ -101,7 +105,10 @@ class Storage:
                     lead.lat, lead.lng, lead.phone, lead.website, email,
                     lead.rating, lead.review_count, lead.business_status,
                     lead.primary_type, ",".join(lead.types or []),
-                    lead.first_name, lead.intro_how, lead.intro_fact, status, _now(),
+                    lead.first_name, lead.intro_how, lead.intro_fact,
+                    lead.intro_why,
+                    json.dumps(lead.rec, ensure_ascii=False) if lead.rec else "",
+                    status, _now(),
                 ),
             )
 

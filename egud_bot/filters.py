@@ -217,8 +217,11 @@ class BusinessLead:
     types: list = field(default_factory=list)
     # שדות אישיים לקמפיין הסוכנים (מגיעים מייבוא CSV ידני, לא מ-Google)
     first_name: str = ""
-    intro_how: str = ""      # {{איך_הגעתי_אליו}}
+    intro_how: str = ""      # {{איך_הגעתי_אליו}} — ניסוח ידני שגובר על האוטומטי
     intro_fact: str = ""     # {{עובדה_קונקרטית_עליו}}
+    intro_why: str = ""      # {{למה_דווקא_הוא}}
+    rec: dict = field(default_factory=dict)   # ההמלצה שנמצאה (recommendations.py)
+    reviews: list = field(default_factory=list)  # ביקורות Google (לא נשמר ב-DB)
 
     @classmethod
     def from_place(cls, place: dict, neighborhood: str = "") -> "BusinessLead":
@@ -238,6 +241,7 @@ class BusinessLead:
             primary_type=place.get("primaryType", ""),
             neighborhood=neighborhood,
             types=place.get("types", []) or [],
+            reviews=place.get("reviews", []) or [],
         )
 
 

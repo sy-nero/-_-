@@ -251,7 +251,7 @@ def person_first_name(name: str) -> str:
 
 def agent_fact(fact: str = "", field: str = "", neighborhood: str = "") -> str:
     """
-    העובדה הקונקרטית שנכנסת ל"וראיתי ש...". מעדיפים עובדה שהוזנה ידנית;
+    העובדה הקונקרטית שנכנסת ל"ראיתי ש...". מעדיפים עובדה שהוזנה ידנית;
     אחרת בונים רק ממה שידוע באמת מהסריקה (תחום + שכונה). לא ממציאים כלום.
     """
     if fact:
@@ -265,15 +265,62 @@ def agent_fact(fact: str = "", field: str = "", neighborhood: str = "") -> str:
     return ""
 
 
-def _agent_intro(how: str, fact: str) -> str:
-    """שורת הפתיחה האישית. אם אין שום מידע אמיתי — מחזיר ריק והשורה יורדת."""
-    if how and fact:
-        return f"{how}, וראיתי ש{fact}."
-    if how:
-        return f"{how}."
+def agent_seen_line(rec=None, fact: str = "", field: str = "",
+                    neighborhood: str = "") -> str:
+    """
+    שורת "מה ראיתי עליו" — הלגיטימציה לפנייה. הבסיס הוא המלצה אמיתית
+    שנמצאה (ביקורות גוגל / עמוד המלצות באתר / חיפוש), עם ציטוט כשיש.
+    בלי המלצה אמיתית לא כותבים שראינו המלצה — נופלים לעובדה שידועה בוודאות.
+    """
+    seen = ""
+    if rec:
+        quote = (rec.get("quote") or "").strip()
+        source = rec.get("source") or ""
+        count = int(rec.get("count") or 0)
+        rating = rec.get("rating")
+        where = {"google": "בגוגל", "site": "באתר שלך"}.get(source, "ברשת")
+        if quote and source == "google":
+            seen = f'ראיתי את ההמלצות עליך בגוגל, ואחד הלקוחות כתב שם: "{quote}"'
+        elif quote:
+            seen = f'ראיתי המלצה עליך {where}: "{quote}"'
+        elif count >= 3:
+            grade = f", בדירוג {rating}" if rating else ""
+            seen = f"ראיתי את ההמלצות עליך בגוגל — {count} לקוחות{grade}."
+    fact = agent_fact(fact, field, neighborhood) if not seen else fact
     if fact:
-        return f"ראיתי ש{fact}."
-    return ""
+        return f"{seen} וראיתי גם ש{fact}." if seen else f"ראיתי ש{fact}."
+    return seen
+
+
+# ניסוח רבים של המקצוע (ל"אני מחפשת רואי חשבון ותיקים...")
+AGENT_PROFESSIONALS = {
+    "משרד רואי חשבון": "רואי חשבון",
+    "משרד עורכי דין": "עורכי דין",
+    "סוכנות ביטוח": "סוכני ביטוח",
+    "משרד תיווך": "מתווכים",
+}
+
+
+def agent_why_line(rec=None, field: str = "", neighborhood: str = "") -> str:
+    """
+    "למה דווקא אתה" — הנימוק לפנייה, מבוסס על מה שבאמת עולה מההמלצות:
+    האם הממליצים הם בעלי עסקים, והאם מדובר בליווי שוטף. בלי המלצות נשאר
+    הנימוק האמיתי של הסינון עצמו: ותק + לקוחות שהם בעלי עסקים.
+    """
+    signals = list((rec or {}).get("signals") or [])
+    if "owners" in signals and "ongoing" in signals:
+        return ("פניתי דווקא אליך כי ההמלצות עליך הן מבעלי עסקים, ורואים בהן "
+                "שאתה מלווה אותם לאורך זמן ולא רק מגיש דוח פעם בשנה.")
+    if "owners" in signals:
+        return ("פניתי דווקא אליך כי ההמלצות עליך הן מבעלי עסקים — "
+                "וזה בדיוק הקהל שאני עובדת איתו.")
+    if "ongoing" in signals:
+        return ("פניתי דווקא אליך כי מההמלצות רואים שאתה מלווה את הלקוחות "
+                "לאורך זמן, ולא רק מגיש דוח פעם בשנה.")
+    who = AGENT_PROFESSIONALS.get(field, "בעלי מקצוע")
+    where = f" ב{neighborhood}" if neighborhood else ""
+    return (f"פניתי דווקא אליך כי אני מחפשת {who} ותיקים{where} "
+            f"שהלקוחות שלהם הם בעלי עסקים קטנים.")
 
 
 def _department_of(sender_title: str) -> str:
@@ -288,11 +335,13 @@ def _department_of(sender_title: str) -> str:
 def _agent(business_name="", sender_name="מירי בר לב",
            sender_title="מנהלת מחלקת הטכנולוגיה", company="סינרו",
            department="", sender_phone="", contact_email="",
-           first_name="", intro_how="", intro_fact="",
-           field="", neighborhood="", **_):
+           first_name="", intro_how="", intro_fact="", intro_why="",
+           rec=None, field="", neighborhood="", **_):
     first_name = (first_name or person_first_name(business_name)).strip()
-    intro = _agent_intro(intro_how.strip(),
-                         agent_fact(intro_fact.strip(), field, neighborhood))
+    # מה ראיתי (המלצה אמיתית) + למה דווקא הוא. ניסוח ידני תמיד גובר.
+    seen = intro_how.strip() or agent_seen_line(rec, intro_fact.strip(),
+                                                field, neighborhood)
+    why = intro_why.strip() or agent_why_line(rec, field, neighborhood)
     department = department or _department_of(sender_title)
     sign_role = f"{department}, {company}" if department else company
 
@@ -304,8 +353,10 @@ def _agent(business_name="", sender_name="מירי בר לב",
         greeting,
         f"זאת {sender_name}, {sender_title} ב{company}.",
     ]
-    if intro:
-        lines.append(intro)
+    if seen:
+        lines.append(seen)
+    if why:
+        lines.append(why)
     lines += [
         "יש לי רעיון לשיתוף פעולה קטן, ואשמח לספר לך עליו בקצרה.",
         "אם זה מעניין אותך, תשאיר לי כאן טלפון ואני אתקשר אליך בעצמי.",

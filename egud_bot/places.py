@@ -29,6 +29,10 @@ FIELD_MASK = ",".join([
     "places.primaryType",
 ])
 
+# ביקורות Google — נדרשות רק לקמפיין הסוכנים (בסיס ל"ראיתי המלצה עליך").
+# שדה יקר יותר ב-Places, ולכן מתווסף רק כשמבקשים אותו במפורש.
+REVIEWS_FIELD_MASK = FIELD_MASK + ",places.reviews"
+
 # סוגי עסקים מקומיים קטנים רלוונטיים. מפצלים לפי סוג כדי לעקוף את מגבלת 20 התוצאות.
 LOCAL_BUSINESS_TYPES = [
     "store",
@@ -102,9 +106,11 @@ class PlacesClient:
 
     mode = "new"
 
-    def __init__(self, api_key: str, request_delay: float = 1.0):
+    def __init__(self, api_key: str, request_delay: float = 1.0,
+                 include_reviews: bool = False):
         self.api_key = api_key
         self.request_delay = request_delay
+        self.include_reviews = include_reviews
         self.session = requests.Session()
 
     def enrich_contact(self, lead) -> None:
@@ -115,7 +121,8 @@ class PlacesClient:
         return {
             "Content-Type": "application/json",
             "X-Goog-Api-Key": self.api_key,
-            "X-Goog-FieldMask": FIELD_MASK,
+            "X-Goog-FieldMask": (REVIEWS_FIELD_MASK if self.include_reviews
+                                 else FIELD_MASK),
         }
 
     def search_nearby(
@@ -201,10 +208,12 @@ class LegacyPlacesClient:
 
     mode = "legacy"
 
-    def __init__(self, api_key: str, request_delay: float = 1.0, max_pages_per_type: int = 1):
+    def __init__(self, api_key: str, request_delay: float = 1.0,
+                 max_pages_per_type: int = 1, include_reviews: bool = False):
         self.api_key = api_key
         self.request_delay = request_delay
         self.max_pages_per_type = max_pages_per_type
+        self.include_reviews = include_reviews
         self.session = requests.Session()
 
     def search_nearby_type(
@@ -256,9 +265,12 @@ class LegacyPlacesClient:
         """ממלא אתר וטלפון לליד דרך Place Details (רק ללידים שעברו סינון)."""
         if not lead.place_id:
             return
+        fields = "website,formatted_phone_number"
+        if self.include_reviews:
+            fields += ",reviews,rating,user_ratings_total"
         params = {
             "place_id": lead.place_id,
-            "fields": "website,formatted_phone_number",
+            "fields": fields,
             "language": "he",
             "key": self.api_key,
         }
@@ -272,6 +284,8 @@ class LegacyPlacesClient:
             lead.website = result["website"]
         if result.get("formatted_phone_number") and not lead.phone:
             lead.phone = result["formatted_phone_number"]
+        if result.get("reviews"):
+            lead.reviews = result["reviews"]
 
 
 def _new_api_available(api_key: str) -> bool:
@@ -301,7 +315,7 @@ def _new_api_available(api_key: str) -> bool:
     return resp.status_code == 200
 
 
-def make_client(cfg):
+def make_client(cfg, include_reviews: bool = False):
     """
     בוחר לקוח לפי PLACES_API_MODE:
       - 'new'    → API חדש בלבד
@@ -310,16 +324,20 @@ def make_client(cfg):
     """
     mode = getattr(cfg, "places_api_mode", "auto").lower()
     if mode == "new":
-        return PlacesClient(cfg.google_api_key, cfg.request_delay_seconds)
+        return PlacesClient(cfg.google_api_key, cfg.request_delay_seconds,
+                            include_reviews)
     if mode == "legacy":
         return LegacyPlacesClient(
-            cfg.google_api_key, cfg.request_delay_seconds, cfg.max_pages_per_type
+            cfg.google_api_key, cfg.request_delay_seconds,
+            cfg.max_pages_per_type, include_reviews
         )
     # auto
     if _new_api_available(cfg.google_api_key):
         logger.info("Places API (New) זמין — משתמש ב-API החדש")
-        return PlacesClient(cfg.google_api_key, cfg.request_delay_seconds)
+        return PlacesClient(cfg.google_api_key, cfg.request_delay_seconds,
+                            include_reviews)
     logger.info("Places API (New) חסום — נופל ל-API הישן (legacy)")
     return LegacyPlacesClient(
-        cfg.google_api_key, cfg.request_delay_seconds, cfg.max_pages_per_type
+        cfg.google_api_key, cfg.request_delay_seconds, cfg.max_pages_per_type,
+        include_reviews
     )

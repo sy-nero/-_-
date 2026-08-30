@@ -1,6 +1,7 @@
 """
 תזמור התהליך המלא: סריקה -> סינון -> איתור מייל -> שמירה -> שליחה.
 """
+import json
 import time
 import logging
 
@@ -14,6 +15,7 @@ from egud_bot.filters import (BusinessLead, passes_filters,
                               passes_filters_agent,
                               is_blocked_email, looks_established)
 from egud_bot.email_finder import find_email
+from egud_bot import recommendations
 from egud_bot.storage import Storage
 from egud_bot.mailer import Mailer
 from egud_bot import templates
@@ -27,6 +29,17 @@ def _col(row, name: str) -> str:
         return (row[name] or "").strip()
     except (IndexError, KeyError):
         return ""
+
+
+def _rec(row) -> dict:
+    """ההמלצה שנמצאה על הליד (JSON ב-DB) — ריק אם לא נמצאה."""
+    raw = _col(row, "rec_json")
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw)
+    except ValueError:
+        return {}
 
 
 def build_ctx(cfg: Config, campaign: str, lead) -> dict:
@@ -45,6 +58,8 @@ def build_ctx(cfg: Config, campaign: str, lead) -> dict:
         first_name=_col(lead, "first_name"),
         intro_how=_col(lead, "intro_how"),
         intro_fact=_col(lead, "intro_fact"),
+        intro_why=_col(lead, "intro_why"),
+        rec=_rec(lead),
     )
     if campaign == "agent":
         # מייל הסוכנים חתום אישית בשם מירי מסינרו, ולא בשם האיגוד
@@ -92,7 +107,8 @@ def scan_retail(
     """
     neighborhoods = neighborhoods or HAREDI_NEIGHBORHOODS
     target = cfg.target_emails if target_emails is None else target_emails
-    client = make_client(cfg)
+    # לקמפיין הסוכנים מושכים גם ביקורות — הן הבסיס ל"ראיתי המלצה עליך"
+    client = make_client(cfg, include_reviews=(campaign == "agent"))
 
     # בחירת סוגי חיפוש ומסנן לפי הקמפיין
     if campaign == "crm":
@@ -113,6 +129,8 @@ def scan_retail(
         passes = passes_filters
 
     summary = {"scanned": 0, "passed": 0, "new": 0, "with_email": 0, "no_email": 0}
+    if campaign == "agent":
+        summary["with_rec"] = 0      # כמה מהם נמצאה עליהם המלצה אמיתית
 
     for nb in neighborhoods:
         logger.info("סורק שכונה: %s (מיילים שנאספו: %d/%d)",
@@ -134,6 +152,14 @@ def scan_retail(
 
             # העשרת אתר/טלפון (רלוונטי ל-legacy — קריאת Details רק ללידים שעברו סינון)
             client.enrich_contact(lead)
+
+            # קמפיין סוכנים: מחפשים המלצה אמיתית עליו (גוגל / אתר / חיפוש)
+            if campaign == "agent":
+                rec = recommendations.collect(lead, cfg, cfg.request_delay_seconds)
+                lead.rec = rec.as_dict() if rec else {}
+                if rec:
+                    summary["with_rec"] += 1
+                    logger.info("  ★ נמצאה המלצה (%s) על %s", rec.source, lead.name)
 
             email = find_email(lead.website, cfg.request_delay_seconds) if lead.website else None
             if email and is_blocked_email(email):  # רשת גדולה / ארגון / דומיין טכני

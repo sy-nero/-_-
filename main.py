@@ -102,6 +102,22 @@ def cmd_jobdebug(args) -> int:
     return 0
 
 
+def _preview_rec(args) -> str:
+    """בונה המלצה לדוגמה לתצוגה, כולל זיהוי הסימנים כמו בסריקה אמיתית."""
+    if not (args.rec_quote or args.rec_count):
+        return ""
+    import json
+    from egud_bot import recommendations
+    rec = recommendations.Recommendation(
+        source=args.rec_source,
+        quote=args.rec_quote,
+        count=args.rec_count,
+        rating=args.rec_rating,
+        signals=recommendations.detect_signals([args.rec_quote], args.rec_count),
+    )
+    return json.dumps(rec.as_dict(), ensure_ascii=False)
+
+
 def cmd_preview(args) -> int:
     """מדפיס את נוסח המייל של הקמפיין (בלי DB ובלי שליחה) — לבדיקת הנוסח."""
     from egud_bot import templates
@@ -114,6 +130,8 @@ def cmd_preview(args) -> int:
         "first_name": args.first_name,
         "intro_how": args.how,
         "intro_fact": args.fact,
+        "intro_why": args.why,
+        "rec_json": _preview_rec(args),
     }
     subject, html, text = templates.render(
         campaign, **pipeline.build_ctx(config, campaign, lead))
@@ -202,6 +220,17 @@ def build_parser() -> argparse.ArgumentParser:
                     help="קמפיין סוכנים: {{איך_הגעתי_אליו}}")
     pv.add_argument("--fact", default="",
                     help="קמפיין סוכנים: {{עובדה_קונקרטית_עליו}}")
+    pv.add_argument("--why", default="",
+                    help="קמפיין סוכנים: {{למה_דווקא_הוא}} (אחרת נגזר מההמלצות)")
+    pv.add_argument("--rec-quote", dest="rec_quote", default="",
+                    help="ציטוט המלצה לדוגמה (בסריקה אמיתית נשלף מגוגל/מהאתר)")
+    pv.add_argument("--rec-count", dest="rec_count", type=int, default=0,
+                    help="מספר ההמלצות בגוגל (לדוגמה)")
+    pv.add_argument("--rec-rating", dest="rec_rating", type=float, default=None,
+                    help="דירוג בגוגל (לדוגמה)")
+    pv.add_argument("--rec-source", dest="rec_source", default="google",
+                    choices=["google", "site", "web"],
+                    help="מקור ההמלצה לדוגמה")
     pv.add_argument("--whatsapp", action="store_true",
                     help="נוסח לוואטסאפ (בלי שורת נושא)")
     pv.add_argument("--html", action="store_true", help="הדפסת ה-HTML של המייל")

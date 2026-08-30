@@ -323,6 +323,7 @@ def import_csv(storage: Storage, path: str, email_col: str = "email",
                 first_name=(row.get("first_name") or "").strip(),
                 intro_how=(row.get("how") or "").strip(),
                 intro_fact=(row.get("fact") or "").strip(),
+                intro_why=(row.get("why") or "").strip(),
             )
             storage.upsert_lead(lead, email, status="found")
             added += 1
