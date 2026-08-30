@@ -47,6 +47,7 @@ python main.py run               # scan ואז send ברצף
 python main.py stats             # סטטוס הלידים ב-DB
 python main.py export leads.csv  # ייצוא כל הלידים (כולל no_email) ל-CSV
 python main.py preview --campaign agent   # תצוגת נוסח המייל של קמפיין
+python main.py check --campaign agent     # מה מוגדר ומה חסר ב-.env
 ```
 
 ### דף הנחיתה

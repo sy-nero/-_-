@@ -58,12 +58,14 @@ python main.py export leads.csv  # ייצוא כל הלידים (כולל בלי
 ## קמפיין גיוס סוכנים (agent) — שליחה עם אישור
 
 ```bash
+python main.py check  --campaign agent
 python main.py scan   --campaign agent --city bnei-brak
 python main.py stats  --campaign agent
 python main.py export --campaign agent agents.csv
 python main.py send   --campaign agent --limit 5 --confirm
 ```
 
+0. `check` — מראה מה מוגדר ומה חסר ב-.env (בלי להדפיס סיסמאות).
 1. `scan` — מוצא משרדים ותיקים, מאתר מייל, ומחפש המלצה אמיתית על כל אחד.
 2. `stats` / `export` — מה נאסף, ולבדוק את ההמלצות בעיניים לפני שליחה.
 3. `send --confirm` — כל מייל מוצג בטרמינל ונשלח רק אחרי אישור.

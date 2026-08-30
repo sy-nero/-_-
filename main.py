@@ -178,6 +178,39 @@ def cmd_preview(args) -> int:
     return 0
 
 
+def cmd_check(args) -> int:
+    """בודק מה מוגדר ומה חסר כדי להריץ — בלי להדפיס סיסמאות או מפתחות."""
+    import os
+    campaign = _campaign(args)
+    from_email, from_name, smtp_user, smtp_password = config.sender_for(campaign)
+
+    print(f"\n=== בדיקת הגדרות (קמפיין {campaign}) ===")
+    print(f"  קובץ .env: {'נמצא' if os.path.exists('.env') else 'לא קיים'}")
+
+    checks = [
+        ("מפתח Google Places (לסריקה)", bool(config.google_api_key)),
+        ("שרת SMTP (לשליחה)", bool(config.smtp_host)),
+        ("משתמש SMTP", bool(smtp_user)),
+        ("סיסמת SMTP", bool(smtp_password)),
+        ("כתובת השולח", bool(from_email)),
+    ]
+    for label, ok in checks:
+        print(f"  [{'✓' if ok else '✗'}] {label}")
+    print(f"\n  המייל ייצא בשם: {from_name} <{from_email or 'לא מוגדר'}>")
+    if campaign == "agent":
+        print(f"  טלפון בחתימה: {config.agent_sender_phone}")
+        print(f"  ותק מינימלי לסוכן: {config.agent_min_reviews} ביקורות")
+
+    scan_errors = config.validate_for_scan()
+    send_errors = config.validate_for_email(campaign)
+    print("\n  סריקה: " + ("מוכנה" if not scan_errors else "חסר — " + ", ".join(scan_errors)))
+    print("  שליחה: " + ("מוכנה" if not send_errors else "חסר — " + ", ".join(send_errors)))
+    if scan_errors or send_errors:
+        print("\n  את הערכים החסרים מוסיפים לקובץ .env בתיקיית הפרויקט.")
+        print("  רשימת כל המשתנים נמצאת ב-.env.example")
+    return 0
+
+
 def cmd_stats(args) -> int:
     storage = _storage(args)
     stats = storage.stats()
@@ -276,6 +309,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     _add_campaign(sub.add_parser("clean", help="הסרת מה שאינו חנות קמעונאית")).set_defaults(func=cmd_clean)
     _add_campaign(sub.add_parser("stats", help="הצגת סטטיסטיקות")).set_defaults(func=cmd_stats)
+    _add_campaign(sub.add_parser("check", help="בדיקת מה מוגדר ומה חסר להרצה")).set_defaults(func=cmd_check)
 
     jd = sub.add_parser("jobdebug", help="אבחון מבנה דף הדרושים (לכוונון הסורק)")
     jd.add_argument("--url", default="https://www.drushim.co.il/jobs/cat32/",
