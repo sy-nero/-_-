@@ -195,15 +195,16 @@ def scan_retail(
 
 def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
                 campaign: str = "funding", skip_contacted: bool = False,
-                limit: int | None = None, confirm=None) -> dict:
+                limit: int | None = None, confirm=None, confirm_batch=None) -> dict:
     """
     שולח מייל ללידים חדשים שיש להם כתובת מייל (עד המכסה בהרצה).
     skip_contacted=True מדלג על כל מי שקיבל מייל באיזשהו קמפיין אחר
     (כדי לא לשלוח לאותו עסק שתי פניות שונות).
     limit — כמה מיילים לשלוח בהרצה הזאת (במקום MAX_EMAILS_PER_RUN).
     confirm — פונקציית אישור אינטראקטיבית. מקבלת את המייל המוכן ומחזירה
-    "yes" / "no" / "quit". קודם עוברים על כל המיילים לאישור, ורק המאושרים
-    נשלחים בפועל — כדי לא להחזיק חיבור SMTP פתוח בזמן הקריאה.
+    "yes" / "no" / "quit". "quit" מבטל את ההרצה כולה ולא נשלח דבר, גם לא
+    מיילים שאושרו קודם. אחרי סבב האישורים מוצגת רשימת הנמענים לאישור אחרון
+    (confirm_batch), ורק אז נפתח חיבור ה-SMTP ונשלח.
     """
     # סינון לפי יומן שליחות קבוע: לעולם לא לשלוח שוב למי שכבר קיבל (גם אחרי מחיקת DB)
     sent_before = storage.already_sent_emails()
@@ -241,23 +242,29 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
 
     # אישור אנושי לפני שליחה: מציגים כל מייל ושואלים
     if confirm and not dry_run:
-        approved, stopped = [], False
+        approved = []
         for index, lead in enumerate(leads, 1):
             ctx = build_ctx(cfg, campaign, lead)
             subject, _html, text = templates.render(campaign, **ctx)
             answer = confirm(lead, subject, text, index, len(leads), ctx.get("rec"))
             if answer == "quit":
-                stopped = True
-                break
+                # ביטול מלא: גם מה שאושר קודם לא נשלח
+                summary.update(candidates=0, declined=len(leads), cancelled=True)
+                logger.info("ההרצה בוטלה — לא נשלח אף מייל.")
+                return summary
             if answer == "yes":
                 approved.append(lead)
         summary["declined"] = len(leads) - len(approved)
-        if stopped:
-            summary["stopped_by_user"] = True
         leads = approved
         summary["candidates"] = len(leads)
         if not leads:
             logger.info("לא אושר אף מייל — לא נשלח דבר.")
+            return summary
+        # אישור אחרון על הרשימה כולה, רגע לפני שנפתח חיבור SMTP
+        if confirm_batch and not confirm_batch(leads):
+            summary.update(candidates=0, declined=summary["declined"] + len(leads),
+                           cancelled=True)
+            logger.info("השליחה בוטלה בשלב האישור הסופי — לא נשלח אף מייל.")
             return summary
 
     if dry_run:

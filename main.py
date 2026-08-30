@@ -71,20 +71,40 @@ def _ask_before_send(lead, subject, text, index, total, rec=None) -> str:
     print("-" * 72)
     while True:
         try:
-            answer = input("לשלוח את המייל הזה? [y=כן / n=דלג / q=עצור הכול]: ").strip().lower()
+            answer = input(
+            "לשלוח את המייל הזה? [y=כן / n=דלג / q=ביטול מלא, בלי לשלוח כלום]: "
+        ).strip().lower()
         except (EOFError, KeyboardInterrupt):
             # אין קלט (הרצה לא אינטראקטיבית) או Ctrl-C — עוצרים ולא שולחים
-            print("\n  → הופסק. לא נשלח שום מייל שלא אושר.")
+            print("\n  → הופסק. לא נשלח אף מייל.")
             return "quit"
         if answer in ("y", "yes", "כן", "כ"):
             return "yes"
         if answer in ("n", "no", "לא", "ל"):
             print("  → מדלג. הליד נשאר ב-DB וניתן לשלוח אליו בהרצה אחרת.")
             return "no"
-        if answer in ("q", "quit", "עצור", "ע"):
-            print("  → עוצר. לא יישלח שום מייל שלא אושר.")
+        if answer in ("q", "quit", "עצור", "ע", "ביטול", "ב"):
+            print("  → מבטל את ההרצה כולה. לא יישלח אף מייל, גם לא כאלה שאושרו קודם.")
             return "quit"
         print("  תשובה לא ברורה. הקלד y / n / q.")
+
+
+def _confirm_batch(leads) -> bool:
+    """אישור אחרון על הרשימה כולה, רגע לפני שנפתח חיבור SMTP ונשלח."""
+    print("\n" + "=" * 72)
+    print(f"אישרת {len(leads)} מיילים. אלה הנמענים:")
+    for lead in leads:
+        print(f"  • {lead['name']} <{lead['email']}>")
+    print("=" * 72)
+    try:
+        answer = input("לשלוח אותם עכשיו? [y=שלח / כל תשובה אחרת מבטלת]: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print("\n  → בוטל. לא נשלח דבר.")
+        return False
+    if answer in ("y", "yes", "כן", "כ"):
+        return True
+    print("  → בוטל. לא נשלח דבר.")
+    return False
 
 
 def cmd_send(args) -> int:
@@ -101,7 +121,8 @@ def cmd_send(args) -> int:
                                    campaign=_campaign(args),
                                    skip_contacted=getattr(args, "skip_contacted", False),
                                    limit=getattr(args, "limit", None),
-                                   confirm=confirm)
+                                   confirm=confirm,
+                                   confirm_batch=_confirm_batch if confirm else None)
     print("\n=== סיכום שליחה ===")
     for k, v in summary.items():
         print(f"  {k}: {v}")
