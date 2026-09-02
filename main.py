@@ -191,8 +191,11 @@ def cmd_preview(args) -> int:
         "intro_why": args.why,
         "rec_json": _preview_rec(args),
     }
+    # בקמפיין הסוכנים אפשר לראות כל אחד משני הנוסחים
+    template_campaign = (f"{campaign}_offer"
+                         if getattr(args, "variant", None) == "b" else campaign)
     subject, html, text = templates.render(
-        campaign, **pipeline.build_ctx(config, campaign, lead))
+        template_campaign, **pipeline.build_ctx(config, campaign, lead))
     if args.html:
         print(html)
         return 0
@@ -408,6 +411,8 @@ def build_parser() -> argparse.ArgumentParser:
     pv.add_argument("--rec-source", dest="rec_source", default="google",
                     choices=["google", "site", "web"],
                     help="מקור ההמלצה לדוגמה")
+    pv.add_argument("--variant", choices=["a", "b"], default="a",
+                    help="איזה נוסח להציג: a=פנייה ראשונה, b=ההצעה ישירות")
     pv.add_argument("--whatsapp", action="store_true",
                     help="נוסח לוואטסאפ (בלי שורת נושא)")
     pv.add_argument("--html", action="store_true", help="הדפסת ה-HTML של המייל")
