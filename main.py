@@ -266,6 +266,48 @@ def cmd_check(args) -> int:
 VARIANT_NAMES = {"a": "נוסח א׳ (פנייה ראשונה)", "b": "נוסח ב׳ (ההצעה ישירות)"}
 
 
+def cmd_test(args) -> int:
+    """שולח מייל בדיקה אחד לכתובת שלך — לראות איך הוא באמת מגיע."""
+    campaign = _campaign(args)
+    errors = config.validate_for_email(campaign)
+    if errors:
+        print("שגיאות קונפיגורציה:\n  - " + "\n  - ".join(errors))
+        return 1
+
+    from egud_bot import templates
+    from egud_bot.mailer import Mailer
+    from_email, from_name, smtp_user, smtp_password = config.sender_for(campaign)
+    lead = {
+        "name": args.name, "place_id": "test", "primary_type": args.type,
+        "neighborhood": args.neighborhood, "first_name": args.first_name,
+        "intro_how": "", "intro_fact": "", "intro_why": "",
+        "rec_json": _preview_rec(args),
+    }
+    template_campaign = (f"{campaign}_offer"
+                         if getattr(args, "variant", None) == "b" else campaign)
+    subject, html, text = templates.render(
+        template_campaign, **pipeline.build_ctx(config, campaign, lead))
+
+    print(f"\nשולח מייל בדיקה אחד:")
+    print(f"  אל:              {args.to}")
+    print(f"  שדה השולח (From): {from_name} <{from_email}>")
+    print(f"  מתחבר כ:          {smtp_user}")
+    print(f"  שרת:              {config.smtp_host}:{config.smtp_port}\n")
+    try:
+        with Mailer(host=config.smtp_host, port=config.smtp_port, user=smtp_user,
+                    password=smtp_password, from_email=from_email,
+                    from_name=from_name, reply_to=from_email,
+                    use_ssl=config.smtp_use_ssl, logo_path="") as mailer:
+            mailer.send(args.to, subject, html, text)
+    except Exception as exc:  # noqa: BLE001
+        print(f"השליחה נכשלה: {exc}")
+        return 1
+    print("נשלח. בדקי בתיבה שלך מאיזו כתובת הוא הגיע בפועל —")
+    print("אם היא שונה מ'שדה השולח' למעלה, Gmail שכתב אותה כי הכתובת")
+    print("אינה מאומתת אצלו כ'שלח מייל בשם' (Send mail as).")
+    return 0
+
+
 def cmd_report(args) -> int:
     """משפך הקמפיין והשוואה בין שני הנוסחים."""
     storage = _storage(args)
@@ -427,6 +469,19 @@ def build_parser() -> argparse.ArgumentParser:
     _add_campaign(sub.add_parser("stats", help="הצגת סטטיסטיקות")).set_defaults(func=cmd_stats)
     _add_campaign(sub.add_parser("check", help="בדיקת מה מוגדר ומה חסר להרצה")).set_defaults(func=cmd_check)
     _add_campaign(sub.add_parser("report", help="משפך הקמפיין: נשלח, המשך, תשובות")).set_defaults(func=cmd_report)
+
+    ts = _add_campaign(sub.add_parser("test", help="שליחת מייל בדיקה אחד לכתובת שלך"))
+    ts.add_argument("--to", required=True, help="הכתובת שאליה יישלח מייל הבדיקה")
+    ts.add_argument("--variant", choices=["a", "b"], default="a", help="איזה נוסח")
+    ts.add_argument("--name", default='רו"ח משה כהן', help="שם לדוגמה")
+    ts.add_argument("--first-name", dest="first_name", default="", help="שם פרטי")
+    ts.add_argument("--neighborhood", default="פרדס כץ", help="שכונה לדוגמה")
+    ts.add_argument("--type", default="accounting", help="סוג העסק בגוגל")
+    ts.add_argument("--rec-count", dest="rec_count", type=int, default=12)
+    ts.add_argument("--rec-rating", dest="rec_rating", type=float, default=4.8)
+    ts.add_argument("--rec-source", dest="rec_source", default="google")
+    ts.add_argument("--rec-quote", dest="rec_quote", default="")
+    ts.set_defaults(func=cmd_test)
 
     rep = _add_campaign(sub.add_parser("replied", help="רישום סוכן שהשיב"))
     rep.add_argument("email", help="כתובת המייל של מי שהשיב")
