@@ -224,6 +224,11 @@ def cmd_check(args) -> int:
     for label, ok in checks:
         print(f"  [{'✓' if ok else '✗'}] {label}")
     print(f"\n  המייל ייצא בשם: {from_name} <{from_email or 'לא מוגדר'}>")
+    print(f"  החשבון שמתחבר ושולח בפועל (SMTP): {smtp_user or 'לא מוגדר'}")
+    print(f"  שרת: {config.smtp_host or 'לא מוגדר'}:{config.smtp_port}")
+    if smtp_user and from_email and smtp_user.lower() != from_email.lower():
+        print("  שימו לב: הכתובת שממנה נשלח שונה מהחשבון שמתחבר — עותק המייל "
+              "יישמר בתיבת ה'נשלחו' של החשבון שמתחבר.")
     if campaign == "agent":
         print(f"  טלפון בחתימה: {config.agent_sender_phone}")
         print(f"  ותק מינימלי לסוכן: {config.agent_min_reviews} ביקורות")
