@@ -372,21 +372,28 @@ AGENT_TYPES = {"accounting"}
 
 # ותק ויציבות עסקית: ל-Places אין שנת ייסוד, ולכן הפרוקסי לוותק הוא מספר
 # ביקורות מינימלי (הפוך משאר הקמפיינים, שמחפשים דווקא עסק חדש).
-AGENT_MIN_REVIEWS = 3
+AGENT_MIN_REVIEWS = 2
+# "ביקורות חיוביות" — דירוג ממוצע מינימלי
+AGENT_MIN_RATING = 4.0
 
 
 def passes_filters_agent(
     lead: BusinessLead,
     min_review_count: int = AGENT_MIN_REVIEWS,
     require_operational: bool = True,
+    min_rating: float = AGENT_MIN_RATING,
 ) -> bool:
     """
-    קריטריונים לסוכן ממליץ: משרד פעיל מהקטגוריות המתאימות, עם ותק
-    (מספר ביקורות מעל הסף), שאינו מוסד ציבורי, רשת גדולה או מהמגזר הערבי.
+    קריטריונים לסוכן ממליץ: משרד פעיל מהקטגוריות המתאימות, עם לפחות
+    min_review_count ביקורות **חיוביות** (דירוג מעל min_rating), שאינו מוסד
+    ציבורי, רשת גדולה או מהמגזר הערבי.
     """
     if require_operational and lead.business_status not in ("", "OPERATIONAL"):
         return False
-    if lead.review_count < min_review_count:      # משרד חדש מדי — אין לו עדיין ותק
+    if lead.review_count < min_review_count:      # אין מספיק ביקורות
+        return False
+    # "ביקורות חיוביות": בלי זה היינו כותבים על ביקורות חיוביות למי שאין לו
+    if lead.rating is not None and lead.rating < min_rating:
         return False
     ts = {(t or "").lower() for t in (lead.types or [])}
     ts.add((lead.primary_type or "").lower())

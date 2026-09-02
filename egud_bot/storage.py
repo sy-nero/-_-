@@ -4,7 +4,7 @@
 import os
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from contextlib import contextmanager
 
 from egud_bot.filters import BusinessLead
@@ -33,7 +33,10 @@ CREATE TABLE IF NOT EXISTS leads (
     status          TEXT DEFAULT 'found',   -- found | emailed | no_email | failed | skipped
     error           TEXT,
     found_at        TEXT,
-    emailed_at      TEXT
+    emailed_at      TEXT,
+    followup_at     TEXT,                   -- מתי נשלחה הודעת ההמשך
+    replied_at      TEXT,                   -- מתי הוא השיב (נרשם ידנית)
+    reply_note      TEXT                    -- טלפון שהשאיר / הערה
 );
 
 CREATE TABLE IF NOT EXISTS registrations (
@@ -63,7 +66,8 @@ class Storage:
             conn.executescript(SCHEMA)
             # מיגרציה: הוספת עמודות ל-DB ישן (אם חסרות)
             for column in ("types", "first_name", "intro_how", "intro_fact",
-                           "intro_why", "rec_json"):
+                           "intro_why", "rec_json", "followup_at", "replied_at",
+                           "reply_note"):
                 try:
                     conn.execute(f"ALTER TABLE leads ADD COLUMN {column} TEXT")
                 except sqlite3.OperationalError:
@@ -144,6 +148,76 @@ class Storage:
                    ORDER BY found_at ASC LIMIT ?""",
                 (limit,),
             ).fetchall()
+
+    def leads_emailed(self, limit: int, after_days: int = 0) -> list[sqlite3.Row]:
+        """
+        לידים שכבר קיבלו את ההודעה הראשונה ועדיין לא את ההמשך — קהל היעד
+        של הודעת ההמשך. after_days מוודא שעבר מספיק זמן מההודעה הראשונה.
+        """
+        cutoff = ""
+        if after_days:
+            cutoff = (datetime.now(timezone.utc)
+                      - timedelta(days=after_days)).isoformat()
+        with self._conn() as conn:
+            return conn.execute(
+                """SELECT * FROM leads
+                   WHERE status = 'emailed'
+                     AND email IS NOT NULL AND email != ''
+                     AND (followup_at IS NULL OR followup_at = '')
+                     AND (? = '' OR emailed_at <= ?)
+                   GROUP BY lower(email)
+                   ORDER BY emailed_at ASC LIMIT ?""",
+                (cutoff, cutoff, limit),
+            ).fetchall()
+
+    def mark_followup(self, place_id: str) -> None:
+        """מסמן שהודעת ההמשך נשלחה (לכל הלידים עם אותה כתובת)."""
+        with self._conn() as conn:
+            row = conn.execute("SELECT email FROM leads WHERE place_id=?",
+                               (place_id,)).fetchone()
+            email = row["email"] if row else None
+            if email:
+                conn.execute("UPDATE leads SET followup_at=? WHERE lower(email)=lower(?)",
+                             (_now(), email))
+            else:
+                conn.execute("UPDATE leads SET followup_at=? WHERE place_id=?",
+                             (_now(), place_id))
+
+    def mark_replied(self, email: str, note: str = "") -> int:
+        """רושם שהסוכן השיב (וטלפון/הערה אם יש). מחזיר כמה שורות עודכנו."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "UPDATE leads SET replied_at=?, reply_note=? WHERE lower(email)=lower(?)",
+                (_now(), note, (email or "").strip()))
+            return cur.rowcount
+
+    def funnel(self) -> dict:
+        """מספרי המשפך למדידת הקמפיין."""
+        with self._conn() as conn:
+            one = lambda q: conn.execute(q).fetchone()[0]  # noqa: E731
+            return {
+                "לידים ב-DB": one("SELECT COUNT(*) FROM leads"),
+                "עם כתובת מייל": one(
+                    "SELECT COUNT(*) FROM leads WHERE email IS NOT NULL AND email != ''"),
+                "נמצאה עליהם המלצה": one(
+                    "SELECT COUNT(*) FROM leads WHERE rec_json IS NOT NULL AND rec_json != ''"),
+                "נשלחה הודעה 1": one(
+                    "SELECT COUNT(DISTINCT lower(email)) FROM leads WHERE status='emailed'"),
+                "נשלחה הודעה 2": one(
+                    "SELECT COUNT(DISTINCT lower(email)) FROM leads "
+                    "WHERE followup_at IS NOT NULL AND followup_at != ''"),
+                "השיבו": one(
+                    "SELECT COUNT(DISTINCT lower(email)) FROM leads "
+                    "WHERE replied_at IS NOT NULL AND replied_at != ''"),
+            }
+
+    def replies(self) -> list[sqlite3.Row]:
+        """מי השיב, מתי, ומה נרשם (טלפון/הערה)."""
+        with self._conn() as conn:
+            return conn.execute(
+                """SELECT name, email, phone, reply_note, replied_at FROM leads
+                   WHERE replied_at IS NOT NULL AND replied_at != ''
+                   GROUP BY lower(email) ORDER BY replied_at DESC""").fetchall()
 
     def purge_non_business(self) -> list[str]:
         """מסיר מה-DB כל מה שאינו חנות קמעונאית (מוסד/שירות/חברה/ערבי), בלי סריקה מחדש."""

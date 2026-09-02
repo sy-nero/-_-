@@ -13,6 +13,7 @@ import re
 from urllib.parse import quote
 
 from egud_bot import recommendations
+from data.neighborhoods import city_of
 
 # מיפוי סוג העסק (Google type) לשם עברי (לקמפיין המימון)
 FIELD_NOUNS = {
@@ -305,6 +306,14 @@ def agent_seen_line(rec=None, fact: str = "", field: str = "",
     return seen
 
 
+# ניסוח יחיד של המקצוע ("חיפשתי רואה חשבון באזור ירושלים")
+AGENT_PROFESSIONS = {
+    "משרד רואי חשבון": "רואה חשבון",
+    "משרד עורכי דין": "עורך דין",
+    "סוכנות ביטוח": "סוכן ביטוח",
+    "משרד תיווך": "מתווך",
+}
+
 # ניסוח רבים של המקצוע (ל"אני מחפשת רואי חשבון ותיקים...")
 AGENT_PROFESSIONALS = {
     "משרד רואי חשבון": "רואי חשבון",
@@ -348,47 +357,30 @@ def _department_of(sender_title: str) -> str:
     return t
 
 
-def _agent(business_name="", sender_name="מירי בר לב",
-           sender_title="מנהלת מחלקת הטכנולוגיה", company="סינרו",
-           department="", sender_phone="", contact_email="",
-           first_name="", intro_how="", intro_fact="", intro_why="",
-           rec=None, field="", neighborhood="", **_):
-    first_name = (first_name or person_first_name(business_name)).strip()
-    # מה ראיתי (המלצה אמיתית) + למה דווקא הוא. ניסוח ידני תמיד גובר.
-    seen = intro_how.strip() or agent_seen_line(rec, intro_fact.strip(),
-                                                field, neighborhood)
-    why = intro_why.strip() or agent_why_line(rec, field, neighborhood)
-    department = department or _department_of(sender_title)
-    sign_role = f"{department}, {company}" if department else company
+def reviews_line(rec=None) -> str:
+    """
+    מה שראינו עליו — לפי מספר הביקורות בפועל. "הרבה ביקורות" נאמר רק כשיש
+    באמת הרבה; בשתיים-שלוש זה היה נשמע מנופח ולא אמין.
+    """
+    count = int((rec or {}).get("count") or 0)
+    if count >= 8:
+        return "ראיתי הרבה ביקורות חיוביות מלקוחות שלך"
+    if count >= 2:
+        return "ראיתי ביקורות חיוביות מלקוחות שלך"
+    return ""
 
-    subject = (f"{first_name}, רציתי לכתוב לך אישית" if first_name
-               else "רציתי לכתוב לך אישית")
-    greeting = f"שלום {first_name}," if first_name else "שלום,"
 
-    lines = [
-        greeting,
-        f"זאת {sender_name}, {sender_title} ב{company}.",
-    ]
-    if seen:
-        lines.append(seen)
-    if why:
-        lines.append(why)
-    lines += [
-        "יש לי רעיון לשיתוף פעולה קטן, ואשמח לספר לך עליו בקצרה.",
-        "אם זה מעניין אותך, תשאיר לי כאן טלפון ואני אתקשר אליך בעצמי.",
-    ]
-    sign = [sender_name, sign_role]
-    if sender_phone:
-        sign.append(sender_phone)
+def _agent_signature(sender_name, contact_email):
+    sign = [sender_name]
     if contact_email:
         sign.append(contact_email)
+    return sign
 
-    text = "\n\n".join(lines) + "\n\nיום טוב,\n" + "\n".join(sign) + "\n"
 
+def _agent_html(lines, sign):
     p = "margin:0 0 14px;"
     body = "\n".join(f'    <p style="{p}">{line}</p>' for line in lines)
-    sign_html = "<br>".join(sign)
-    html = f"""<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang="he" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#ffffff;">
@@ -396,15 +388,65 @@ def _agent(business_name="", sender_name="מירי בר לב",
        padding:22px 20px;font-family:Arial,Helvetica,sans-serif;font-size:16px;
        line-height:1.75;color:#222222;">
 {body}
-    <p style="margin:0 0 4px;">יום טוב,</p>
-    <p style="margin:0;">{sign_html}</p>
+    <p style="margin:0;">{"<br>".join(sign)}</p>
   </div>
 </body></html>"""
-    return subject, html, text
+
+
+# ------------------ הודעה 1: פנייה ראשונה ------------------
+def _agent(business_name="", sender_name="מירי לודמיר",
+           sender_title="מנהלת סינרו טק", company="סינרו טק",
+           contact_email="", first_name="", intro_how="",
+           rec=None, field="", neighborhood="", area="", **_):
+    first_name = (first_name or person_first_name(business_name)).strip()
+    profession = AGENT_PROFESSIONS.get(field, "רואה חשבון")
+    area = area or city_of(neighborhood)
+
+    where = f" באזור {area}" if area else ""
+    found = intro_how.strip() or f"חיפשתי {profession}{where} ונתקלתי בך"
+    seen = reviews_line(rec)
+    opener = f"{found} — {seen}." if seen else f"{found}."
+
+    subject = (f"{first_name}, רציתי לכתוב לך אישית" if first_name
+               else "רציתי לכתוב לך אישית")
+    lines = [
+        f"היי {first_name}," if first_name else "היי,",
+        f"{sender_name}, {sender_title} — נעים להכיר.",
+        opener,
+        "רציתי לדבר איתך על שיתוף פעולה שאנחנו מציעים לבעלי מקצוע בתחום שלך.",
+        "תכתבו לי כאן את הטלפון שלכם ואחזור אליכם להצגת ההצעה המלאה.",
+    ]
+    sign = _agent_signature(sender_name, contact_email)
+    text = "\n\n".join(lines) + "\n\n" + "\n".join(sign) + "\n"
+    return subject, _agent_html(lines, sign), text
+
+
+# ------------------ הודעה 2: המשך לפנייה הראשונה ------------------
+# תנאי שיתוף הפעולה (ניתן לעדכן כאן)
+AGENT_CRM_MONTHS_FREE = 3
+AGENT_COMMISSION = "10%"
+
+
+def _agent_followup(business_name="", sender_name="מירי לודמיר",
+                    sender_title="מנהלת סינרו טק", contact_email="",
+                    first_name="", **_):
+    first_name = (first_name or person_first_name(business_name)).strip()
+    subject = (f"{first_name}, פרטי שיתוף הפעולה" if first_name
+               else "פרטי שיתוף הפעולה")
+    lines = [
+        f"היי {first_name}," if first_name else "היי,",
+        f"במסגרת שיתוף הפעולה תקבלו מערכת CRM מתקדמת לניהול לקוחות ולידים — "
+        f"{AGENT_CRM_MONTHS_FREE} חודשים במתנה.",
+        f"בנוסף, על כל רכישה של מי שהפניתם תקבלו עמלה בשווי {AGENT_COMMISSION}.",
+        "תכתבו לי כאן את הטלפון שלכם ואחזור אליכם להצגת ההצעה המלאה.",
+    ]
+    sign = _agent_signature(sender_name, contact_email)
+    text = "\n\n".join(lines) + "\n\n" + "\n".join(sign) + "\n"
+    return subject, _agent_html(lines, sign), text
 
 
 CAMPAIGNS = {"funding": _funding, "hr": _hr, "crm": _crm, "grant": _grant,
-             "agent": _agent}
+             "agent": _agent, "agent_followup": _agent_followup}
 
 
 def render(campaign, **ctx):

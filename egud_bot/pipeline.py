@@ -123,7 +123,8 @@ def scan_retail(
         # כאן הסף הוא מינימום ותק (ולא מקסימום "חדשוּת" כמו בשאר הקמפיינים)
         def passes(lead, _max_reviews, require_operational):
             return passes_filters_agent(lead, cfg.agent_min_reviews,
-                                        require_operational)
+                                        require_operational,
+                                        cfg.agent_min_rating)
     else:
         query_types = None
         passes = passes_filters
@@ -195,7 +196,8 @@ def scan_retail(
 
 def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
                 campaign: str = "funding", skip_contacted: bool = False,
-                limit: int | None = None, confirm=None, confirm_batch=None) -> dict:
+                limit: int | None = None, confirm=None, confirm_batch=None,
+                followup: bool = False, after_days: int = 0) -> dict:
     """
     שולח מייל ללידים חדשים שיש להם כתובת מייל (עד המכסה בהרצה).
     skip_contacted=True מדלג על כל מי שקיבל מייל באיזשהו קמפיין אחר
@@ -206,11 +208,16 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
     מיילים שאושרו קודם. אחרי סבב האישורים מוצגת רשימת הנמענים לאישור אחרון
     (confirm_batch), ורק אז נפתח חיבור ה-SMTP ונשלח.
     """
+    template_campaign = f"{campaign}_followup" if followup else campaign
     # סינון לפי יומן שליחות קבוע: לעולם לא לשלוח שוב למי שכבר קיבל (גם אחרי מחיקת DB)
     sent_before = storage.already_sent_emails()
     if skip_contacted:
         sent_before = sent_before | storage.contacted_any_campaign()
-    all_candidates = storage.leads_to_email(10 ** 9)
+    if followup:
+        # הודעת ההמשך יוצאת רק למי שכבר קיבל את ההודעה הראשונה
+        all_candidates = storage.leads_emailed(10 ** 9, after_days)
+    else:
+        all_candidates = storage.leads_to_email(10 ** 9)
     # חסימת רשתות גדולות / ארגונים / דומיינים טכניים (הגנה גם אם נכנסו ל-DB בעבר)
     blocked = [l for l in all_candidates if is_blocked_email(l["email"])]
     remaining = [l for l in all_candidates if not is_blocked_email(l["email"])]
@@ -245,7 +252,7 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
         approved = []
         for index, lead in enumerate(leads, 1):
             ctx = build_ctx(cfg, campaign, lead)
-            subject, _html, text = templates.render(campaign, **ctx)
+            subject, _html, text = templates.render(template_campaign, **ctx)
             answer = confirm(lead, subject, text, index, len(leads), ctx.get("rec"))
             if answer == "quit":
                 # ביטול מלא: גם מה שאושר קודם לא נשלח
@@ -290,15 +297,19 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
     ) as mailer:
         for lead in leads:
             subject, html, text = templates.render(
-                campaign, **build_ctx(cfg, campaign, lead))
+                template_campaign, **build_ctx(cfg, campaign, lead))
             try:
                 mailer.send(lead["email"], subject, html, text)
-                storage.mark_emailed(lead["place_id"], success=True)
+                if followup:
+                    storage.mark_followup(lead["place_id"])
+                else:
+                    storage.mark_emailed(lead["place_id"], success=True)
                 storage.record_sent(lead["email"])   # יומן קבוע נגד שליחה כפולה
                 summary["sent"] += 1
             except Exception as exc:  # noqa: BLE001
                 logger.warning("שליחה אל %s נכשלה: %s", lead["email"], exc)
-                storage.mark_emailed(lead["place_id"], success=False, error=str(exc))
+                if not followup:
+                    storage.mark_emailed(lead["place_id"], success=False, error=str(exc))
                 summary["failed"] += 1
             time.sleep(cfg.request_delay_seconds)
 

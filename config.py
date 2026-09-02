@@ -58,14 +58,17 @@ class Config:
     grant_smtp_password: str = os.getenv("GRANT_SMTP_PASSWORD", "").replace(" ", "")
     # קמפיין גיוס סוכנים (agent): נשלח אישית בשם מירי מסינרו — ראו docs/agents.md
     agent_from_email: str = os.getenv("AGENT_FROM_EMAIL", "cto@sy-nero.com")
-    agent_from_name: str = os.getenv("AGENT_FROM_NAME", "מירי בר לב")
-    agent_sender_title: str = os.getenv("AGENT_SENDER_TITLE", "מנהלת מחלקת הטכנולוגיה")
-    agent_company: str = os.getenv("AGENT_COMPANY", "סינרו")
-    agent_sender_phone: str = os.getenv("AGENT_SENDER_PHONE", "053419438")
+    agent_from_name: str = os.getenv("AGENT_FROM_NAME", "מירי לודמיר")
+    agent_sender_title: str = os.getenv("AGENT_SENDER_TITLE", "מנהלת סינרו טק")
+    agent_company: str = os.getenv("AGENT_COMPANY", "סינרו טק")
+    agent_sender_phone: str = os.getenv("AGENT_SENDER_PHONE", "")
     agent_smtp_user: str = os.getenv("AGENT_SMTP_USER", "")
     agent_smtp_password: str = os.getenv("AGENT_SMTP_PASSWORD", "").replace(" ", "")
-    # ותק מינימלי לסוכן (מספר ביקורות — פרוקסי לוותק, ל-Places אין שנת ייסוד)
-    agent_min_reviews: int = int(os.getenv("AGENT_MIN_REVIEWS", "3"))
+    # תנאי סף לסוכן: לפחות 2 ביקורות, ובדירוג חיובי
+    agent_min_reviews: int = int(os.getenv("AGENT_MIN_REVIEWS", "2"))
+    agent_min_rating: float = float(os.getenv("AGENT_MIN_RATING", "4.0"))
+    # כמה ימים לחכות בין ההודעה הראשונה להמשך
+    agent_followup_after_days: int = int(os.getenv("AGENT_FOLLOWUP_AFTER_DAYS", "3"))
     landing_page_url: str = os.getenv("LANDING_PAGE_URL", "https://example.co.il/register")
     unsubscribe_url: str = os.getenv("UNSUBSCRIBE_URL", "https://example.co.il/unsubscribe")
     # נתיב לקובץ הלוגו של האיגוד (PNG/JPG) שיוטמע במייל

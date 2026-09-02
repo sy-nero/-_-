@@ -37,7 +37,9 @@ def _campaign(args) -> str:
 def _storage(args) -> Storage:
     c = _campaign(args)
     path = config.db_path if c == "funding" else f"data/leads_{c}.db"
-    return Storage(path, campaign=c)
+    # הודעת ההמשך יושבת על אותו DB, עם יומן שליחות נפרד משלה
+    stage = f"{c}_followup" if getattr(args, "followup", False) else c
+    return Storage(path, campaign=stage)
 
 
 def cmd_scan(args) -> int:
@@ -122,7 +124,11 @@ def cmd_send(args) -> int:
                                    skip_contacted=getattr(args, "skip_contacted", False),
                                    limit=getattr(args, "limit", None),
                                    confirm=confirm,
-                                   confirm_batch=_confirm_batch if confirm else None)
+                                   confirm_batch=_confirm_batch if confirm else None,
+                                   followup=getattr(args, "followup", False),
+                                   after_days=(args.after_days
+                                               if getattr(args, "after_days", None) is not None
+                                               else config.agent_followup_after_days))
     print("\n=== סיכום שליחה ===")
     for k, v in summary.items():
         print(f"  {k}: {v}")
@@ -256,6 +262,41 @@ def cmd_check(args) -> int:
     return 0
 
 
+def cmd_report(args) -> int:
+    """משפך הקמפיין: כמה נאספו, כמה קיבלו כל הודעה, וכמה השיבו."""
+    storage = _storage(args)
+    funnel = storage.funnel()
+    print(f"\n=== משפך הקמפיין ({_campaign(args)}) ===")
+    sent_first = funnel.get("נשלחה הודעה 1", 0)
+    for label, value in funnel.items():
+        share = ""
+        if sent_first and label in ("נשלחה הודעה 2", "השיבו"):
+            share = f"  ({value * 100 // sent_first}% ממי שקיבל הודעה 1)"
+        print(f"  {label}: {value}{share}")
+
+    replies = storage.replies()
+    if replies:
+        print("\n  מי השיב:")
+        for r in replies:
+            note = f" — {r['reply_note']}" if r["reply_note"] else ""
+            print(f"    • {r['name']} <{r['email']}>{note}")
+    else:
+        print("\n  עדיין לא נרשמה תשובה. לרישום תשובה:")
+        print("    python3 main.py replied --campaign agent <מייל> --note <טלפון>")
+    return 0
+
+
+def cmd_replied(args) -> int:
+    """רישום ידני של סוכן שהשיב — זה מה שהופך את המשפך למדיד."""
+    storage = _storage(args)
+    updated = storage.mark_replied(args.email, args.note)
+    if updated:
+        print(f"נרשם: {args.email} השיב" + (f" ({args.note})" if args.note else ""))
+    else:
+        print(f"לא נמצא ליד עם הכתובת {args.email} ב-DB של הקמפיין.")
+    return 0 if updated else 1
+
+
 def cmd_stats(args) -> int:
     storage = _storage(args)
     stats = storage.stats()
@@ -328,6 +369,11 @@ def build_parser() -> argparse.ArgumentParser:
                     help="כמה מיילים לשלוח בהרצה הזאת (למשל 5)")
     sp.add_argument("--confirm", action="store_true",
                     help="להציג כל מייל בטרמינל ולשאול לפני שליחה")
+    sp.add_argument("--followup", action="store_true",
+                    help="לשלוח את הודעת ההמשך (הודעה 2) למי שכבר קיבל את הראשונה")
+    sp.add_argument("--after-days", dest="after_days", type=int, default=None,
+                    help="בהמשך: לשלוח רק למי שקיבל את ההודעה הראשונה לפני "
+                         "לפחות כך וכך ימים (ברירת מחדל AGENT_FOLLOWUP_AFTER_DAYS)")
     sp.set_defaults(func=cmd_send)
 
     rp = _add_target(_add_city(_add_campaign(sub.add_parser("run", help="scan ואז send"))))
@@ -363,6 +409,12 @@ def build_parser() -> argparse.ArgumentParser:
     _add_campaign(sub.add_parser("clean", help="הסרת מה שאינו חנות קמעונאית")).set_defaults(func=cmd_clean)
     _add_campaign(sub.add_parser("stats", help="הצגת סטטיסטיקות")).set_defaults(func=cmd_stats)
     _add_campaign(sub.add_parser("check", help="בדיקת מה מוגדר ומה חסר להרצה")).set_defaults(func=cmd_check)
+    _add_campaign(sub.add_parser("report", help="משפך הקמפיין: נשלח, המשך, תשובות")).set_defaults(func=cmd_report)
+
+    rep = _add_campaign(sub.add_parser("replied", help="רישום סוכן שהשיב"))
+    rep.add_argument("email", help="כתובת המייל של מי שהשיב")
+    rep.add_argument("--note", default="", help="טלפון שהשאיר / הערה")
+    rep.set_defaults(func=cmd_replied)
 
     jd = sub.add_parser("jobdebug", help="אבחון מבנה דף הדרושים (לכוונון הסורק)")
     jd.add_argument("--url", default="https://www.drushim.co.il/jobs/cat32/",

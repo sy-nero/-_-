@@ -63,16 +63,21 @@ python main.py export leads.csv  # ייצוא כל הלידים (כולל בלי
 
 ```bash
 python main.py check  --campaign agent
-python main.py scan   --campaign agent --city bnei-brak
-python main.py stats  --campaign agent
+python main.py scan   --campaign agent --city jerusalem --target 50
 python main.py export --campaign agent agents.csv
-python main.py send   --campaign agent --limit 5 --confirm
+python main.py send   --campaign agent --limit 50 --confirm
+python main.py send   --campaign agent --limit 50 --confirm --followup
+python main.py report --campaign agent
 ```
 
 0. `check` — מראה מה מוגדר ומה חסר ב-.env (בלי להדפיס סיסמאות).
 1. `scan` — מוצא משרדים ותיקים, מאתר מייל, ומחפש המלצה אמיתית על כל אחד.
 2. `stats` / `export` — מה נאסף, ולבדוק את ההמלצות בעיניים לפני שליחה.
-3. `send --confirm` — כל מייל מוצג בטרמינל ונשלח רק אחרי אישור.
+3. `send --confirm` — הודעה 1. כל מייל מוצג בטרמינל ונשלח רק אחרי אישור.
+4. `send --confirm --followup` — הודעה 2, רק למי שקיבל את הראשונה, ורק
+   אחרי 3 ימים (`--after-days 0` לשליחה מיידית).
+5. `report` — כמה נשלחו, כמה קיבלו המשך, וכמה השיבו.
+   לרישום תשובה: `python main.py replied --campaign agent <מייל> --note "טלפון"`
 
 > שימו לב: אל תדביקו לטרמינל שורות הערה שיש בהן מרכאה בודדת (למשל `רו"ח`) —
 > ב-zsh המרכאה פותחת מחרוזת והטרמינל נתקע ב-`dquote>`. הבלוקים כאן נקיים
