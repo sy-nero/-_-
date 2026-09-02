@@ -119,7 +119,8 @@ def scan_retail(
         query_types = GRANT_BUSINESS_TYPES_QUERY
         passes = passes_filters_grant
     elif campaign == "agent":
-        query_types = AGENT_BUSINESS_TYPES_QUERY
+        custom = [t.strip() for t in (cfg.agent_types or "").split(",") if t.strip()]
+        query_types = custom or AGENT_BUSINESS_TYPES_QUERY
 
         # כאן הסף הוא מינימום ותק (ולא מקסימום "חדשוּת" כמו בשאר הקמפיינים)
         def passes(lead, _max_reviews, require_operational):

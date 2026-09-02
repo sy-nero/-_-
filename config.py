@@ -66,6 +66,8 @@ class Config:
     agent_website: str = os.getenv("AGENT_WEBSITE", "https://tech.sy-nero.com/")
     agent_smtp_user: str = os.getenv("AGENT_SMTP_USER", "")
     agent_smtp_password: str = os.getenv("AGENT_SMTP_PASSWORD", "").replace(" ", "")
+    # אילו סוגי בעלי מקצוע לסרוק (סוגי Google, מופרדים בפסיק). ריק = ברירת המחדל
+    agent_types: str = os.getenv("AGENT_TYPES", "")
     # תנאי סף לסוכן: לפחות 2 ביקורות, ובדירוג חיובי
     agent_min_reviews: int = int(os.getenv("AGENT_MIN_REVIEWS", "2"))
     agent_min_rating: float = float(os.getenv("AGENT_MIN_RATING", "4.0"))

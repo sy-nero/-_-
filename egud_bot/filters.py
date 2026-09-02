@@ -368,7 +368,7 @@ def passes_filters_grant(
 # ============ קמפיין agent: גיוס סוכנים ממליצים ============
 # מי שיש לו כבר יחסי אמון עם בעלי עסקים מה-ICP שלנו. ראו docs/agents.md.
 # מ-Google אפשר לסרוק רק משרדי רואי חשבון; שאר הקטגוריות מיובאות מ-CSV.
-AGENT_TYPES = {"accounting"}
+AGENT_TYPES = {"accounting", "lawyer", "insurance_agency", "real_estate_agency"}
 
 # ותק ויציבות עסקית: ל-Places אין שנת ייסוד, ולכן הפרוקסי לוותק הוא מספר
 # ביקורות מינימלי (הפוך משאר הקמפיינים, שמחפשים דווקא עסק חדש).

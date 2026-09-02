@@ -312,6 +312,7 @@ AGENT_PROFESSIONS = {
     "משרד עורכי דין": "עורך דין",
     "סוכנות ביטוח": "סוכן ביטוח",
     "משרד תיווך": "מתווך",
+    "סוכנות נסיעות": "סוכן נסיעות",
 }
 
 # ניסוח רבים של המקצוע (ל"אני מחפשת רואי חשבון ותיקים...")
@@ -385,7 +386,9 @@ def _agent_opening(sender_name, sender_title, first_name, intro_how,
     פתיחת המייל — זהה בשני הנוסחים: היכרות, איך הגעתי אליו, ומה ראיתי.
     ההבדל בין הנוסחים מתחיל רק אחרי הפתיחה הזאת.
     """
-    profession = AGENT_PROFESSIONS.get(field, "רואה חשבון")
+    # התחום של הנמען עצמו. בלי התאמה מדויקת משתמשים בשם התחום כפי שהוא,
+    # ורק אם אין כלום נופלים לניסוח כללי — לעולם לא לכתוב תחום שגוי.
+    profession = AGENT_PROFESSIONS.get(field) or field or "בעל מקצוע"
     area = area or city_of(neighborhood)
     where = f" באזור {area}" if area else ""
     found = intro_how.strip() or f"חיפשתי {profession}{where} ונתקלתי בך"
