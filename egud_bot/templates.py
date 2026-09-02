@@ -370,16 +370,38 @@ def reviews_line(rec=None) -> str:
     return ""
 
 
-def _agent_signature(sender_name, contact_email):
+def _agent_signature(sender_name, contact_email, website=""):
     sign = [sender_name]
     if contact_email:
         sign.append(contact_email)
+    if website:
+        sign.append(website)
     return sign
+
+
+def _agent_opening(sender_name, sender_title, first_name, intro_how,
+                   rec, field, neighborhood, area):
+    """
+    פתיחת המייל — זהה בשני הנוסחים: היכרות, איך הגעתי אליו, ומה ראיתי.
+    ההבדל בין הנוסחים מתחיל רק אחרי הפתיחה הזאת.
+    """
+    profession = AGENT_PROFESSIONS.get(field, "רואה חשבון")
+    area = area or city_of(neighborhood)
+    where = f" באזור {area}" if area else ""
+    found = intro_how.strip() or f"חיפשתי {profession}{where} ונתקלתי בך"
+    seen = reviews_line(rec)
+    return [
+        f"היי {first_name}," if first_name else "היי,",
+        f"{sender_name}, {sender_title} — נעים להכיר.",
+        f"{found} — {seen}." if seen else f"{found}.",
+    ]
 
 
 def _agent_html(lines, sign):
     p = "margin:0 0 14px;"
     body = "\n".join(f'    <p style="{p}">{line}</p>' for line in lines)
+    sign = [(f'<a href="{v}" style="color:#1a2e4a;">{v}</a>'
+             if v.startswith("http") else v) for v in sign]
     return f"""<!DOCTYPE html>
 <html lang="he" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"></head>
@@ -396,27 +418,17 @@ def _agent_html(lines, sign):
 # ------------------ הודעה 1: פנייה ראשונה ------------------
 def _agent(business_name="", sender_name="מירי לודמיר",
            sender_title="מנהלת סינרו טק", company="סינרו טק",
-           contact_email="", first_name="", intro_how="",
+           contact_email="", website="", first_name="", intro_how="",
            rec=None, field="", neighborhood="", area="", **_):
     first_name = (first_name or person_first_name(business_name)).strip()
-    profession = AGENT_PROFESSIONS.get(field, "רואה חשבון")
-    area = area or city_of(neighborhood)
-
-    where = f" באזור {area}" if area else ""
-    found = intro_how.strip() or f"חיפשתי {profession}{where} ונתקלתי בך"
-    seen = reviews_line(rec)
-    opener = f"{found} — {seen}." if seen else f"{found}."
-
     subject = (f"{first_name}, רציתי לכתוב לך אישית" if first_name
                else "רציתי לכתוב לך אישית")
-    lines = [
-        f"היי {first_name}," if first_name else "היי,",
-        f"{sender_name}, {sender_title} — נעים להכיר.",
-        opener,
+    lines = _agent_opening(sender_name, sender_title, first_name, intro_how,
+                           rec, field, neighborhood, area) + [
         "רציתי לדבר איתך על שיתוף פעולה שאנחנו מציעים לבעלי מקצוע בתחום שלך.",
         "תכתבו לי כאן את הטלפון שלכם ואחזור אליכם להצגת ההצעה המלאה.",
     ]
-    sign = _agent_signature(sender_name, contact_email)
+    sign = _agent_signature(sender_name, contact_email, website)
     text = "\n\n".join(lines) + "\n\n" + "\n".join(sign) + "\n"
     return subject, _agent_html(lines, sign), text
 
@@ -429,20 +441,21 @@ AGENT_COMMISSION = "10%"
 
 
 def _agent_offer(business_name="", sender_name="מירי לודמיר",
-                 sender_title="מנהלת סינרו טק", contact_email="",
-                 first_name="", **_):
+                 sender_title="מנהלת סינרו טק", contact_email="", website="",
+                 first_name="", intro_how="", rec=None, field="",
+                 neighborhood="", area="", **_):
+    """נוסח ב': אותה פתיחה בדיוק כמו נוסח א', וממשיך ישר לתנאי ההצעה."""
     first_name = (first_name or person_first_name(business_name)).strip()
     subject = (f"{first_name}, הצעה לשיתוף פעולה" if first_name
                else "הצעה לשיתוף פעולה")
-    lines = [
-        f"היי {first_name}," if first_name else "היי,",
-        f"{sender_name}, {sender_title} — נעים להכיר.",
-        f"במסגרת שיתוף הפעולה תקבלו מערכת CRM מתקדמת לניהול לקוחות ולידים — "
-        f"{AGENT_CRM_MONTHS_FREE} חודשים במתנה.",
+    lines = _agent_opening(sender_name, sender_title, first_name, intro_how,
+                           rec, field, neighborhood, area) + [
+        f"רציתי להציע לך שיתוף פעולה: תקבל מערכת CRM מתקדמת לניהול לקוחות "
+        f"ולידים — {AGENT_CRM_MONTHS_FREE} חודשים במתנה.",
         f"בנוסף, על כל רכישה של מי שהפניתם תקבלו עמלה בשווי {AGENT_COMMISSION}.",
         "תכתבו לי כאן את הטלפון שלכם ואחזור אליכם להצגת ההצעה המלאה.",
     ]
-    sign = _agent_signature(sender_name, contact_email)
+    sign = _agent_signature(sender_name, contact_email, website)
     text = "\n\n".join(lines) + "\n\n" + "\n".join(sign) + "\n"
     return subject, _agent_html(lines, sign), text
 

@@ -64,11 +64,8 @@ def _ask_before_send(lead, subject, text, index, total, rec=None) -> str:
     print(f"נושא:  {subject}")
     print("-" * 72)
     print(text)
-    if rec and rec.get("url"):
-        print(f"[מקור ההמלצה: {rec.get('source')} | לאימות: {rec['url']}]")
-        from egud_bot import templates
-        if rec.get("quote") and not templates.usable_quote(rec):
-            print("[ההמלצה שנמצאה לא נוגעת לעסק ולכן לא צוטטה במייל]")
+    if rec and rec.get("count"):
+        print(f"[{rec['count']} ביקורות בגוגל, דירוג {rec.get('rating') or '—'}]")
     print("-" * 72)
     while True:
         try:

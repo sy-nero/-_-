@@ -62,6 +62,8 @@ class Config:
     agent_sender_title: str = os.getenv("AGENT_SENDER_TITLE", "מנהלת סינרו טק")
     agent_company: str = os.getenv("AGENT_COMPANY", "סינרו טק")
     agent_sender_phone: str = os.getenv("AGENT_SENDER_PHONE", "")
+    # קישור לאתר שמופיע בחתימת המייל
+    agent_website: str = os.getenv("AGENT_WEBSITE", "https://tech.sy-nero.com/")
     agent_smtp_user: str = os.getenv("AGENT_SMTP_USER", "")
     agent_smtp_password: str = os.getenv("AGENT_SMTP_PASSWORD", "").replace(" ", "")
     # תנאי סף לסוכן: לפחות 2 ביקורות, ובדירוג חיובי

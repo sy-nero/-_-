@@ -66,6 +66,7 @@ def build_ctx(cfg: Config, campaign: str, lead) -> dict:
         ctx.update(sender_title=cfg.agent_sender_title,
                    company=cfg.agent_company,
                    sender_phone=cfg.agent_sender_phone,
+                   website=cfg.agent_website,
                    contact_email=from_email)
     return ctx
 
