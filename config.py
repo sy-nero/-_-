@@ -67,8 +67,6 @@ class Config:
     # תנאי סף לסוכן: לפחות 2 ביקורות, ובדירוג חיובי
     agent_min_reviews: int = int(os.getenv("AGENT_MIN_REVIEWS", "2"))
     agent_min_rating: float = float(os.getenv("AGENT_MIN_RATING", "4.0"))
-    # כמה ימים לחכות בין ההודעה הראשונה להמשך
-    agent_followup_after_days: int = int(os.getenv("AGENT_FOLLOWUP_AFTER_DAYS", "3"))
     landing_page_url: str = os.getenv("LANDING_PAGE_URL", "https://example.co.il/register")
     unsubscribe_url: str = os.getenv("UNSUBSCRIBE_URL", "https://example.co.il/unsubscribe")
     # נתיב לקובץ הלוגו של האיגוד (PNG/JPG) שיוטמע במייל

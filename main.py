@@ -37,9 +37,8 @@ def _campaign(args) -> str:
 def _storage(args) -> Storage:
     c = _campaign(args)
     path = config.db_path if c == "funding" else f"data/leads_{c}.db"
-    # הודעת ההמשך יושבת על אותו DB, עם יומן שליחות נפרד משלה
-    stage = f"{c}_followup" if getattr(args, "followup", False) else c
-    return Storage(path, campaign=stage)
+    # שני הנוסחים חולקים יומן שליחות אחד, כדי שאיש לא יקבל את שניהם
+    return Storage(path, campaign=c)
 
 
 def cmd_scan(args) -> int:
@@ -125,10 +124,7 @@ def cmd_send(args) -> int:
                                    limit=getattr(args, "limit", None),
                                    confirm=confirm,
                                    confirm_batch=_confirm_batch if confirm else None,
-                                   followup=getattr(args, "followup", False),
-                                   after_days=(args.after_days
-                                               if getattr(args, "after_days", None) is not None
-                                               else config.agent_followup_after_days))
+                                   variant=getattr(args, "variant", "") or "")
     print("\n=== סיכום שליחה ===")
     for k, v in summary.items():
         print(f"  {k}: {v}")
@@ -262,24 +258,40 @@ def cmd_check(args) -> int:
     return 0
 
 
+VARIANT_NAMES = {"a": "נוסח א׳ (פנייה ראשונה)", "b": "נוסח ב׳ (ההצעה ישירות)"}
+
+
 def cmd_report(args) -> int:
-    """משפך הקמפיין: כמה נאספו, כמה קיבלו כל הודעה, וכמה השיבו."""
+    """משפך הקמפיין והשוואה בין שני הנוסחים."""
     storage = _storage(args)
-    funnel = storage.funnel()
     print(f"\n=== משפך הקמפיין ({_campaign(args)}) ===")
-    sent_first = funnel.get("נשלחה הודעה 1", 0)
-    for label, value in funnel.items():
-        share = ""
-        if sent_first and label in ("נשלחה הודעה 2", "השיבו"):
-            share = f"  ({value * 100 // sent_first}% ממי שקיבל הודעה 1)"
-        print(f"  {label}: {value}{share}")
+    for label, value in storage.funnel().items():
+        print(f"  {label}: {value}")
+
+    rows = storage.variant_stats()
+    print("\n=== השוואת נוסחים ===")
+    if not rows:
+        print("  עדיין לא נשלח אף נוסח.")
+    for row in rows:
+        name = VARIANT_NAMES.get(row["variant"], row["variant"])
+        rate = f"{row['replied'] * 100 / row['sent']:.0f}%" if row["sent"] else "—"
+        print(f"  {name}: נשלחו {row['sent']}, השיבו {row['replied']}  ({rate})")
+    if len(rows) == 2 and all(r["sent"] for r in rows):
+        best = max(rows, key=lambda r: r["replied"] / r["sent"])
+        gap = abs(rows[0]["replied"] / rows[0]["sent"]
+                  - rows[1]["replied"] / rows[1]["sent"])
+        if gap > 0:
+            print(f"\n  מוביל כרגע: {VARIANT_NAMES.get(best['variant'])}")
+        total_replies = sum(r["replied"] for r in rows)
+        if total_replies < 10:
+            print("  (מעט תשובות עדיין — ההפרש בשלב הזה עוד לא מובהק)")
 
     replies = storage.replies()
     if replies:
         print("\n  מי השיב:")
         for r in replies:
             note = f" — {r['reply_note']}" if r["reply_note"] else ""
-            print(f"    • {r['name']} <{r['email']}>{note}")
+            print(f"    • [{r['variant'] or '?'}] {r['name']} <{r['email']}>{note}")
     else:
         print("\n  עדיין לא נרשמה תשובה. לרישום תשובה:")
         print("    python3 main.py replied --campaign agent <מייל> --note <טלפון>")
@@ -369,11 +381,9 @@ def build_parser() -> argparse.ArgumentParser:
                     help="כמה מיילים לשלוח בהרצה הזאת (למשל 5)")
     sp.add_argument("--confirm", action="store_true",
                     help="להציג כל מייל בטרמינל ולשאול לפני שליחה")
-    sp.add_argument("--followup", action="store_true",
-                    help="לשלוח את הודעת ההמשך (הודעה 2) למי שכבר קיבל את הראשונה")
-    sp.add_argument("--after-days", dest="after_days", type=int, default=None,
-                    help="בהמשך: לשלוח רק למי שקיבל את ההודעה הראשונה לפני "
-                         "לפחות כך וכך ימים (ברירת מחדל AGENT_FOLLOWUP_AFTER_DAYS)")
+    sp.add_argument("--variant", choices=["a", "b"], default=None,
+                    help="בדיקת A/B: a=נוסח הפנייה הראשונה, b=נוסח ההצעה. "
+                         "כל נמען מקבל נוסח אחד בלבד")
     sp.set_defaults(func=cmd_send)
 
     rp = _add_target(_add_city(_add_campaign(sub.add_parser("run", help="scan ואז send"))))

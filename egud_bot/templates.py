@@ -421,20 +421,22 @@ def _agent(business_name="", sender_name="מירי לודמיר",
     return subject, _agent_html(lines, sign), text
 
 
-# ------------------ הודעה 2: המשך לפנייה הראשונה ------------------
+# ------------------ נוסח ב': ההצעה ישירות ------------------
+# שני הנוסחים נשלחים לשתי קבוצות שונות (A/B), לא זה אחרי זה.
 # תנאי שיתוף הפעולה (ניתן לעדכן כאן)
 AGENT_CRM_MONTHS_FREE = 3
 AGENT_COMMISSION = "10%"
 
 
-def _agent_followup(business_name="", sender_name="מירי לודמיר",
-                    sender_title="מנהלת סינרו טק", contact_email="",
-                    first_name="", **_):
+def _agent_offer(business_name="", sender_name="מירי לודמיר",
+                 sender_title="מנהלת סינרו טק", contact_email="",
+                 first_name="", **_):
     first_name = (first_name or person_first_name(business_name)).strip()
-    subject = (f"{first_name}, פרטי שיתוף הפעולה" if first_name
-               else "פרטי שיתוף הפעולה")
+    subject = (f"{first_name}, הצעה לשיתוף פעולה" if first_name
+               else "הצעה לשיתוף פעולה")
     lines = [
         f"היי {first_name}," if first_name else "היי,",
+        f"{sender_name}, {sender_title} — נעים להכיר.",
         f"במסגרת שיתוף הפעולה תקבלו מערכת CRM מתקדמת לניהול לקוחות ולידים — "
         f"{AGENT_CRM_MONTHS_FREE} חודשים במתנה.",
         f"בנוסף, על כל רכישה של מי שהפניתם תקבלו עמלה בשווי {AGENT_COMMISSION}.",
@@ -446,7 +448,7 @@ def _agent_followup(business_name="", sender_name="מירי לודמיר",
 
 
 CAMPAIGNS = {"funding": _funding, "hr": _hr, "crm": _crm, "grant": _grant,
-             "agent": _agent, "agent_followup": _agent_followup}
+             "agent": _agent, "agent_offer": _agent_offer}
 
 
 def render(campaign, **ctx):

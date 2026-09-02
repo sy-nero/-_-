@@ -65,18 +65,17 @@ python main.py export leads.csv  # ייצוא כל הלידים (כולל בלי
 python main.py check  --campaign agent
 python main.py scan   --campaign agent --city jerusalem --target 50
 python main.py export --campaign agent agents.csv
-python main.py send   --campaign agent --limit 50 --confirm
-python main.py send   --campaign agent --limit 50 --confirm --followup
+python main.py send   --campaign agent --limit 50 --confirm --variant a
+python main.py send   --campaign agent --limit 50 --confirm --variant b
 python main.py report --campaign agent
 ```
 
 0. `check` — מראה מה מוגדר ומה חסר ב-.env (בלי להדפיס סיסמאות).
 1. `scan` — מוצא משרדים ותיקים, מאתר מייל, ומחפש המלצה אמיתית על כל אחד.
 2. `stats` / `export` — מה נאסף, ולבדוק את ההמלצות בעיניים לפני שליחה.
-3. `send --confirm` — הודעה 1. כל מייל מוצג בטרמינל ונשלח רק אחרי אישור.
-4. `send --confirm --followup` — הודעה 2, רק למי שקיבל את הראשונה, ורק
-   אחרי 3 ימים (`--after-days 0` לשליחה מיידית).
-5. `report` — כמה נשלחו, כמה קיבלו המשך, וכמה השיבו.
+3. `--variant a` — 50 נמענים מקבלים את נוסח הפנייה הראשונה.
+4. `--variant b` — 50 **נמענים אחרים** מקבלים את נוסח ההצעה. אין חפיפה.
+5. `report` — כמה נשלחו בכל נוסח וכמה השיבו, עם אחוזי תגובה.
    לרישום תשובה: `python main.py replied --campaign agent <מייל> --note "טלפון"`
 
 > שימו לב: אל תדביקו לטרמינל שורות הערה שיש בהן מרכאה בודדת (למשל `רו"ח`) —
