@@ -392,8 +392,8 @@ def _agent_opening(sender_name, sender_title, first_name, intro_how,
     seen = reviews_line(rec)
     return [
         f"היי {first_name}," if first_name else "היי,",
-        f"{sender_name}, {sender_title} — נעים להכיר.",
-        f"{found} — {seen}." if seen else f"{found}.",
+        f"{sender_name}, {sender_title} - נעים להכיר.",
+        f"{found} - {seen}." if seen else f"{found}.",
     ]
 
 
@@ -451,7 +451,7 @@ def _agent_offer(business_name="", sender_name="מירי לודמיר",
     lines = _agent_opening(sender_name, sender_title, first_name, intro_how,
                            rec, field, neighborhood, area) + [
         f"רציתי להציע לך שיתוף פעולה: תקבל מערכת CRM מתקדמת לניהול לקוחות "
-        f"ולידים — {AGENT_CRM_MONTHS_FREE} חודשים במתנה.",
+        f"ולידים - {AGENT_CRM_MONTHS_FREE} חודשים במתנה.",
         f"בנוסף, על כל רכישה של מי שהפניתם תקבלו עמלה בשווי {AGENT_COMMISSION}.",
         "תכתבו לי כאן את הטלפון שלכם ואחזור אליכם להצגת ההצעה המלאה.",
     ]
