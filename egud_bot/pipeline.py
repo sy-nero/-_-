@@ -196,6 +196,43 @@ def scan_retail(
     return summary
 
 
+def enrich_missing_emails(cfg: Config, storage: Storage, limit: int = 50) -> dict:
+    """
+    מנסה להשלים כתובות מייל ללידים שנסרקו בלי אתר. Google Places לא מחזיר
+    מייל, ולידים בלי אתר נשארים תקועים — כאן מחפשים את אתר המשרד ברשת
+    (Custom Search אם מוגדר, אחרת DuckDuckGo) ומחלצים ממנו מייל.
+    """
+    from egud_bot.jobscan import _find_company_website
+    from data.neighborhoods import city_of
+
+    leads = storage.leads_without_email(limit)
+    summary = {"נבדקו": len(leads), "נמצא אתר": 0, "נמצא מייל": 0}
+    if not leads:
+        logger.info("אין לידים ללא מייל להעשרה.")
+        return summary
+
+    for i, lead in enumerate(leads, 1):
+        name = lead["name"]
+        city = city_of(lead["neighborhood"] or "")
+        query = f"{name} {city}".strip()
+        logger.info("[%d/%d] מחפש אתר עבור %s", i, len(leads), name)
+        site = _find_company_website(query, cfg.request_delay_seconds,
+                                     cfg.google_search_key, cfg.google_search_cx)
+        if not site:
+            continue
+        summary["נמצא אתר"] += 1
+
+        email = find_email(site, cfg.request_delay_seconds)
+        if not email or is_blocked_email(email):
+            continue
+        summary["נמצא מייל"] += 1
+        storage.update_contact(lead["place_id"], email, site)
+        logger.info("  ✔ %s → %s", name, email)
+
+    logger.info("סיכום העשרה: %s", summary)
+    return summary
+
+
 def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
                 campaign: str = "funding", skip_contacted: bool = False,
                 limit: int | None = None, confirm=None, confirm_batch=None,

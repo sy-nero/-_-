@@ -153,6 +153,25 @@ class Storage:
                 (limit,),
             ).fetchall()
 
+    def leads_without_email(self, limit: int) -> list[sqlite3.Row]:
+        """לידים שנסרקו אך לא נמצאה להם כתובת מייל — מועמדים להעשרה."""
+        with self._conn() as conn:
+            return conn.execute(
+                """SELECT * FROM leads
+                   WHERE (email IS NULL OR email = '')
+                     AND status = 'no_email'
+                   ORDER BY review_count DESC LIMIT ?""",
+                (limit,),
+            ).fetchall()
+
+    def update_contact(self, place_id: str, email: str, website: str = "") -> None:
+        """ממלא מייל (ואתר) לליד קיים ומחזיר אותו לרשימת השליחה."""
+        with self._conn() as conn:
+            conn.execute(
+                """UPDATE leads SET email=?, website=COALESCE(NULLIF(?,''), website),
+                   status='found' WHERE place_id=?""",
+                (email, website, place_id))
+
     def set_variant(self, place_id: str, variant: str) -> None:
         """רושם איזה נוסח נשלח לליד — הבסיס להשוואה בין הקבוצות."""
         with self._conn() as conn:

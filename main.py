@@ -308,6 +308,17 @@ def cmd_test(args) -> int:
     return 0
 
 
+def cmd_enrich(args) -> int:
+    """משלים כתובות מייל ללידים שנסרקו בלי אתר."""
+    storage = _storage(args)
+    summary = pipeline.enrich_missing_emails(config, storage, args.limit)
+    print("\n=== סיכום העשרה ===")
+    for k, v in summary.items():
+        print(f"  {k}: {v}")
+    print("\nמי שנמצא לו מייל נכנס אוטומטית לרשימת השליחה.")
+    return 0
+
+
 def cmd_report(args) -> int:
     """משפך הקמפיין והשוואה בין שני הנוסחים."""
     storage = _storage(args)
@@ -469,6 +480,12 @@ def build_parser() -> argparse.ArgumentParser:
     _add_campaign(sub.add_parser("stats", help="הצגת סטטיסטיקות")).set_defaults(func=cmd_stats)
     _add_campaign(sub.add_parser("check", help="בדיקת מה מוגדר ומה חסר להרצה")).set_defaults(func=cmd_check)
     _add_campaign(sub.add_parser("report", help="משפך הקמפיין: נשלח, המשך, תשובות")).set_defaults(func=cmd_report)
+
+    en = _add_campaign(sub.add_parser(
+        "enrich", help="חיפוש אתר ומייל ללידים שנסרקו בלי כתובת"))
+    en.add_argument("--limit", type=int, default=50,
+                    help="כמה לידים לנסות בהרצה אחת (ברירת מחדל 50)")
+    en.set_defaults(func=cmd_enrich)
 
     ts = _add_campaign(sub.add_parser("test", help="שליחת מייל בדיקה אחד לכתובת שלך"))
     ts.add_argument("--to", required=True, help="הכתובת שאליה יישלח מייל הבדיקה")
