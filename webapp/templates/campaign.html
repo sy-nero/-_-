@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}{{ campaign['title'] }}{% endblock %}
+{% block body %}
+
+<div class="card">
+  <h2>{{ campaign['title'] }}</h2>
+  <div>
+    <span class="stat"><b>{{ metrics.sent }}</b><span class="muted">נשלחו</span></span>
+    <span class="stat"><b>{{ metrics.opened }}</b><span class="muted">נפתחו ({{ open_rate }})</span></span>
+    <span class="stat"><b>{{ metrics.replied }}</b><span class="muted">השיבו ({{ reply_rate }})</span></span>
+  </div>
+  {% if campaign['source_campaign'] %}
+  <p style="margin-top:14px;">
+    <a class="btn" href="{{ url_for('send_page', campaign_id=campaign['id']) }}">
+      שליחה וניהול נמענים</a>
+  </p>
+  {% endif %}
+</div>
+
+<form method="post">
+<div class="card">
+  <h2>הגדרות</h2>
+  <div class="grid3">
+    <label>שם הקמפיין<input type="text" name="title" value="{{ campaign['title'] }}"></label>
+    <label>תאריך<input type="text" name="started_on" value="{{ campaign['started_on'] or '' }}"></label>
+    <label>סוג
+      <select name="kind">
+        <option value="email" {{ 'selected' if campaign['kind']=='email' }}>מיילים</option>
+        <option value="phone" {{ 'selected' if campaign['kind']=='phone' }}>שיחות טלפון</option>
+      </select>
+    </label>
+    <label>מאגר הלידים
+      <input type="text" name="source_campaign" value="{{ campaign['source_campaign'] or '' }}">
+    </label>
+    <label>נוסח
+      <select name="variant">
+        <option value="" {{ 'selected' if not campaign['variant'] }}>כל הנוסחים</option>
+        <option value="a" {{ 'selected' if campaign['variant']=='a' }}>נוסח א׳</option>
+        <option value="b" {{ 'selected' if campaign['variant']=='b' }}>נוסח ב׳</option>
+      </select>
+    </label>
+  </div>
+</div>
+
+<div class="card scroll">
+  <h2>פרטי הקמפיין</h2>
+  <table>
+    <tr><th style="width:130px;"></th><th>פרטים</th><th>הערות</th><th>המלצות לשיפור</th></tr>
+    {% for field in text_fields %}
+    <tr>
+      <td class="rowhead">{{ field }}</td>
+      <td><textarea name="value::{{ field }}">{{ fields[field].value }}</textarea></td>
+      <td><textarea name="note::{{ field }}">{{ fields[field].note }}</textarea></td>
+      <td><textarea name="improve::{{ field }}">{{ fields[field].improve }}</textarea></td>
+    </tr>
+    {% endfor %}
+
+    {% for field in auto_fields %}
+    <tr>
+      <td class="rowhead">{{ field }}</td>
+      <td class="num auto">{{ fields[field].value }}
+        <div class="muted">נמדד אוטומטית</div></td>
+      <td><textarea name="note::{{ field }}">{{ fields[field].note }}</textarea></td>
+      <td><textarea name="improve::{{ field }}">{{ fields[field].improve }}</textarea></td>
+    </tr>
+    {% endfor %}
+
+    {% for field in manual_fields %}
+    <tr>
+      <td class="rowhead">{{ field }}</td>
+      <td><input type="text" name="value::{{ field }}" value="{{ fields[field].value }}"></td>
+      <td><textarea name="note::{{ field }}">{{ fields[field].note }}</textarea></td>
+      <td><textarea name="improve::{{ field }}">{{ fields[field].improve }}</textarea></td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p style="margin-top:16px;"><button type="submit">שמירה</button></p>
+</div>
+</form>
+
+<div class="card">
+  <form method="post" action="{{ url_for('campaign_delete', campaign_id=campaign['id']) }}"
+        onsubmit="return confirm('למחוק את הקמפיין? הנתונים שנמדדו יישארו במאגר הלידים.');">
+    <button type="submit" class="danger">מחיקת הקמפיין</button>
+  </form>
+</div>
+{% endblock %}

@@ -253,6 +253,11 @@ def cmd_check(args) -> int:
         print("      תיקון: pip install --upgrade --force-reinstall certifi")
         print("      ואם מדובר בפייתון של Homebrew: brew reinstall ca-certificates")
 
+    if config.tracking_base_url:
+        print(f"\n  מעקב פתיחות: פעיל ({config.tracking_base_url})")
+    else:
+        print("\n  מעקב פתיחות: כבוי (חסר TRACKING_BASE_URL ב-.env)")
+
     scan_errors = config.validate_for_scan()
     send_errors = config.validate_for_email(campaign)
     print("\n  סריקה: " + ("מוכנה" if not scan_errors else "חסר — " + ", ".join(scan_errors)))

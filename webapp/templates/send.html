@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}שליחה — {{ campaign['title'] }}{% endblock %}
+{% block body %}
+
+<div class="card">
+  <h2>{{ campaign['title'] }} — שליחה</h2>
+  <p class="muted">
+    כל מייל מוצג במלואו לפני השליחה. סמני את מי שברצונך לשלוח אליו, ואשרי למטה.
+    {% if not tracking_on %}<br>מעקב פתיחות כבוי — המיילים יישלחו בלי פיקסל מדידה.{% endif %}
+  </p>
+  <a class="btn ghost" href="{{ url_for('campaign_edit', campaign_id=campaign['id']) }}">
+    חזרה לקמפיין</a>
+</div>
+
+<form method="post">
+{% if not previews %}
+  <div class="card"><p class="muted">אין נמענים ממתינים במאגר. אפשר להריץ סריקה
+  או <code>enrich</code> כדי להוסיף.</p></div>
+{% endif %}
+
+{% for p in previews %}
+<div class="card">
+  <label style="display:flex; gap:10px; align-items:flex-start;">
+    <input type="checkbox" name="place_id" value="{{ p.lead['place_id'] }}"
+           style="width:auto; margin-top:5px;">
+    <span>
+      <b>{{ p.lead['name'] }}</b>
+      &lt;{{ p.lead['email'] }}&gt;
+      <div class="muted">{{ p.lead['neighborhood'] }} ·
+        {{ p.lead['review_count'] }} ביקורות · דירוג {{ p.lead['rating'] or '—' }}</div>
+    </span>
+  </label>
+  <p style="margin:12px 0 6px;"><b>נושא:</b> {{ p.subject }}</p>
+  <div class="mail">{{ p.text }}</div>
+</div>
+{% endfor %}
+
+{% if previews %}
+<div class="card">
+  <button type="submit">שליחה לנמענים שסומנו</button>
+  <span class="muted">&nbsp; אחרי הלחיצה המיילים יוצאים מיד.</span>
+</div>
+{% endif %}
+</form>
+
+<div class="card scroll">
+  <h2>נשלחו ({{ sent|length }})</h2>
+  {% if not sent %}<p class="muted">עוד לא נשלח דבר בקמפיין הזה.</p>{% else %}
+  <table>
+    <tr><th>נמען</th><th>מייל</th><th>נפתח</th><th>השיב</th><th>רישום תשובה</th></tr>
+    {% for lead in sent %}
+    <tr>
+      <td>{{ lead['name'] }}</td>
+      <td class="muted">{{ lead['email'] }}</td>
+      <td class="num">{{ '✓' if lead['opened_at'] else '—' }}</td>
+      <td class="num">{{ lead['reply_note'] or ('✓' if lead['replied_at'] else '—') }}</td>
+      <td>
+        <form method="post" action="{{ url_for('mark_replied', campaign_id=campaign['id']) }}"
+              style="display:flex; gap:6px;">
+          <input type="hidden" name="email" value="{{ lead['email'] }}">
+          <input type="text" name="note" placeholder="טלפון שהשאיר">
+          <button type="submit" class="ghost">רישום</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</div>
+{% endblock %}

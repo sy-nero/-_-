@@ -62,6 +62,11 @@ class Config:
     agent_sender_title: str = os.getenv("AGENT_SENDER_TITLE", "מנהלת סינרו טק")
     agent_company: str = os.getenv("AGENT_COMPANY", "סינרו טק")
     agent_sender_phone: str = os.getenv("AGENT_SENDER_PHONE", "")
+    # כתובת ציבורית של אפליקציית הניהול — הבסיס לפיקסל מעקב הפתיחות.
+    # חייבת להיות נגישה מהאינטרנט, אחרת לא תירשם אף פתיחה.
+    tracking_base_url: str = os.getenv("TRACKING_BASE_URL", "")
+    # פורט אפליקציית הניהול
+    app_port: int = int(os.getenv("APP_PORT", "5001"))
     # קישור לאתר שמופיע בחתימת המייל
     agent_website: str = os.getenv("AGENT_WEBSITE", "https://tech.sy-nero.com/")
     agent_smtp_user: str = os.getenv("AGENT_SMTP_USER", "")

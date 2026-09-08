@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}קמפיינים — סינרו טק{% endblock %}</title>
+<style>
+  :root {
+    --bg:#f5f6f8; --card:#ffffff; --line:#dfe3e8; --ink:#1c2430;
+    --muted:#6b7683; --accent:#1a2e4a; --ok:#1e7a4d; --warn:#9a6b00;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font-family:'Segoe UI',Arial,Helvetica,sans-serif; font-size:15px;
+         line-height:1.6; }
+  header { background:var(--accent); color:#fff; padding:14px 22px;
+           display:flex; align-items:center; gap:18px; flex-wrap:wrap; }
+  header h1 { font-size:18px; margin:0; font-weight:600; }
+  header a { color:#cfe0f5; text-decoration:none; font-size:14px; }
+  header a:hover { color:#fff; }
+  main { padding:22px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:8px;
+          padding:18px; margin-bottom:18px; }
+  h2 { font-size:17px; margin:0 0 14px; }
+  table { border-collapse:collapse; width:100%; }
+  th, td { border:1px solid var(--line); padding:8px 10px; text-align:right;
+           vertical-align:top; }
+  th { background:#eef1f5; font-weight:600; font-size:14px; }
+  .rowhead { background:#f7f9fb; font-weight:600; white-space:nowrap; }
+  .num { text-align:center; font-variant-numeric:tabular-nums; }
+  .auto { background:#f0f7f2; }
+  .muted { color:var(--muted); font-size:13px; }
+  input[type=text], input[type=date], textarea, select {
+      width:100%; padding:7px 9px; border:1px solid var(--line);
+      border-radius:5px; font-family:inherit; font-size:14px; background:#fff; }
+  textarea { min-height:56px; resize:vertical; }
+  button, .btn { background:var(--accent); color:#fff; border:0; border-radius:5px;
+                 padding:8px 16px; font-size:14px; cursor:pointer;
+                 text-decoration:none; display:inline-block; font-family:inherit; }
+  button.ghost, .btn.ghost { background:#fff; color:var(--accent);
+                             border:1px solid var(--line); }
+  button.danger { background:#fff; color:#a33; border:1px solid #e6c9c9; }
+  .flash { background:#e8f3ec; border:1px solid #bcdcc8; color:var(--ok);
+           padding:10px 14px; border-radius:6px; margin-bottom:16px; }
+  .warn { background:#fdf6e3; border:1px solid #e8d9a8; color:var(--warn);
+          padding:10px 14px; border-radius:6px; margin-bottom:16px; font-size:14px; }
+  .scroll { overflow-x:auto; }
+  .mail { background:#fbfcfd; border:1px solid var(--line); border-radius:6px;
+          padding:12px 14px; white-space:pre-wrap; font-size:14px; }
+  .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
+  .stat { display:inline-block; margin-left:22px; }
+  .stat b { font-size:22px; display:block; }
+</style>
+</head>
+<body>
+<header>
+  <h1>לוח הקמפיינים</h1>
+  <a href="{{ url_for('board') }}">כל הקמפיינים</a>
+</header>
+<main>
+  {% with msgs = get_flashed_messages() %}
+    {% for m in msgs %}<div class="flash">{{ m }}</div>{% endfor %}
+  {% endwith %}
+  {% block body %}{% endblock %}
+</main>
+</body>
+</html>

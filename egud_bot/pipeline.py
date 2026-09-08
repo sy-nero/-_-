@@ -15,7 +15,7 @@ from egud_bot.filters import (BusinessLead, passes_filters,
                               passes_filters_agent,
                               is_blocked_email, looks_established)
 from egud_bot.email_finder import find_email
-from egud_bot import recommendations
+from egud_bot import recommendations, tracking
 from egud_bot.storage import Storage
 from egud_bot.mailer import Mailer
 from egud_bot import templates
@@ -236,7 +236,7 @@ def enrich_missing_emails(cfg: Config, storage: Storage, limit: int = 50) -> dic
 def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
                 campaign: str = "funding", skip_contacted: bool = False,
                 limit: int | None = None, confirm=None, confirm_batch=None,
-                variant: str = "") -> dict:
+                variant: str = "", only=None) -> dict:
     """
     שולח מייל ללידים חדשים שיש להם כתובת מייל (עד המכסה בהרצה).
     skip_contacted=True מדלג על כל מי שקיבל מייל באיזשהו קמפיין אחר
@@ -248,6 +248,8 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
     (confirm_batch), ורק אז נפתח חיבור ה-SMTP ונשלח.
     variant — "a" או "b" בבדיקת A/B: איזה נוסח לשלוח. כל נמען משויך לנוסח
     אחד בלבד, ומי שכבר קיבל נוסח לא ייכנס לקבוצה השנייה.
+    only — אוסף place_id לשליחה. מסונן לפני חיתוך המכסה, כדי שבחירה מפורשת
+    של נמענים לא תיחתך על ידי limit.
     """
     # נוסח ב' הוא תבנית נפרדת; ברירת המחדל (ובנוסח א') היא תבנית הקמפיין
     template_campaign = f"{campaign}_offer" if variant == "b" else campaign
@@ -265,6 +267,9 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
         small = [l for l in remaining if not looks_established(l["name"], l["email"])]
         remaining = [l for l in remaining if looks_established(l["name"], l["email"])]
     skipped = [l for l in remaining if (l["email"] or "").lower() in sent_before]
+    if only is not None:            # בחירה מפורשת — לפני חיתוך המכסה
+        only = set(only)
+        remaining = [l for l in remaining if l["place_id"] in only]
     max_this_run = limit if limit else cfg.max_emails_per_run
     leads = [l for l in remaining
              if (l["email"] or "").lower() not in sent_before][:max_this_run]
@@ -336,8 +341,15 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
         for lead in leads:
             subject, html, text = templates.render(
                 template_campaign, **build_ctx(cfg, campaign, lead))
+            # פיקסל מעקב פתיחות (רק אם הוגדרה כתובת ציבורית)
+            track_id = ""
+            if cfg.tracking_base_url:
+                track_id = tracking.new_track_id()
+                html = tracking.add_pixel(html, cfg.tracking_base_url, track_id)
             try:
                 mailer.send(lead["email"], subject, html, text)
+                if track_id:
+                    storage.set_track_id(lead["place_id"], track_id)
                 storage.mark_emailed(lead["place_id"], success=True)
                 if variant:
                     storage.set_variant(lead["place_id"], variant)

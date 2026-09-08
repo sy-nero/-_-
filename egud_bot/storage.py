@@ -35,6 +35,9 @@ CREATE TABLE IF NOT EXISTS leads (
     found_at        TEXT,
     emailed_at      TEXT,
     variant         TEXT,                   -- איזה נוסח נשלח לו: a / b
+    track_id        TEXT,                   -- מזהה לפיקסל מעקב הפתיחות
+    opened_at       TEXT,                   -- מתי נפתח המייל בפעם הראשונה
+    open_count      INTEGER DEFAULT 0,      -- כמה פעמים נפתח
     replied_at      TEXT,                   -- מתי הוא השיב (נרשם ידנית)
     reply_note      TEXT                    -- טלפון שהשאיר / הערה
 );
@@ -67,7 +70,7 @@ class Storage:
             # מיגרציה: הוספת עמודות ל-DB ישן (אם חסרות)
             for column in ("types", "first_name", "intro_how", "intro_fact",
                            "intro_why", "rec_json", "variant", "replied_at",
-                           "reply_note"):
+                           "reply_note", "track_id", "opened_at", "open_count"):
                 try:
                     conn.execute(f"ALTER TABLE leads ADD COLUMN {column} TEXT")
                 except sqlite3.OperationalError:
@@ -184,6 +187,61 @@ class Storage:
             else:
                 conn.execute("UPDATE leads SET variant=? WHERE place_id=?",
                              (variant, place_id))
+
+    def set_track_id(self, place_id: str, track_id: str) -> None:
+        with self._conn() as conn:
+            conn.execute("UPDATE leads SET track_id=? WHERE place_id=?",
+                         (track_id, place_id))
+
+    def mark_opened(self, track_id: str) -> bool:
+        """רושם פתיחת מייל. מחזיר True אם זו הפתיחה הראשונה."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT place_id, opened_at FROM leads WHERE track_id=?",
+                (track_id,)).fetchone()
+            if not row:
+                return False
+            first = not row["opened_at"]
+            conn.execute(
+                """UPDATE leads SET opened_at=COALESCE(NULLIF(opened_at,''), ?),
+                   open_count=COALESCE(open_count,0)+1 WHERE track_id=?""",
+                (_now(), track_id))
+            return first
+
+    def variant_metrics(self, variant: str = "") -> dict:
+        """נשלחו / נפתחו / השיבו — לנוסח מסוים או לקמפיין כולו."""
+        where = "variant = ?" if variant else "variant IS NOT NULL AND variant != ''"
+        params = (variant,) if variant else ()
+        with self._conn() as conn:
+            row = conn.execute(
+                f"""SELECT COUNT(DISTINCT lower(email)) AS sent,
+                       COUNT(DISTINCT CASE WHEN opened_at IS NOT NULL AND opened_at != ''
+                             THEN lower(email) END) AS opened,
+                       COUNT(DISTINCT CASE WHEN replied_at IS NOT NULL AND replied_at != ''
+                             THEN lower(email) END) AS replied
+                    FROM leads WHERE {where}""", params).fetchone()
+            return {"sent": row["sent"], "opened": row["opened"],
+                    "replied": row["replied"]}
+
+    def lead_by_email(self, email: str):
+        with self._conn() as conn:
+            return conn.execute(
+                "SELECT * FROM leads WHERE lower(email)=lower(?) LIMIT 1",
+                ((email or "").strip(),)).fetchone()
+
+    def sent_leads(self, variant: str = "", limit: int = 500):
+        """מי כבר קיבל מייל — לתצוגה באפליקציה."""
+        where = "status='emailed'"
+        params = []
+        if variant:
+            where += " AND variant=?"
+            params.append(variant)
+        params.append(limit)
+        with self._conn() as conn:
+            return conn.execute(
+                f"""SELECT * FROM leads WHERE {where}
+                    GROUP BY lower(email) ORDER BY emailed_at DESC LIMIT ?""",
+                params).fetchall()
 
     def mark_replied(self, email: str, note: str = "") -> int:
         """רושם שהסוכן השיב (וטלפון/הערה אם יש). מחזיר כמה שורות עודכנו."""

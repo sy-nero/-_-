@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block body %}
+
+{% if not tracking_on %}
+<div class="warn">
+  מעקב הפתיחות כבוי. כדי למדוד פתיחות צריך להגדיר <code>TRACKING_BASE_URL</code>
+  ב-<code>.env</code> — כתובת של האפליקציה הזאת שנגישה מהאינטרנט. פיקסל
+  שמצביע ל-localhost לא ייטען אצל אף נמען, ולכן "כמות פתיחות" תישאר 0.
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>קמפיין חדש</h2>
+  <form method="post" action="{{ url_for('campaign_new') }}" class="grid3">
+    <input type="text" name="title" placeholder="שם הקמפיין (למשל: 0.1 מיילים כללי)" required>
+    <select name="kind">
+      <option value="email">מיילים</option>
+      <option value="phone">שיחות טלפון</option>
+    </select>
+    <div style="display:flex; gap:8px;">
+      <input type="text" name="source_campaign" placeholder="מאגר (agent)" value="agent">
+      <select name="variant">
+        <option value="">כל הנוסחים</option>
+        <option value="a">נוסח א׳</option>
+        <option value="b">נוסח ב׳</option>
+      </select>
+      <button type="submit">הוסף</button>
+    </div>
+  </form>
+</div>
+
+<div class="card scroll">
+  <h2>הלוח</h2>
+  {% if not columns %}
+    <p class="muted">עוד אין קמפיינים. הוסיפי אחד למעלה.</p>
+  {% else %}
+  <table>
+    <tr>
+      <th></th>
+      {% for col in columns %}
+        <th colspan="3">
+          <a href="{{ url_for('campaign_edit', campaign_id=col.campaign['id']) }}">
+            {{ col.campaign['title'] }}</a>
+          <div class="muted">{{ 'מיילים' if col.campaign['kind'] == 'email' else 'טלפונים' }}</div>
+        </th>
+      {% endfor %}
+    </tr>
+    <tr>
+      <th></th>
+      {% for col in columns %}
+        <th>פרטים</th><th>הערות</th><th>המלצות לשיפור</th>
+      {% endfor %}
+    </tr>
+    <tr>
+      <td class="rowhead">תאריך</td>
+      {% for col in columns %}
+        <td>{{ col.campaign['started_on'] or '' }}</td><td></td><td></td>
+      {% endfor %}
+    </tr>
+    {% for field in text_fields %}
+    <tr>
+      <td class="rowhead">{{ field }}</td>
+      {% for col in columns %}
+        <td>{{ col.fields[field].value }}</td>
+        <td>{{ col.fields[field].note }}</td>
+        <td>{{ col.fields[field].improve }}</td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+    {% for field in auto_fields %}
+    <tr>
+      <td class="rowhead">{{ field }}</td>
+      {% for col in columns %}
+        <td class="num auto">{{ col.fields[field].value }}</td>
+        <td>{{ col.fields[field].note }}</td>
+        <td>{{ col.fields[field].improve }}</td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+    {% for field in manual_fields %}
+    <tr>
+      <td class="rowhead">{{ field }}</td>
+      {% for col in columns %}
+        <td class="num">{{ col.fields[field].value }}</td>
+        <td>{{ col.fields[field].note }}</td>
+        <td>{{ col.fields[field].improve }}</td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+    <tr>
+      <td class="rowhead">אחוז פתיחה / תגובה</td>
+      {% for col in columns %}
+        <td class="num auto" colspan="3">
+          {{ col.open_rate }} פתיחה &nbsp;·&nbsp; {{ col.reply_rate }} תגובה
+        </td>
+      {% endfor %}
+    </tr>
+  </table>
+  <p class="muted">השורות בירוק נמדדות אוטומטית מהמיילים שנשלחו ולא ניתן לערוך אותן ידנית.</p>
+  {% endif %}
+</div>
+{% endblock %}
