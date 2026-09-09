@@ -3,61 +3,174 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}קמפיינים — סינרו טק{% endblock %}</title>
+<title>{% block title %}לוח הקמפיינים — סינרו טק{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg:#f5f6f8; --card:#ffffff; --line:#dfe3e8; --ink:#1c2430;
-    --muted:#6b7683; --accent:#1a2e4a; --ok:#1e7a4d; --warn:#9a6b00;
+    --bg:#f2f4f7;
+    --surface:#ffffff;
+    --line:#e3e8ef;
+    --line-strong:#cfd6e0;
+    --ink:#16202e;
+    --ink-2:#48566a;
+    --muted:#8a97a8;
+    --brand:#16324f;
+    --brand-soft:#eef3f9;
+    --good:#1f7a52;
+    --good-soft:#eaf5ef;
+    --warn-ink:#8a6100;
+    --warn-bg:#fdf7e7;
+    --warn-line:#f0e0b6;
+    --radius:12px;
+    --shadow:0 1px 2px rgba(16,32,48,.05), 0 4px 16px rgba(16,32,48,.05);
   }
   * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--ink);
-         font-family:'Segoe UI',Arial,Helvetica,sans-serif; font-size:15px;
-         line-height:1.6; }
-  header { background:var(--accent); color:#fff; padding:14px 22px;
-           display:flex; align-items:center; gap:18px; flex-wrap:wrap; }
-  header h1 { font-size:18px; margin:0; font-weight:600; }
-  header a { color:#cfe0f5; text-decoration:none; font-size:14px; }
-  header a:hover { color:#fff; }
-  main { padding:22px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:8px;
-          padding:18px; margin-bottom:18px; }
-  h2 { font-size:17px; margin:0 0 14px; }
-  table { border-collapse:collapse; width:100%; }
-  th, td { border:1px solid var(--line); padding:8px 10px; text-align:right;
-           vertical-align:top; }
-  th { background:#eef1f5; font-weight:600; font-size:14px; }
-  .rowhead { background:#f7f9fb; font-weight:600; white-space:nowrap; }
-  .num { text-align:center; font-variant-numeric:tabular-nums; }
-  .auto { background:#f0f7f2; }
+  html, body { height:100%; }
+  body {
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:'Assistant','Segoe UI',Arial,sans-serif;
+    font-size:15px; line-height:1.65; -webkit-font-smoothing:antialiased;
+  }
+  a { color:var(--brand); }
+
+  /* ---------- מסגרת ---------- */
+  header.top {
+    position:sticky; top:0; z-index:30;
+    background:var(--brand); color:#fff;
+    padding:0 26px; height:58px;
+    display:flex; align-items:center; gap:24px;
+    box-shadow:0 1px 0 rgba(0,0,0,.08);
+  }
+  header.top .brand { font-size:17px; font-weight:700; letter-spacing:-.2px; }
+  header.top .brand span { opacity:.55; font-weight:400; margin-inline-start:8px;
+                           font-size:14px; }
+  header.top nav a { color:#c8d7e8; text-decoration:none; font-size:14.5px;
+                     padding:6px 2px; }
+  header.top nav a:hover { color:#fff; }
+  main { padding:26px; max-width:1600px; margin:0 auto; }
+
+  h2 { font-size:16px; font-weight:700; margin:0 0 4px; letter-spacing:-.2px; }
+  .sub { color:var(--muted); font-size:13.5px; margin:0 0 18px; }
   .muted { color:var(--muted); font-size:13px; }
+
+  .card {
+    background:var(--surface); border:1px solid var(--line);
+    border-radius:var(--radius); padding:20px 22px; margin-bottom:20px;
+    box-shadow:var(--shadow);
+  }
+  .card.tight { padding:16px 18px; }
+
+  /* ---------- כרטיסי סיכום ---------- */
+  .cards { display:grid; gap:16px; margin-bottom:22px;
+           grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); }
+  .ccard { background:var(--surface); border:1px solid var(--line);
+           border-radius:var(--radius); padding:18px 20px; box-shadow:var(--shadow);
+           display:flex; flex-direction:column; gap:14px; text-decoration:none;
+           color:inherit; transition:border-color .15s, transform .15s; }
+  .ccard:hover { border-color:var(--line-strong); transform:translateY(-1px); }
+  .ccard .actions { display:flex; gap:8px; align-items:center; }
+  .ccard .name { font-weight:700; font-size:15.5px; }
+  .chip { display:inline-block; font-size:12px; padding:2px 9px; border-radius:20px;
+          background:var(--brand-soft); color:var(--brand); font-weight:600; }
+  .chip.phone { background:#f4efe6; color:#7a5a1e; }
+  .kpis { display:flex; gap:18px; }
+  .kpi b { display:block; font-size:23px; font-weight:700; line-height:1.15;
+           font-variant-numeric:tabular-nums; }
+  .kpi span { font-size:12.5px; color:var(--muted); }
+  .bar { height:6px; border-radius:99px; background:#eef1f5; overflow:hidden;
+         display:flex; }
+  .bar i { display:block; height:100%; }
+  .bar .open { background:#7aa8d6; }
+  .bar .reply { background:var(--good); }
+
+  /* ---------- טבלאות ---------- */
+  .scroll { overflow-x:auto; border-radius:10px; border:1px solid var(--line); }
+  table { border-collapse:separate; border-spacing:0; width:100%;
+          background:var(--surface); }
+  th, td { padding:11px 14px; text-align:right; vertical-align:top;
+           border-bottom:1px solid var(--line); font-size:14px; }
+  thead th { background:#f7f9fc; font-weight:600; color:var(--ink-2);
+             white-space:nowrap; }
+  tbody tr:hover td { background:#fbfcfe; }
+  tbody tr:last-child td { border-bottom:0; }
+  .rowhead { background:#f7f9fc; font-weight:600; white-space:nowrap;
+             position:sticky; inset-inline-start:0; z-index:4;
+             border-inline-end:1px solid var(--line); }
+  tbody tr:hover .rowhead { background:#f3f6fa; }
+  .colhead { font-weight:700; font-size:15px; }
+  .num { text-align:center; font-variant-numeric:tabular-nums; font-size:15px; }
+  .auto { background:var(--good-soft); }
+  .auto b { color:var(--good); }
+  .subhead th { font-size:12.5px; color:var(--muted); font-weight:600;
+                background:#fafbfd; }
+
+  /* ---------- טפסים ---------- */
+  label.field { display:block; }
+  label.field > span { display:block; font-size:13px; color:var(--ink-2);
+                       margin-bottom:5px; font-weight:600; }
   input[type=text], input[type=date], textarea, select {
-      width:100%; padding:7px 9px; border:1px solid var(--line);
-      border-radius:5px; font-family:inherit; font-size:14px; background:#fff; }
-  textarea { min-height:56px; resize:vertical; }
-  button, .btn { background:var(--accent); color:#fff; border:0; border-radius:5px;
-                 padding:8px 16px; font-size:14px; cursor:pointer;
-                 text-decoration:none; display:inline-block; font-family:inherit; }
-  button.ghost, .btn.ghost { background:#fff; color:var(--accent);
-                             border:1px solid var(--line); }
-  button.danger { background:#fff; color:#a33; border:1px solid #e6c9c9; }
-  .flash { background:#e8f3ec; border:1px solid #bcdcc8; color:var(--ok);
-           padding:10px 14px; border-radius:6px; margin-bottom:16px; }
-  .warn { background:#fdf6e3; border:1px solid #e8d9a8; color:var(--warn);
-          padding:10px 14px; border-radius:6px; margin-bottom:16px; font-size:14px; }
-  .scroll { overflow-x:auto; }
-  .mail { background:#fbfcfd; border:1px solid var(--line); border-radius:6px;
-          padding:12px 14px; white-space:pre-wrap; font-size:14px;
-          /* כל שורה לפי הכיווניות שלה, כדי שכתובות לטיניות לא יתהפכו */
-          unicode-bidi:plaintext; }
-  .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
-  .stat { display:inline-block; margin-left:22px; }
-  .stat b { font-size:22px; display:block; }
+      width:100%; padding:9px 11px; border:1px solid var(--line-strong);
+      border-radius:8px; font-family:inherit; font-size:14px; background:#fff;
+      color:var(--ink); transition:border-color .15s, box-shadow .15s; }
+  input:focus, textarea:focus, select:focus {
+      outline:0; border-color:#8fb3d9; box-shadow:0 0 0 3px rgba(143,179,217,.25); }
+  textarea { min-height:52px; resize:vertical; line-height:1.5; }
+  .grid { display:grid; gap:14px; }
+  .grid.c2 { grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); }
+  .grid.c3 { grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); }
+
+  .btn, button {
+      background:var(--brand); color:#fff; border:1px solid var(--brand);
+      border-radius:8px; padding:9px 18px; font-size:14.5px; font-weight:600;
+      cursor:pointer; text-decoration:none; display:inline-block;
+      font-family:inherit; transition:filter .15s; }
+  .btn:hover, button:hover { filter:brightness(1.15); }
+  .btn.ghost, button.ghost { background:#fff; color:var(--brand);
+                             border-color:var(--line-strong); font-weight:600; }
+  .btn.ghost:hover, button.ghost:hover { background:#f7f9fc; filter:none; }
+  button.danger { background:#fff; color:#a13b3b; border-color:#e8cccc; }
+  button.small { padding:6px 12px; font-size:13px; }
+
+  .flash { background:var(--good-soft); border:1px solid #c3e2d2; color:var(--good);
+           padding:11px 16px; border-radius:10px; margin-bottom:18px;
+           font-weight:600; font-size:14px; }
+  .warn { background:var(--warn-bg); border:1px solid var(--warn-line);
+          color:var(--warn-ink); padding:12px 16px; border-radius:10px;
+          margin-bottom:20px; font-size:14px; }
+  .warn b { font-weight:700; }
+
+  /* ---------- שליחה ---------- */
+  .rcard { border:1px solid var(--line); border-radius:var(--radius);
+           background:var(--surface); margin-bottom:12px; box-shadow:var(--shadow);
+           transition:border-color .15s, background .15s; }
+  .rcard:has(input:checked) { border-color:#8fb3d9; background:#fbfdff; }
+  .rhead { display:flex; gap:12px; align-items:flex-start; padding:14px 18px;
+           cursor:pointer; }
+  .rhead input { width:17px; height:17px; margin-top:4px; accent-color:var(--brand);
+                 flex:none; }
+  .rname { font-weight:700; }
+  .remail { color:var(--muted); font-size:13px; unicode-bidi:plaintext; }
+  details.preview { border-top:1px solid var(--line); }
+  details.preview > summary { padding:9px 18px; cursor:pointer; font-size:13.5px;
+      color:var(--ink-2); font-weight:600; list-style:none; }
+  details.preview > summary::-webkit-details-marker { display:none; }
+  details.preview > summary::before { content:"▾ "; color:var(--muted); }
+  details.preview[open] > summary::before { content:"▴ "; }
+  .mail { padding:6px 22px 20px; white-space:pre-wrap; font-size:14px;
+          line-height:1.75; color:var(--ink-2); unicode-bidi:plaintext; }
+  .mail .subject { color:var(--ink); font-weight:700; margin-bottom:10px; }
+  .actionbar { display:flex; align-items:center; gap:16px; margin-top:18px;
+               padding-top:16px; border-top:1px solid var(--line); flex-wrap:wrap; }
+  .ok { color:var(--good); font-weight:700; }
+  .dash { color:var(--muted); }
 </style>
 </head>
 <body>
-<header>
-  <h1>לוח הקמפיינים</h1>
-  <a href="{{ url_for('board') }}">כל הקמפיינים</a>
+<header class="top">
+  <div class="brand">לוח הקמפיינים <span>סינרו טק</span></div>
+  <nav><a href="{{ url_for('board') }}">כל הקמפיינים</a></nav>
 </header>
 <main>
   {% with msgs = get_flashed_messages() %}

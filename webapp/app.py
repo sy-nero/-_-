@@ -64,12 +64,16 @@ def campaign_view(campaign) -> dict:
     fields["כמות פניות"]["value"] = str(metrics["sent"])
     fields["כמות פתיחות"]["value"] = str(metrics["opened"])
     fields["הודעה חוזרת"]["value"] = str(metrics["replied"])
-    open_rate = (f"{metrics['opened'] * 100 // metrics['sent']}%"
-                 if metrics["sent"] else "—")
-    reply_rate = (f"{metrics['replied'] * 100 // metrics['sent']}%"
-                  if metrics["sent"] else "—")
+    open_pct = (metrics["opened"] * 100 // metrics["sent"]) if metrics["sent"] else 0
+    reply_pct = (metrics["replied"] * 100 // metrics["sent"]) if metrics["sent"] else 0
+
+    st = leads_store(campaign["source_campaign"])
+    pending = len(st.leads_to_email(10 ** 6)) if st else 0
+
     return {"campaign": campaign, "fields": fields, "metrics": metrics,
-            "open_rate": open_rate, "reply_rate": reply_rate}
+            "open_rate": f"{open_pct}%" if metrics["sent"] else "—",
+            "reply_rate": f"{reply_pct}%" if metrics["sent"] else "—",
+            "open_pct": open_pct, "reply_pct": reply_pct, "pending": pending}
 
 
 # ---------------------------- הלוח ----------------------------
@@ -139,7 +143,7 @@ def send_page(campaign_id):
         flash("לקמפיין הזה אין מאגר לידים מקושר")
         return redirect(url_for("campaign_edit", campaign_id=campaign_id))
 
-    limit = int(request.args.get("limit", 10))
+    limit = int(request.args.get("limit", 50))
     pending = st.leads_to_email(limit)
     previews = []
     for lead in pending:
@@ -152,6 +156,7 @@ def send_page(campaign_id):
         previews.append({"lead": lead, "subject": subject, "text": text})
 
     return render_template("send.html", campaign=campaign, previews=previews,
+                           sample=previews[0] if previews else None,
                            sent=st.sent_leads(campaign["variant"] or "", 200),
                            tracking_on=bool(config.tracking_base_url))
 

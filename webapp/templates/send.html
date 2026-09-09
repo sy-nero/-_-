@@ -4,67 +4,111 @@
 
 <div class="card">
   <h2>{{ campaign['title'] }} — שליחה</h2>
-  <p class="muted">
-    כל מייל מוצג במלואו לפני השליחה. סמני את מי שברצונך לשלוח אליו, ואשרי למטה.
+  <p class="sub">
+    1. מסמנים בטבלה למי לשלוח &nbsp;·&nbsp; 2. אפשר לפתוח כל שורה ולראות את
+    המייל המדויק שלה &nbsp;·&nbsp; 3. לוחצים על כפתור השליחה למטה.
     {% if not tracking_on %}<br>מעקב פתיחות כבוי — המיילים יישלחו בלי פיקסל מדידה.{% endif %}
   </p>
   <a class="btn ghost" href="{{ url_for('campaign_edit', campaign_id=campaign['id']) }}">
     חזרה לקמפיין</a>
 </div>
 
+{% if sample %}
+<div class="card">
+  <h2>כך ייראה המייל</h2>
+  <p class="sub">הדוגמה של {{ sample.lead['name'] }}. השם, התחום והעיר משתנים לכל נמען.</p>
+  <div class="mail" style="padding:0;"><div class="subject">נושא: {{ sample.subject }}</div>{{ sample.text }}</div>
+</div>
+{% endif %}
+
 <form method="post">
-{% if not previews %}
-  <div class="card"><p class="muted">אין נמענים ממתינים במאגר. אפשר להריץ סריקה
-  או <code>enrich</code> כדי להוסיף.</p></div>
-{% endif %}
-
-{% for p in previews %}
 <div class="card">
-  <label style="display:flex; gap:10px; align-items:flex-start;">
-    <input type="checkbox" name="place_id" value="{{ p.lead['place_id'] }}"
-           style="width:auto; margin-top:5px;">
-    <span>
-      <b>{{ p.lead['name'] }}</b>
-      &lt;{{ p.lead['email'] }}&gt;
-      <div class="muted">{{ p.lead['neighborhood'] }} ·
-        {{ p.lead['review_count'] }} ביקורות · דירוג {{ p.lead['rating'] or '—' }}</div>
-    </span>
-  </label>
-  <p style="margin:12px 0 6px;"><b>נושא:</b> {{ p.subject }}</p>
-  <div class="mail">{{ p.text }}</div>
-</div>
-{% endfor %}
+  <h2>ממתינים לשליחה ({{ previews|length }})</h2>
+  {% if not previews %}
+    <p class="muted">אין נמענים ממתינים במאגר. אפשר להריץ <code>scan</code> או
+      <code>enrich</code> בטרמינל כדי להוסיף.</p>
+  {% else %}
+  <div class="scroll">
+  <table>
+    <thead>
+      <tr>
+        <th style="width:44px;"><input type="checkbox" id="all"
+              onclick="document.querySelectorAll('.pick').forEach(c=>c.checked=this.checked);count()"></th>
+        <th>נמען</th><th>מייל</th><th>אזור</th><th>ביקורות</th><th>דירוג</th><th>המייל שלו</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in previews %}
+      <tr>
+        <td><input class="pick" type="checkbox" name="place_id"
+                   value="{{ p.lead['place_id'] }}" onclick="count()"
+                   style="width:17px;height:17px;accent-color:#16324f;"></td>
+        <td><b>{{ p.lead['name'] }}</b></td>
+        <td class="remail">{{ p.lead['email'] }}</td>
+        <td>{{ p.lead['neighborhood'] }}</td>
+        <td class="num">{{ p.lead['review_count'] }}</td>
+        <td class="num">{{ p.lead['rating'] or '—' }}</td>
+        <td><button type="button" class="ghost small"
+              onclick="var r=document.getElementById('m{{ loop.index }}');
+                       r.hidden=!r.hidden;">הצגה</button></td>
+      </tr>
+      <tr id="m{{ loop.index }}" hidden>
+        <td colspan="7" style="background:#fbfcfe;">
+          <div class="mail" style="padding:4px 0 6px;"><div class="subject">נושא: {{ p.subject }}</div>{{ p.text }}</div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
 
-{% if previews %}
-<div class="card">
-  <button type="submit">שליחה לנמענים שסומנו</button>
-  <span class="muted">&nbsp; אחרי הלחיצה המיילים יוצאים מיד.</span>
+  <div class="actionbar">
+    <button type="submit">שליחה לנמענים שסומנו</button>
+    <span id="chosen" class="muted">לא נבחר אף נמען</span>
+    <span class="muted" style="margin-inline-start:auto;">אחרי הלחיצה המיילים יוצאים מיד.</span>
+  </div>
+  {% endif %}
 </div>
-{% endif %}
 </form>
 
-<div class="card scroll">
+<div class="card">
   <h2>נשלחו ({{ sent|length }})</h2>
   {% if not sent %}<p class="muted">עוד לא נשלח דבר בקמפיין הזה.</p>{% else %}
+  <div class="scroll">
   <table>
-    <tr><th>נמען</th><th>מייל</th><th>נפתח</th><th>השיב</th><th>רישום תשובה</th></tr>
+    <thead><tr><th>נמען</th><th>מייל</th><th>נפתח</th><th>תשובה</th>
+      <th>רישום תשובה</th></tr></thead>
+    <tbody>
     {% for lead in sent %}
     <tr>
-      <td>{{ lead['name'] }}</td>
-      <td class="muted">{{ lead['email'] }}</td>
-      <td class="num">{{ '✓' if lead['opened_at'] else '—' }}</td>
-      <td class="num">{{ lead['reply_note'] or ('✓' if lead['replied_at'] else '—') }}</td>
+      <td><b>{{ lead['name'] }}</b></td>
+      <td class="remail">{{ lead['email'] }}</td>
+      <td class="num">{% if lead['opened_at'] %}<span class="ok">✓</span>
+        {% else %}<span class="dash">—</span>{% endif %}</td>
+      <td>{% if lead['reply_note'] %}{{ lead['reply_note'] }}
+        {% elif lead['replied_at'] %}<span class="ok">✓</span>
+        {% else %}<span class="dash">—</span>{% endif %}</td>
       <td>
         <form method="post" action="{{ url_for('mark_replied', campaign_id=campaign['id']) }}"
               style="display:flex; gap:6px;">
           <input type="hidden" name="email" value="{{ lead['email'] }}">
-          <input type="text" name="note" placeholder="טלפון שהשאיר">
-          <button type="submit" class="ghost">רישום</button>
+          <input type="text" name="note" placeholder="הטלפון שהשאיר">
+          <button type="submit" class="ghost small">רישום</button>
         </form>
       </td>
     </tr>
     {% endfor %}
+    </tbody>
   </table>
+  </div>
   {% endif %}
 </div>
+
+<script>
+  function count() {
+    var n = document.querySelectorAll('.pick:checked').length;
+    document.getElementById('chosen').textContent =
+      n ? ('נבחרו ' + n + ' נמענים') : 'לא נבחר אף נמען';
+  }
+</script>
 {% endblock %}
