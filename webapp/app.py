@@ -12,6 +12,7 @@
   * שליחת מיילים מתוך האפליקציה, עם תצוגה מקדימה לפני כל שליחה.
   * מדידה אוטומטית: נשלחו, נפתחו (פיקסל), השיבו.
 """
+import logging
 import os
 import sys
 
@@ -27,6 +28,8 @@ from flask import (Flask, request, render_template, redirect,  # noqa: E402
 
 from config import config  # noqa: E402
 from egud_bot import db, pipeline, templates as mail_templates, tracking  # noqa: E402
+
+logger = logging.getLogger(__name__)
 from webapp.jobs import runner  # noqa: E402
 from egud_bot.campaigns import (CampaignStore, TEXT_FIELDS, AUTO_FIELDS,  # noqa: E402
                                 MANUAL_FIELDS, ALL_FIELDS)
@@ -117,11 +120,28 @@ def leads_db_path(source_campaign: str) -> str:
             else os.path.join(config.data_dir, f"leads_{source_campaign}.db"))
 
 
-def leads_store(source_campaign: str):
+def leads_store_or_error(source_campaign: str) -> tuple[Storage | None, str]:
+    """
+    מאגר הלידים של הקמפיין, ואם הוא לא נגיש — הסיבה.
+
+    בדיקת קיום הקובץ תקפה רק לאחסון מקומי. ב-D1 אין קובץ בכלל, ולכן
+    הבדיקה הזאת החזירה None תמיד — והמספרים בטבלה נשארו אפס גם כשהסריקה
+    כן שמרה נתונים. וכשהחיבור ל-D1 שגוי צריך לומר זאת, לא להציג אפסים.
+    """
     path = leads_db_path(source_campaign)
-    if not path or not os.path.exists(path):
-        return None
-    return Storage(path, campaign=source_campaign)
+    if not path:
+        return None, ""
+    if not db.d1_configured() and not os.path.exists(path):
+        return None, ""       # עוד לא נסרק כלום — לא שגיאה
+    try:
+        return Storage(path, campaign=source_campaign), ""
+    except Exception as exc:  # noqa: BLE001 — כשל אחסון לא מפיל את העמוד
+        logger.warning("מאגר הלידים %s לא נגיש: %s", source_campaign, exc)
+        return None, str(exc)
+
+
+def leads_store(source_campaign: str):
+    return leads_store_or_error(source_campaign)[0]
 
 
 def auto_metrics(campaign) -> dict:
@@ -162,20 +182,21 @@ def _col(row, name: str) -> str:
         return ""
 
 
-def pool_of(campaign) -> dict:
+def pool_of(campaign) -> tuple[dict, str]:
     """
     מצב מאגר הלידים של הקמפיין: כמה נסרקו, לכמה יש מייל, כמה ממתינים.
 
     נקרא רק בעמוד הקמפיין הבודד ולא בלוח — ב-D1 כל שאילתה היא קריאת רשת,
     ובלוח זה היה מכפיל את זמן הטעינה במספר הקמפיינים.
     """
-    st = leads_store(_col(campaign, "source_campaign") or "agent")
+    st, error = leads_store_or_error(_col(campaign, "source_campaign") or "agent")
     if not st:
-        return {}
+        return {}, error
     try:
-        return st.funnel()
-    except Exception:  # noqa: BLE001 — מאגר חסר לא מפיל את העמוד
-        return {}
+        return st.funnel(), ""
+    except Exception as exc:  # noqa: BLE001 — כשל אחסון לא מפיל את העמוד
+        logger.warning("קריאת מאגר הלידים נכשלה: %s", exc)
+        return {}, str(exc)
 
 
 def campaign_view(campaign) -> dict:
@@ -261,9 +282,10 @@ def campaign_edit(campaign_id):
                                 saved=1) + "#scan")
 
     view = campaign_view(campaign)
+    pool = pool_of(campaign)
     return render_template("campaign.html", **view, text_fields=TEXT_FIELDS,
                            auto_fields=AUTO_FIELDS, manual_fields=MANUAL_FIELDS,
-                           cities=CITIES, pool=pool_of(campaign),
+                           cities=CITIES, pool=pool[0], pool_error=pool[1],
                            min_reviews=config.agent_min_reviews,
                            min_rating=config.agent_min_rating,
                            terms=pipeline.split_query(_col(campaign, "search_query")),
@@ -562,7 +584,19 @@ def backup_upload():
 
 @app.route("/health")
 def health():
-    return {"status": "ok", "tracking": bool(config.tracking_base_url)}
+    """
+    בדיקת חיים — כולל האחסון עצמו. בלי זה כשל בהגדרות D1 היה מתגלה רק
+    בכך שהמספרים בטבלה נשארים אפס, בלי שום הודעה.
+    """
+    info = {"status": "ok", "tracking": bool(config.tracking_base_url),
+            "storage": "d1" if db.d1_configured() else "local",
+            "password": bool(config.app_password)}
+    try:
+        store.all()
+        info["storage_ok"] = True
+    except Exception as exc:  # noqa: BLE001 — זה בדיוק מה שהבדיקה מדווחת
+        info.update(status="degraded", storage_ok=False, storage_error=str(exc)[:300])
+    return info
 
 
 if __name__ == "__main__":

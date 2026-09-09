@@ -184,6 +184,15 @@
   </div>
   {% endif %}
 
+  {% if pool_error %}
+  <div class="warn">
+    <b>מאגר הלידים לא נגיש, ולכן המספרים כאן ובטבלה נשארים אפס.</b><br>
+    <code style="unicode-bidi:plaintext;">{{ pool_error }}</code><br>
+    אם כתוב "Could not route" — ה-<code>D1_ACCOUNT_ID</code> וה-<code>D1_DATABASE_ID</code>
+    מוחלפים במשתני הסביבה. ה-Account ID הוא 32 תווים בלי מקפים, ה-Database ID הוא
+    UUID עם מקפים.
+  </div>
+  {% endif %}
   {% if pool %}
   <div class="pool">
     {% for name, count in pool.items() %}

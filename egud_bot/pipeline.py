@@ -2,6 +2,8 @@
 תזמור התהליך המלא: סריקה -> סינון -> איתור מייל -> שמירה -> שליחה.
 """
 import json
+import math
+import os
 import re
 import time
 import logging
@@ -214,6 +216,23 @@ _NOISE_RE = re.compile(r"\s*(?:וכדומה|וכולי|וכדו|וכד|וכו|ו
 _EDGE = "-\u2013\u2014,.\"'\u201c\u201d\u05f4\u05f3 "
 
 
+# חיפוש הטקסט של Google מתייחס ל-location/radius כהטיה ולא כמסננת, ולכן
+# חיפוש "עורכי דין" סביב שכונה בירושלים מחזיר גם משרדים בתל אביב ובחיפה.
+# המרחק נמדד כאן ומי שרחוק מדי נפסל — אחרת המייל כותב "באזור ירושלים"
+# למשרד בראשון לציון.
+MAX_DISTANCE_KM = float(os.getenv("SCAN_MAX_DISTANCE_KM", "20"))
+
+
+def _distance_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    """מרחק אווירי בין שתי נקודות (haversine), בקילומטרים."""
+    r = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp = p2 - p1
+    dl = math.radians(lng2 - lng1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
+
+
 def split_query(query: str) -> list[str]:
     """
     מפרק את שדה "תחום לחיפוש" לרשימת מונחי חיפוש.
@@ -262,10 +281,11 @@ def scan_by_query(cfg: Config, storage: Storage, query: str,
 
     client = make_client(cfg, include_reviews=(campaign == "agent"))
     neighborhoods = neighborhoods_for(city)
-    summary = {"נסרקו": 0, "עברו סינון": 0, "חדשים": 0,
+    summary = {"נסרקו": 0, "רחוקים מדי": 0, "עברו סינון": 0, "חדשים": 0,
                "עם מייל": 0, "בלי מייל": 0, "עם המלצה": 0}
-    logger.info("תחומים לחיפוש: %s (לפחות %d ביקורות, דירוג %.1f ומעלה)",
-                " · ".join(terms), reviews_floor, rating_floor)
+    logger.info("תחומים לחיפוש: %s (לפחות %d ביקורות, דירוג %.1f ומעלה, "
+                "עד %g ק\"מ מהשכונה)",
+                " · ".join(terms), reviews_floor, rating_floor, MAX_DISTANCE_KM)
 
     for nb in neighborhoods:
         for term in terms:
@@ -277,6 +297,11 @@ def scan_by_query(cfg: Config, storage: Storage, query: str,
             for place in places.values():
                 lead = BusinessLead.from_place(place, neighborhood=nb.name)
                 if not lead.place_id:
+                    continue
+                # חיפוש הטקסט מחזיר גם עסקים בעיר אחרת לגמרי — פוסלים אותם
+                if lead.lat and lead.lng and _distance_km(
+                        nb.lat, nb.lng, lead.lat, lead.lng) > MAX_DISTANCE_KM:
+                    summary["רחוקים מדי"] += 1
                     continue
                 if not passes_filters_agent(lead, reviews_floor,
                                             cfg.require_operational,
