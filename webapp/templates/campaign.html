@@ -56,7 +56,7 @@
   </div>
 </div>
 
-<div class="card">
+<div class="card" id="what">
   <h2>מה לחפש ומה לשלוח</h2>
   <p class="sub">
     התחום נשלח לחיפוש בגוגל כפי שהוא — אפשר לכתוב "יועצים עסקיים",
@@ -65,7 +65,7 @@
   </p>
   <div class="grid c2">
     <label class="field"><span>תחום לחיפוש</span>
-      <input type="text" name="search_query" placeholder="יועצים עסקיים"
+      <input type="text" name="search_query" id="search_query" placeholder="יועצים עסקיים"
              value="{{ campaign['search_query'] or '' }}"></label>
     <label class="field"><span>נושא המייל</span>
       <input type="text" name="subject_tpl" placeholder="{{ '{{שם}}' }}, בקשר לשיתוף פעולה"
@@ -158,7 +158,8 @@
     <div style="grid-column:1/-1;" class="muted">
       יחפש בגוגל:
       {% for t in terms %}<span class="tag">{{ t }}</span>{% endfor %}
-      &middot; בשכונות החרדיות של העיר שנבחרה, עם לפחות 2 ביקורות ודירוג 4.0 ומעלה.
+      <a href="#what" class="editlink" onclick="return editQuery()">שינוי התחום</a><br>
+      בשכונות החרדיות של העיר שנבחרה, עם לפחות 2 ביקורות ודירוג 4.0 ומעלה.
       {% if busy %}<b>יש כרגע סריקה שרצה</b> — <a href="{{ url_for('jobs_page') }}">להתקדמות</a>.
       {% else %}התוצאות נכנסות למאגר <code>{{ campaign['source_campaign'] or 'agent' }}</code>
       והמספרים בטבלה מתעדכנים לבד.{% endif %}
@@ -166,7 +167,8 @@
   </form>
   {% else %}
   <div class="warn">
-    עוד לא הוגדר <b>תחום לחיפוש</b>. מלאי אותו למעלה, שמרי — ואז יופיע כאן כפתור סריקה.
+    עוד לא הוגדר <b>תחום לחיפוש</b>.
+    <a href="#what" onclick="return editQuery()">להגדרת התחום</a> — ואחרי שמירה יופיע כאן כפתור סריקה.
   </div>
   {% endif %}
 
@@ -203,4 +205,20 @@
     <button type="submit" class="danger small">מחיקת הקמפיין</button>
   </form>
 </div>
+
+<script>
+  // "שינוי התחום" — גלילה לשדה, מיקוד והדגשה קצרה, כדי שלא צריך לחפש אותו למעלה.
+  // מחזיר false כדי שניווט העוגן של הדפדפן לא יבטל את המיקוד.
+  function editQuery() {
+    var el = document.getElementById('search_query');
+    if (!el) return true;
+    var card = document.getElementById('what') || el;
+    card.scrollIntoView({behavior: 'smooth', block: 'center'});
+    el.focus({preventScroll: true});
+    el.select();
+    el.classList.add('flashfield');
+    setTimeout(function () { el.classList.remove('flashfield'); }, 1600);
+    return false;
+  }
+</script>
 {% endblock %}
