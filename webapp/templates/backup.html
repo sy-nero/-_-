@@ -2,6 +2,15 @@
 {% block title %}גיבוי ושחזור{% endblock %}
 {% block body %}
 
+{% if on_d1 %}
+<div class="warn">
+  <b>הנתונים שמורים ב-Cloudflare D1</b>, לא בקבצים על השרת — כלומר הם
+  שורדים פריסה מחדש והרדמה של השירות. הגיבוי בעמוד הזה נוגע רק לקבצים
+  מקומיים (למשל במחשב שלך), ולשחזור מ-D1 יש "Time Travel" בלוח הבקרה של
+  Cloudflare.
+</div>
+{% endif %}
+
 <div class="card">
   <h2>גיבוי ושחזור</h2>
   <p class="sub">

@@ -26,7 +26,7 @@ from flask import (Flask, request, render_template, redirect,  # noqa: E402
                    url_for, Response, flash, session, send_file)
 
 from config import config  # noqa: E402
-from egud_bot import pipeline, templates as mail_templates, tracking  # noqa: E402
+from egud_bot import db, pipeline, templates as mail_templates, tracking  # noqa: E402
 from webapp.jobs import runner  # noqa: E402
 from egud_bot.campaigns import (CampaignStore, TEXT_FIELDS, AUTO_FIELDS,  # noqa: E402
                                 MANUAL_FIELDS, ALL_FIELDS)
@@ -347,7 +347,8 @@ def _data_files() -> list:
 def backup_page():
     files = [(f, os.path.getsize(os.path.join(config.data_dir, f)))
              for f in _data_files()]
-    return render_template("backup.html", files=files, data_dir=config.data_dir)
+    return render_template("backup.html", files=files, data_dir=config.data_dir,
+                           on_d1=db.d1_configured())
 
 
 @app.route("/backup/download")

@@ -12,9 +12,10 @@
     שלבים שקורים בשיחה ולא במייל, ולכן מוזנים ביד.
 """
 import os
-import sqlite3
 from datetime import datetime, timezone
 from contextlib import contextmanager
+
+from egud_bot import db
 
 DB_PATH = os.path.join(os.getenv("DATA_DIR", "data"), "campaigns.db")
 
@@ -67,14 +68,12 @@ def _now() -> str:
 class CampaignStore:
     def __init__(self, db_path: str = DB_PATH):
         self.db_path = db_path
-        os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
         with self._conn() as conn:
             conn.executescript(SCHEMA)
 
     @contextmanager
     def _conn(self):
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
+        conn = db.connect(self.db_path)
         try:
             yield conn
             conn.commit()
