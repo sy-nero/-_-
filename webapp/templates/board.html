@@ -78,18 +78,22 @@
     <p class="muted">עוד אין קמפיינים — הוסיפי אחד למעלה.</p>
   {% else %}
   <div class="scroll">
-  <table>
+  <table class="sheet">
+    <colgroup>
+      <col class="label">
+      {% for col in columns %}<col class="cell"><col class="cell"><col class="cell">{% endfor %}
+    </colgroup>
     <thead>
       <tr>
-        <th class="rowhead" style="background:#f7f9fc;"></th>
+        <th class="rowhead">קמפיין</th>
         {% for col in columns %}
-          <th colspan="3" class="colhead">
+          <th colspan="3">
             <a href="{{ url_for('campaign_edit', campaign_id=col.campaign['id']) }}">
               {{ col.campaign['title'] }}</a></th>
         {% endfor %}
       </tr>
       <tr class="subhead">
-        <th class="rowhead" style="background:#fafbfd;"></th>
+        <th class="rowhead"></th>
         {% for col in columns %}
           <th>פרטים</th><th>הערות</th><th>המלצות לשיפור</th>
         {% endfor %}
@@ -135,9 +139,8 @@
       <tr>
         <td class="rowhead">אחוז פתיחה / תגובה</td>
         {% for col in columns %}
-          <td class="num auto" colspan="3">
-            <b>{{ col.open_rate }}</b> פתיחה &nbsp;·&nbsp;
-            <b>{{ col.reply_rate }}</b> תגובה</td>
+          <td class="num auto rate" colspan="3">
+            {{ col.open_rate }} פתיחה · {{ col.reply_rate }} תגובה</td>
         {% endfor %}
       </tr>
     </tbody>

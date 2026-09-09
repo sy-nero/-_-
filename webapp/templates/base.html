@@ -109,6 +109,30 @@
   .subhead th { font-size:12.5px; color:var(--muted); font-weight:600;
                 background:#fafbfd; }
 
+  /* ---------- טבלת הלוח בסגנון גיליון ---------- */
+  /* קווי רשת מלאים, עמודות צרות ברוחב קבוע, ושורות נמוכות — כדי שכל
+     הקמפיינים ייכנסו למסך אחד ויהיה אפשר להשוות ביניהם במבט. */
+  table.sheet { border-collapse:collapse; table-layout:fixed; width:auto;
+                min-width:100%; }
+  table.sheet th, table.sheet td {
+      border:1px solid #d7dde5; padding:4px 7px; font-size:12.5px;
+      line-height:1.35; max-width:none; vertical-align:middle;
+      overflow-wrap:break-word; }
+  table.sheet thead th { background:#eef1f5; color:var(--ink); text-align:center;
+                         font-weight:700; }
+  table.sheet .subhead th { background:#f6f8fa; color:var(--ink-2);
+                            font-weight:600; font-size:12px; }
+  table.sheet col.label { width:104px; }
+  table.sheet col.cell { width:132px; }
+  table.sheet .rowhead { background:#f6f8fa; font-weight:700; font-size:12.5px;
+                         white-space:normal; text-align:right; }
+  table.sheet tbody tr:hover td { background:#fdfdfe; }
+  table.sheet tbody tr:hover .rowhead { background:#eef1f5; }
+  table.sheet .num { text-align:center; font-size:13px; font-weight:600; }
+  table.sheet .auto { background:#f0f7f2; }
+  table.sheet a { color:var(--brand); }
+  table.sheet .rate { font-size:12px; }
+
   /* ---------- טפסים ---------- */
   label.field { display:block; }
   label.field > span { display:block; font-size:13px; color:var(--ink-2);
@@ -176,6 +200,7 @@
   <div class="brand">לוח הקמפיינים <span>סינרו טק</span></div>
   <nav style="display:flex; gap:18px; margin-inline-start:auto;">
     <a href="{{ url_for('board') }}">כל הקמפיינים</a>
+    <a href="{{ url_for('jobs_page') }}">סריקה</a>
     <a href="{{ url_for('backup_page') }}">גיבוי</a>
     {% if session.get('ok') %}<a href="{{ url_for('logout') }}">יציאה</a>{% endif %}
   </nav>

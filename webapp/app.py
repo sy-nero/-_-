@@ -27,6 +27,7 @@ from flask import (Flask, request, render_template, redirect,  # noqa: E402
 
 from config import config  # noqa: E402
 from egud_bot import pipeline, templates as mail_templates, tracking  # noqa: E402
+from webapp.jobs import runner  # noqa: E402
 from egud_bot.campaigns import (CampaignStore, TEXT_FIELDS, AUTO_FIELDS,  # noqa: E402
                                 MANUAL_FIELDS, ALL_FIELDS)
 from egud_bot.storage import Storage  # noqa: E402
@@ -282,6 +283,55 @@ def pixel(track_id):
     return Response(tracking.TRANSPARENT_GIF, mimetype="image/gif",
                     headers={"Cache-Control": "no-store, no-cache, must-revalidate",
                              "Pragma": "no-cache"})
+
+
+# ---------------------------- סריקה והעשרה ----------------------------
+CITIES = [("jerusalem", "ירושלים"), ("bnei-brak", "בני ברק"),
+          ("beitar", "ביתר עילית"), ("modiin-illit", "מודיעין עילית"),
+          ("elad", "אלעד"), ("beit-shemesh", "בית שמש"),
+          ("ashdod", "אשדוד"), ("all", "כל הערים החרדיות")]
+
+
+@app.route("/jobs")
+def jobs_page():
+    return render_template("jobs.html", job=runner.current or runner.last,
+                           busy=runner.busy, cities=CITIES,
+                           has_key=bool(config.google_api_key))
+
+
+@app.route("/jobs/scan", methods=["POST"])
+def jobs_scan():
+    if not config.google_api_key:
+        flash("חסר GOOGLE_MAPS_API_KEY — בלעדיו אי אפשר לסרוק")
+        return redirect(url_for("jobs_page"))
+
+    campaign = (request.form.get("campaign") or "agent").strip()
+    city = request.form.get("city") or "jerusalem"
+    target = int(request.form.get("target") or 50)
+    city_name = dict(CITIES).get(city, city)
+
+    def work(job):
+        storage = Storage(leads_db_path(campaign), campaign=campaign)
+        return pipeline.scan(config, storage, campaign=campaign, city=city,
+                             target_emails=target)
+
+    ok, msg = runner.start("scan", f"סריקה: {city_name} (יעד {target})", work)
+    flash(msg)
+    return redirect(url_for("jobs_page"))
+
+
+@app.route("/jobs/enrich", methods=["POST"])
+def jobs_enrich():
+    campaign = (request.form.get("campaign") or "agent").strip()
+    limit = int(request.form.get("limit") or 50)
+
+    def work(job):
+        storage = Storage(leads_db_path(campaign), campaign=campaign)
+        return pipeline.enrich_missing_emails(config, storage, limit)
+
+    ok, msg = runner.start("enrich", f"השלמת מיילים ({limit} לידים)", work)
+    flash(msg)
+    return redirect(url_for("jobs_page"))
 
 
 # ---------------------------- גיבוי ושחזור ----------------------------
