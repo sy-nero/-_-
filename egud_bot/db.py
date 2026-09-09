@@ -23,7 +23,9 @@ import requests
 logger = logging.getLogger(__name__)
 
 API_BASE = "https://api.cloudflare.com/client/v4"
-TIMEOUT = 30
+# (חיבור, קריאה). קצר בכוונה: הגדרת D1 שגויה חייבת להיכשל מהר ולא
+# להשאיר בקשת HTTP תלויה עשרות שניות -- אחרת העמוד פשוט לא נטען.
+TIMEOUT = (5, 15)
 
 
 def d1_configured() -> bool:

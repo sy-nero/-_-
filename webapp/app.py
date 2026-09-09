@@ -595,17 +595,28 @@ def backup_upload():
 @app.route("/health")
 def health():
     """
-    בדיקת חיים — כולל האחסון עצמו. בלי זה כשל בהגדרות D1 היה מתגלה רק
-    בכך שהמספרים בטבלה נשארים אפס, בלי שום הודעה.
+    בדיקת חיים — חייבת להיות זולה ומיידית.
+
+    היא משמשת את בדיקת התקינות של Render, ולכן אסור לה לגעת באחסון: עם
+    הגדרות D1 שגויות כל שאילתה ממתינה עד 30 שניות לתשובה מ-Cloudflare,
+    בדיקת התקינות נכשלת בטיים-אאוט, ו-Render מפסיק לנתב תעבורה לשירות —
+    כלומר הכתובת פשוט לא נפתחת. בדיקת האחסון עברה ל-/status.
     """
-    info = {"status": "ok", "tracking": bool(config.tracking_base_url),
+    return {"status": "ok", "tracking": bool(config.tracking_base_url),
             "storage": "d1" if db.d1_configured() else "local",
             "password": bool(config.app_password)}
+
+
+@app.route("/status")
+def status():
+    """בדיקה מעמיקה — נוגעת באחסון, ולכן עלולה להיות איטית. לא לבדיקת תקינות."""
+    info = {"storage": "d1" if db.d1_configured() else "local",
+            "password": bool(config.app_password)}
     try:
-        store.all()
+        info["campaigns"] = len(store.all())
         info["storage_ok"] = True
     except Exception as exc:  # noqa: BLE001 — זה בדיוק מה שהבדיקה מדווחת
-        info.update(status="degraded", storage_ok=False, storage_error=str(exc)[:300])
+        info.update(storage_ok=False, storage_error=str(exc)[:300])
     return info
 
 
