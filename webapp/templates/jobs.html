@@ -7,7 +7,7 @@
   &#8592; חזרה לקמפיין</a></p>
 {% endif %}
 
-{% if busy %}<meta http-equiv="refresh" content="5">{% endif %}
+{% if busy %}<meta http-equiv="refresh" content="15">{% endif %}
 
 {% if not has_key %}
 <div class="warn">
@@ -20,10 +20,28 @@
 <div class="card">
   <h2>{{ job.title }}</h2>
   <p class="sub">
-    {% if job.status == 'running' %}רצה כבר {{ job.elapsed }} שניות · העמוד מתרענן לבד
+    {% if job.stalled %}רצה לפי הרישום {{ job.elapsed }} שניות, אבל
+      {{ job.idle_seconds }} שניות לא נשמע ממנה דבר
+    {% elif job.status == 'running' %}רצה כבר {{ job.elapsed }} שניות ·
+      העמוד מתרענן לבד כל 15 שניות
     {% elif job.status == 'done' %}הסתיימה אחרי {{ job.elapsed }} שניות
     {% else %}נכשלה: {{ job.error }}{% endif %}
   </p>
+
+  {% if job.stalled %}
+  <div class="warn">
+    <b>ההרצה נראית תקועה.</b> כמעט תמיד זה אומר שהשירות הופעל מחדש באמצע —
+    בתוכנית החינמית של Render הוא נרדם אחרי חוסר פעילות, וה-thread של הסריקה
+    מת איתו. <b>מה שנסרק עד אותו רגע נשמר במאגר</b>; השאר נקטע.
+    <form method="post" action="{{ url_for('jobs_release') }}"
+          style="margin-top:10px;">
+      {% if back_campaign %}
+      <input type="hidden" name="campaign" value="{{ back_campaign }}">
+      {% endif %}
+      <button type="submit" class="small">שחרור ההרצה</button>
+    </form>
+  </div>
+  {% endif %}
 
   {% if job.summary %}
   <div class="kpis" style="margin-bottom:14px;">

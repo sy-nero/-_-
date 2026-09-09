@@ -415,6 +415,16 @@ def jobs_scan():
     return redirect(url_for("jobs_page"))
 
 
+@app.route("/jobs/release", methods=["POST"])
+def jobs_release():
+    """משחרר הרצה תקועה — כשהשירות הופעל מחדש באמצע וההרצה 'רצה' לנצח."""
+    flash("ההרצה שוחררה, אפשר להתחיל מחדש" if runner.release()
+          else "אין הרצה תקועה לשחרר")
+    campaign = request.form.get("campaign", type=int)
+    return redirect(url_for("jobs_page", campaign=campaign) if campaign
+                    else url_for("jobs_page"))
+
+
 @app.route("/jobs/enrich", methods=["POST"])
 def jobs_enrich():
     campaign = (request.form.get("campaign") or "agent").strip()
