@@ -199,6 +199,12 @@
     <div><b>{{ count }}</b><span>{{ name }}</span></div>
     {% endfor %}
   </div>
+  <p class="muted" style="margin:10px 0 0;">
+    "ממתינים לשליחה" קטן מ"עם כתובת מייל" כי יורדים ממנו מי שכבר נשלח אליו,
+    מי ששויך לנוסח, וכתובות כפולות.
+    <a href="{{ url_for('recipients_page', campaign_id=campaign['id']) }}">
+      לראות מי בדיוק</a>
+  </p>
   {% endif %}
 
   <h3 class="step">2. או העלאת רשימה משלך</h3>

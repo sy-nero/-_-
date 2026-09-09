@@ -509,6 +509,28 @@ def campaign_upload(campaign_id):
     return redirect(url_for("campaign_edit", campaign_id=campaign_id))
 
 
+@app.route("/campaign/<int:campaign_id>/recipients")
+def recipients_page(campaign_id):
+    """
+    מי בדיוק נמצא במאגר, ולמה. "ממתינים לשליחה" קטן מ"עם כתובת מייל"
+    כי מי שכבר נשלח אליו, מי ששויך לנוסח, וכתובות כפולות -- יורדים.
+    כאן רואים את זה בשמות.
+    """
+    campaign = store.get(campaign_id)
+    st = leads_store(_col(campaign, "source_campaign")) if campaign else None
+    if not st:
+        flash("לקמפיין הזה אין מאגר לידים מקושר")
+        return redirect(url_for("campaign_edit", campaign_id=campaign_id))
+
+    state = request.args.get("state", "pending")
+    if state not in Storage.STATES:
+        state = "pending"
+    return render_template("recipients.html", campaign=campaign, state=state,
+                           counts=st.state_counts(),
+                           leads=st.leads_by_state(state, 500),
+                           states=Storage.STATES)
+
+
 @app.route("/campaign/<int:campaign_id>/phones")
 def phones_page(campaign_id):
     """רשימת טלפונים — למי שאין לו מייל, או לכל הקמפיין."""

@@ -315,6 +315,48 @@ class Storage:
                     GROUP BY lower(email) ORDER BY emailed_at DESC LIMIT ?""",
                 params).fetchall()
 
+    #: מצבי הנמענים כפי שהם מוצגים באפליקציה, והתנאי שמגדיר כל אחד
+    STATES = {
+        "pending": ("ממתינים לשליחה",
+                    "email IS NOT NULL AND email != '' "
+                    "AND status IN ('found','no_email') "
+                    "AND (variant IS NULL OR variant = '')"),
+        "assigned": ("שויכו לנוסח וטרם נשלחו",
+                     "email IS NOT NULL AND email != '' "
+                     "AND status IN ('found','no_email') "
+                     "AND variant IS NOT NULL AND variant != ''"),
+        "emailed": ("כבר נשלח אליהם", "status = 'emailed'"),
+        "failed": ("השליחה נכשלה", "status = 'failed'"),
+        "no_email": ("בלי כתובת מייל", "email IS NULL OR email = ''"),
+    }
+
+    def leads_by_state(self, state: str, limit: int = 500):
+        """הנמענים במצב מסוים — לתצוגת 'מי בדיוק' באפליקציה."""
+        label_where = self.STATES.get(state)
+        if not label_where:
+            return []
+        # אותו איחוד כתובות כמו בספירה, אחרת אורך הרשימה לא תואם למספר
+        group = "place_id" if state == "no_email" else "lower(email)"
+        with self._conn() as conn:
+            return conn.execute(
+                f"""SELECT * FROM {{leads}} WHERE {label_where[1]}
+                    GROUP BY {group}
+                    ORDER BY found_at DESC LIMIT ?""", (limit,)).fetchall()
+
+    def state_counts(self) -> dict:
+        """כמה נמענים בכל מצב — ההסבר למה 'ממתינים' קטן מ'עם מייל'."""
+        out = {}
+        with self._conn() as conn:
+            for state, (label, where) in self.STATES.items():
+                col = "DISTINCT lower(email)" if state != "no_email" else "*"
+                out[state] = {
+                    "label": label,
+                    "count": conn.execute(
+                        f"SELECT COUNT({col}) FROM {{leads}} WHERE {where}"
+                    ).fetchone()[0],
+                }
+        return out
+
     def leads_with_phone(self, limit: int = 1000):
         """לידים שיש להם טלפון — לפנייה טלפונית. מי שאין לו מייל קודם."""
         with self._conn() as conn:
