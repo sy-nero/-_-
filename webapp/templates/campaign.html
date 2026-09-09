@@ -58,7 +58,11 @@
 
 <div class="card">
   <h2>פרטי הקמפיין</h2>
-  <p class="sub">שלוש השורות בירוק נמדדות אוטומטית. השאר — מה שאת ממלאה.</p>
+  <p class="sub">
+    השורות בירוק מתמלאות לבד מהמיילים שנשלחו. אפשר להקליד בהן ערך ידני —
+    למשל לסבב שנשלח לפני שהאפליקציה הייתה, או לקמפיין טלפוני — והוא יגבר
+    על המדידה. למחיקת הערך הידני מרוקנים את השדה.
+  </p>
   <div class="scroll">
   <table>
     <thead><tr>
@@ -77,8 +81,12 @@
     {% for field in auto_fields %}
     <tr>
       <td class="rowhead">{{ field }}</td>
-      <td class="num auto"><b style="font-size:19px;">{{ fields[field].value }}</b>
-        <div class="muted">נמדד אוטומטית</div></td>
+      <td class="auto">
+        <input type="text" name="value::{{ field }}" value="{{ fields[field].value }}"
+               style="text-align:center;">
+        <div class="muted" style="text-align:center; margin-top:4px;">
+          {% if fields[field].manual %}הוזן ידנית · נמדד: {{ fields[field].measured }}
+          {% else %}נמדד אוטומטית{% endif %}</div></td>
       <td><textarea name="note::{{ field }}">{{ fields[field].note }}</textarea></td>
       <td><textarea name="improve::{{ field }}">{{ fields[field].improve }}</textarea></td>
     </tr>

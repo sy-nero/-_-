@@ -109,13 +109,37 @@ def auto_metrics(campaign) -> dict:
         return empty
 
 
+AUTO_TO_METRIC = {"כמות פניות": "sent", "כמות פתיחות": "opened",
+                  "הודעה חוזרת": "replied"}
+
+
+def _as_int(text) -> int | None:
+    try:
+        return int(str(text).strip())
+    except (TypeError, ValueError):
+        return None
+
+
 def campaign_view(campaign) -> dict:
-    """כל מה שצריך להצגת עמודת קמפיין בלוח."""
+    """
+    כל מה שצריך להצגת עמודת קמפיין בלוח.
+
+    שלוש שורות המספרים נמדדות מהמיילים שנשלחו, אבל ערך שהוזן ידנית גובר
+    עליהן — כך אפשר להזין נתונים של סבבים שנשלחו לפני שהאפליקציה הייתה,
+    ושל קמפיינים שאינם מייל בכלל (שיחות טלפון).
+    """
     fields = store.fields(campaign["id"])
-    metrics = auto_metrics(campaign)
-    fields["כמות פניות"]["value"] = str(metrics["sent"])
-    fields["כמות פתיחות"]["value"] = str(metrics["opened"])
-    fields["הודעה חוזרת"]["value"] = str(metrics["replied"])
+    measured = auto_metrics(campaign)
+    metrics = dict(measured)
+
+    for name, key in AUTO_TO_METRIC.items():
+        manual = _as_int(fields[name]["value"])
+        fields[name]["measured"] = measured[key]
+        fields[name]["manual"] = manual is not None
+        if manual is not None:
+            metrics[key] = manual          # ערך ידני גובר על הנמדד
+        elif campaign["source_campaign"]:
+            fields[name]["value"] = str(measured[key])
     open_pct = (metrics["opened"] * 100 // metrics["sent"]) if metrics["sent"] else 0
     reply_pct = (metrics["replied"] * 100 // metrics["sent"]) if metrics["sent"] else 0
 
@@ -165,8 +189,6 @@ def campaign_edit(campaign_id):
                      source_campaign=(request.form.get("source_campaign") or "").strip(),
                      variant=(request.form.get("variant") or "").strip())
         for field in ALL_FIELDS:
-            if field in AUTO_FIELDS:      # נמדד אוטומטית — לא נערך ביד
-                continue
             store.set_field(
                 campaign_id, field,
                 value=request.form.get(f"value::{field}", ""),

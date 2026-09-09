@@ -49,25 +49,25 @@
   header.top nav a { color:#c8d7e8; text-decoration:none; font-size:14.5px;
                      padding:6px 2px; }
   header.top nav a:hover { color:#fff; }
-  main { padding:26px; max-width:1600px; margin:0 auto; }
+  main { padding:20px 22px; max-width:1600px; margin:0 auto; }
 
   h2 { font-size:16px; font-weight:700; margin:0 0 4px; letter-spacing:-.2px; }
-  .sub { color:var(--muted); font-size:13.5px; margin:0 0 18px; }
+  .sub { color:var(--muted); font-size:13px; margin:0 0 14px; }
   .muted { color:var(--muted); font-size:13px; }
 
   .card {
     background:var(--surface); border:1px solid var(--line);
-    border-radius:var(--radius); padding:20px 22px; margin-bottom:20px;
+    border-radius:var(--radius); padding:16px 18px; margin-bottom:16px;
     box-shadow:var(--shadow);
   }
   .card.tight { padding:16px 18px; }
 
   /* ---------- כרטיסי סיכום ---------- */
-  .cards { display:grid; gap:16px; margin-bottom:22px;
-           grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); }
+  .cards { display:grid; gap:12px; margin-bottom:16px;
+           grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); }
   .ccard { background:var(--surface); border:1px solid var(--line);
-           border-radius:var(--radius); padding:18px 20px; box-shadow:var(--shadow);
-           display:flex; flex-direction:column; gap:14px; text-decoration:none;
+           border-radius:var(--radius); padding:14px 16px; box-shadow:var(--shadow);
+           display:flex; flex-direction:column; gap:11px; text-decoration:none;
            color:inherit; transition:border-color .15s, transform .15s; }
   .ccard:hover { border-color:var(--line-strong); transform:translateY(-1px); }
   .ccard .actions { display:flex; gap:8px; align-items:center; }
@@ -76,7 +76,7 @@
           background:var(--brand-soft); color:var(--brand); font-weight:600; }
   .chip.phone { background:#f4efe6; color:#7a5a1e; }
   .kpis { display:flex; gap:18px; }
-  .kpi b { display:block; font-size:23px; font-weight:700; line-height:1.15;
+  .kpi b { display:block; font-size:20px; font-weight:700; line-height:1.15;
            font-variant-numeric:tabular-nums; }
   .kpi span { font-size:12.5px; color:var(--muted); }
   .bar { height:6px; border-radius:99px; background:#eef1f5; overflow:hidden;
@@ -89,8 +89,11 @@
   .scroll { overflow-x:auto; border-radius:10px; border:1px solid var(--line); }
   table { border-collapse:separate; border-spacing:0; width:100%;
           background:var(--surface); }
-  th, td { padding:11px 14px; text-align:right; vertical-align:top;
-           border-bottom:1px solid var(--line); font-size:14px; }
+  th, td { padding:6px 10px; text-align:right; vertical-align:top;
+           border-bottom:1px solid var(--line); font-size:13.5px;
+           line-height:1.45; }
+  /* עמודות טקסט לא נמתחות לרוחב המסך — טבלה צרה קלה יותר לסריקה בעין */
+  td { max-width:260px; }
   thead th { background:#f7f9fc; font-weight:600; color:var(--ink-2);
              white-space:nowrap; }
   tbody tr:hover td { background:#fbfcfe; }
@@ -100,7 +103,7 @@
              border-inline-end:1px solid var(--line); }
   tbody tr:hover .rowhead { background:#f3f6fa; }
   .colhead { font-weight:700; font-size:15px; }
-  .num { text-align:center; font-variant-numeric:tabular-nums; font-size:15px; }
+  .num { text-align:center; font-variant-numeric:tabular-nums; font-size:14px; }
   .auto { background:var(--good-soft); }
   .auto b { color:var(--good); }
   .subhead th { font-size:12.5px; color:var(--muted); font-weight:600;
@@ -116,7 +119,8 @@
       color:var(--ink); transition:border-color .15s, box-shadow .15s; }
   input:focus, textarea:focus, select:focus {
       outline:0; border-color:#8fb3d9; box-shadow:0 0 0 3px rgba(143,179,217,.25); }
-  textarea { min-height:52px; resize:vertical; line-height:1.5; }
+  textarea { min-height:34px; resize:vertical; line-height:1.45; }
+  table textarea, table input[type=text] { padding:5px 8px; font-size:13.5px; }
   .grid { display:grid; gap:14px; }
   .grid.c2 { grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); }
   .grid.c3 { grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); }
