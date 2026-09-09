@@ -382,6 +382,7 @@ def passes_filters_agent(
     min_review_count: int = AGENT_MIN_REVIEWS,
     require_operational: bool = True,
     min_rating: float = AGENT_MIN_RATING,
+    any_type: bool = False,
 ) -> bool:
     """
     קריטריונים לסוכן ממליץ: משרד פעיל מהקטגוריות המתאימות, עם לפחות
@@ -399,7 +400,8 @@ def passes_filters_agent(
     ts.add((lead.primary_type or "").lower())
     if ts & SERVICE_EXCLUDED_TYPES:
         return False
-    if not (ts & AGENT_TYPES):
+    # בחיפוש טקסט חופשי אין סוג מקום מובטח, ולכן שם לא דורשים אותו
+    if not any_type and not (ts & AGENT_TYPES):
         return False
     if is_excluded_by_name_service(lead.name):
         return False

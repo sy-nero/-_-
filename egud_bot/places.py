@@ -39,6 +39,7 @@ def _log_request_error(exc, api_name: str) -> None:
         )
 
 PLACES_NEARBY_URL = "https://places.googleapis.com/v1/places:searchNearby"
+PLACES_TEXT_URL = "https://places.googleapis.com/v1/places:searchText"
 
 # השדות שאנחנו מבקשים מ-Google (FieldMask). ככל שפחות שדות — זול יותר.
 FIELD_MASK = ",".join([
@@ -193,6 +194,48 @@ class PlacesClient:
 
         return resp.json().get("places", [])
 
+    def search_text(self, query: str, lat: float, lng: float,
+                    radius_meters: float, max_results: int = 20) -> list[dict]:
+        """
+        חיפוש חופשי בטקסט ("יועץ עסקי", "מאמן עסקי").
+
+        זה המסלול היחיד שמאפשר לחפש תחומים שאין להם סוג מקום ב-Google —
+        מאמנים עסקיים, יועצים, מטפלים. הוא מוגבל לרדיוס סביב הנקודה, כדי
+        שהתוצאות יישארו באזור שנבחר.
+        """
+        body = {
+            "textQuery": query,
+            "maxResultCount": max_results,
+            "locationBias": {
+                "circle": {"center": {"latitude": lat, "longitude": lng},
+                           "radius": float(radius_meters)}
+            },
+            "languageCode": "he",
+            "regionCode": "IL",
+        }
+        try:
+            resp = self.session.post(PLACES_TEXT_URL, headers=self._headers(),
+                                     json=body, timeout=30)
+        except requests.RequestException as exc:
+            _log_request_error(exc, "Places (חיפוש טקסט)")
+            return []
+        if resp.status_code != 200:
+            logger.warning("Places (טקסט) החזיר קוד %s: %s", resp.status_code,
+                           _redact(resp.text[:300]))
+            return []
+        return resp.json().get("places", [])
+
+    def scan_text(self, query: str, lat: float, lng: float,
+                  radius_meters: float) -> dict[str, dict]:
+        """סורק נקודה אחת לפי שאילתת טקסט ומחזיר {place_id: place}."""
+        found = {}
+        for place in self.search_text(query, lat, lng, radius_meters):
+            pid = place.get("id")
+            if pid:
+                found[pid] = place
+        time.sleep(self.request_delay)
+        return found
+
     def scan_point(
         self, lat: float, lng: float, radius_meters: float,
         included_types: list[str] | None = None,
@@ -280,6 +323,27 @@ class LegacyPlacesClient:
             time.sleep(2.0)
             params = {"pagetoken": token, "key": self.api_key}
         return results
+
+    def scan_text(self, query: str, lat: float, lng: float,
+                  radius_meters: float) -> dict[str, dict]:
+        """חיפוש טקסט ב-API הישן (Text Search)."""
+        params = {"query": query, "location": f"{lat},{lng}",
+                  "radius": int(radius_meters), "language": "he",
+                  "key": self.api_key}
+        try:
+            data = self.session.get(
+                "https://maps.googleapis.com/maps/api/place/textsearch/json",
+                params=params, timeout=30).json()
+        except (requests.RequestException, ValueError) as exc:
+            _log_request_error(exc, "Places (חיפוש טקסט, legacy)")
+            return {}
+        found = {}
+        for result in data.get("results", []):
+            pid = result.get("place_id")
+            if pid:
+                found[pid] = _legacy_to_new(result)
+        time.sleep(self.request_delay)
+        return found
 
     def scan_point(self, lat: float, lng: float, radius_meters: float,
                    included_types: list[str] | None = None) -> dict[str, dict]:

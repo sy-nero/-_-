@@ -329,3 +329,41 @@ def import_csv(storage: Storage, path: str, email_col: str = "email",
             added += 1
     logger.info("יובאו %d עסקים מ-%s", added, path)
     return added
+
+
+def import_rows(storage: Storage, rows, prefix: str = "up") -> dict:
+    """
+    מייבא אנשי קשר משורות (מילונים) — עמודות אפשריות: name, email, phone,
+    first_name, city, how, why, fact. משמש להעלאת קובץ מהאפליקציה.
+    מחזיר סיכום: כמה נוספו, כמה כבר היו, כמה שורות לא היו שמישות.
+    """
+    summary = {"נוספו": 0, "היו כבר": 0, "שורות לא שמישות": 0}
+    for row in rows:
+        row = {(k or "").strip().lower(): (v or "").strip()
+               for k, v in row.items() if k}
+        name = row.get("name") or row.get("שם") or ""
+        email = row.get("email") or row.get("מייל") or ""
+        phone = row.get("phone") or row.get("טלפון") or ""
+        if not (email or phone):
+            summary["שורות לא שמישות"] += 1
+            continue
+
+        # המזהה נגזר מהמייל/טלפון בלבד: אותו איש קשר פעמיים בקובץ לא ייכנס
+        # פעמיים, וגם העלאה חוזרת של אותו קובץ לא תיצור כפילויות.
+        pid = f"{prefix}_{(email or phone).lower()}"
+        if storage.exists(pid):
+            summary["היו כבר"] += 1
+            continue
+        lead = BusinessLead(
+            place_id=pid, name=name or email or phone, address="", lat=0.0,
+            lng=0.0, phone=phone, website="", rating=None, review_count=0,
+            business_status="OPERATIONAL", primary_type="",
+            neighborhood=row.get("city") or row.get("עיר") or "", types=[],
+            first_name=row.get("first_name") or row.get("שם_פרטי") or "",
+            intro_how=row.get("how") or "", intro_fact=row.get("fact") or "",
+            intro_why=row.get("why") or "")
+        storage.upsert_lead(lead, email or None,
+                            status="found" if email else "no_email")
+        summary["נוספו"] += 1
+    logger.info("ייבוא: %s", summary)
+    return summary

@@ -223,9 +223,13 @@ def _grant(business_name, association_name, sender_name,
 # המטרה היחידה של המייל: שהסוכן ישאיר טלפון. אין בו עמלה, אחוזים או בקשת פגישה.
 # הנוסח והפרופיל של "מי מתאים להיות סוכן" מתועדים ב-docs/agents.md.
 
-# תארים מקצועיים שמופיעים לפני שם של אדם ("רו״ח משה כהן")
+# תארים ותיאורי מקצוע שמופיעים לפני שם של אדם — "רו״ח משה כהן",
+# "יועץ עסקי אברהם כץ". מוסרים אותם כדי להגיע לשם עצמו.
 PERSON_TITLES = ('רו"ח', "רו״ח", 'עו"ד', "עו״ד", "יועץ מס", "יועצת מס",
-                 'ד"ר', "ד״ר", "דר'", "מר", "גב'")
+                 'ד"ר', "ד״ר", "דר'", "מר", "גב'",
+                 "יועץ עסקי", "יועצת עסקית", "יועץ", "יועצת",
+                 "מאמן עסקי", "מאמנת עסקית", "מאמן", "מאמנת",
+                 "רואה חשבון", "עורך דין", "עורכת דין", "סוכן ביטוח")
 
 # סימנים לכך שהשם הוא של משרד/חברה ולא של אדם
 FIRM_MARKERS = ("משרד", "ושות", 'בע"מ', "בע״מ", "בעמ", "חברת", "קבוצת",
@@ -240,9 +244,13 @@ def person_first_name(name: str) -> str:
     בכל מקרה אחר מחזיר מחרוזת ריקה — עדיף "שלום," בלי שם מאשר לפנות בשם שגוי.
     """
     n = (name or "").strip()
-    for title in PERSON_TITLES:
-        if n.startswith(title):
-            n = n[len(title):].strip(" -–,")
+    # מסירים תיאורים חוזרים: "יועץ עסקי" ואחריו "רו״ח" וכדומה
+    for _ in range(3):
+        for title in sorted(PERSON_TITLES, key=len, reverse=True):
+            if n.startswith(title):
+                n = n[len(title):].strip(" -–,")
+                break
+        else:
             break
     if not n or any(m in n for m in FIRM_MARKERS):
         return ""
@@ -480,3 +488,99 @@ def render(campaign, **ctx):
 def whatsapp_text(campaign, **ctx):
     """אותו נוסח כהודעת וואטסאפ — גוף הטקסט בלבד, בלי שורת הנושא."""
     return render(campaign, **ctx)[2]
+
+
+# ------------------ נוסח מותאם שהמשתמשת כותבת באפליקציה ------------------
+# מציני המקום שאפשר להשתמש בהם בנוסח. כל מה שלא מוכר נשאר כמו שהוא, כדי
+# שסוגריים מסולסלים בטקסט לא יפילו את השליחה.
+PLACEHOLDERS = {
+    "שם": "first_name_or_business",
+    "שם_פרטי": "first_name",
+    "שם_העסק": "business_name",
+    "תחום": "profession",
+    "עיר": "area",
+    "שכונה": "neighborhood",
+    "ביקורות": "review_count",
+    "דירוג": "rating",
+    "שולח": "sender_name",
+    "אתר": "website",
+    "מייל_שולח": "contact_email",
+}
+
+_PLACEHOLDER_RE = re.compile(r"\{\{?\s*([^{}]+?)\s*\}?\}")
+
+
+def custom_values(business_name="", first_name="", field="", neighborhood="",
+                  area="", rec=None, sender_name="", contact_email="",
+                  website="", profession_hint="", **_) -> dict:
+    """
+    הערכים שמוזרקים לנוסח מותאם, מנתוני הליד.
+
+    לאנשי קשר שהועלו מקובץ אין סוג עסק מגוגל ואין שכונה מוכרת, ולכן התחום
+    נופל לתחום שהוגדר בקמפיין, והאזור לערך שנרשם בקובץ.
+    """
+    first = (first_name or person_first_name(business_name)).strip()
+    rec = rec or {}
+    return {
+        "first_name": first,
+        "first_name_or_business": first or business_name,
+        "business_name": business_name,
+        "profession": (AGENT_PROFESSIONS.get(field) or field
+                       or profession_hint or "בעל מקצוע"),
+        "area": area or city_of(neighborhood) or neighborhood,
+        "neighborhood": neighborhood,
+        "review_count": str(rec.get("count") or ""),
+        "rating": str(rec.get("rating") or ""),
+        "sender_name": sender_name,
+        "contact_email": contact_email,
+        "website": website,
+    }
+
+
+def fill_placeholders(text: str, values: dict) -> str:
+    """מחליף {{שם}} / {שם} בערכים. מציין מקום לא מוכר נשאר כמו שהוא."""
+    def sub(match):
+        key = match.group(1).strip()
+        field = PLACEHOLDERS.get(key)
+        if field is None:
+            return match.group(0)
+        return values.get(field, "")
+    return _PLACEHOLDER_RE.sub(sub, text or "")
+
+
+def _tidy(text: str) -> str:
+    """
+    מנקה את הנוסח אחרי הזרקת הערכים: מציין מקום ריק לא ישאיר "היי ,"
+    או רווח כפול באמצע משפט.
+    """
+    text = re.sub(r"[ \t]{2,}", " ", text or "")
+    text = re.sub(r"\s+([,.!?])", r"\1", text)
+    text = re.sub(r"^([^\S\n]*\S+)[ \t]*,", r"\1,", text, flags=re.M)
+    return text.strip()
+
+
+def render_custom(subject_tpl: str, body_tpl: str, **ctx):
+    """
+    מרנדר נוסח שנכתב באפליקציה. מחזיר (subject, html, text) באותו מבנה
+    כמו שאר התבניות, כדי שהשליחה לא תדע להבחין ביניהן.
+    """
+    values = custom_values(**ctx)
+    subject = _tidy(fill_placeholders(subject_tpl, values))
+    body = _tidy(fill_placeholders(body_tpl, values))
+
+    lines = [ln.strip() for ln in body.split("\n\n") if ln.strip()]
+    text = "\n\n".join(lines) + "\n"
+    p = "margin:0 0 14px;"
+    html_lines = "\n".join(
+        f'    <p style="{p}">{ln.replace(chr(10), "<br>")}</p>' for ln in lines)
+    html = f"""<!DOCTYPE html>
+<html lang="he" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#ffffff;">
+  <div dir="rtl" style="direction:rtl;text-align:right;max-width:600px;margin:0 auto;
+       padding:22px 20px;font-family:Arial,Helvetica,sans-serif;font-size:16px;
+       line-height:1.75;color:#222222;">
+{html_lines}
+  </div>
+</body></html>"""
+    return subject, html, text

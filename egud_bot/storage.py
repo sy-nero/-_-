@@ -300,6 +300,17 @@ class Storage:
                     GROUP BY lower(email) ORDER BY emailed_at DESC LIMIT ?""",
                 params).fetchall()
 
+    def leads_with_phone(self, limit: int = 1000):
+        """לידים שיש להם טלפון — לפנייה טלפונית. מי שאין לו מייל קודם."""
+        with self._conn() as conn:
+            return conn.execute(
+                """SELECT * FROM {leads}
+                   WHERE phone IS NOT NULL AND phone != ''
+                   GROUP BY phone
+                   ORDER BY CASE WHEN email IS NULL OR email = '' THEN 0 ELSE 1 END,
+                            review_count DESC
+                   LIMIT ?""", (limit,)).fetchall()
+
     def mark_replied(self, email: str, note: str = "") -> int:
         """רושם שהסוכן השיב (וטלפון/הערה אם יש). מחזיר כמה שורות עודכנו."""
         with self._conn() as conn:

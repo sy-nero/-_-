@@ -57,6 +57,31 @@
 </div>
 
 <div class="card">
+  <h2>מה לחפש ומה לשלוח</h2>
+  <p class="sub">
+    התחום נשלח לחיפוש בגוגל כפי שהוא — אפשר לכתוב "יועצים עסקיים",
+    "מאמן עסקי", "רואה חשבון". הנוסח הוא מה שיישלח; אם נשאר ריק, יישלח
+    הנוסח המובנה של הקמפיין.
+  </p>
+  <div class="grid c2">
+    <label class="field"><span>תחום לחיפוש</span>
+      <input type="text" name="search_query" placeholder="יועצים עסקיים"
+             value="{{ campaign['search_query'] or '' }}"></label>
+    <label class="field"><span>נושא המייל</span>
+      <input type="text" name="subject_tpl" placeholder="{{ '{{שם}}' }}, בקשר לשיתוף פעולה"
+             value="{{ campaign['subject_tpl'] or '' }}"></label>
+  </div>
+  <label class="field" style="margin-top:12px;"><span>גוף המייל</span>
+    <textarea name="body_tpl" style="min-height:170px;"
+      placeholder="היי {{ '{{שם_פרטי}}' }},&#10;&#10;מירי לודמיר, מנהלת סינרו טק - נעים להכיר.&#10;&#10;חיפשתי {{ '{{תחום}}' }} באזור {{ '{{עיר}}' }} ונתקלתי בך.&#10;&#10;תכתבו לי כאן את הטלפון שלכם ואחזור אליכם.">{{ campaign['body_tpl'] or '' }}</textarea></label>
+  <p class="muted" style="margin-top:8px;">
+    מציני מקום זמינים:
+    {% for key in placeholders %}<code>{{ '{{' }}{{ key }}{{ '}}' }}</code>{{ " · " if not loop.last }}{% endfor %}
+    — שורה ריקה בין פסקאות מפרידה פסקה במייל.
+  </p>
+</div>
+
+<div class="card">
   <h2>פרטי הקמפיין</h2>
   <p class="sub">
     השורות בירוק מתמלאות לבד מהמיילים שנשלחו. אפשר להקליד בהן ערך ידני —
@@ -109,6 +134,40 @@
   </div>
 </div>
 </form>
+
+<div class="card">
+  <h2>מה עושים עכשיו</h2>
+  <p class="sub">שמרי קודם את ההגדרות למעלה, ואז בחרי פעולה.</p>
+
+  <div class="grid c3">
+    <form method="post" action="{{ url_for('campaign_scan', campaign_id=campaign['id']) }}">
+      <label class="field"><span>1. חיפוש נמענים בגוגל</span>
+        <select name="city">
+          {% for key, name in cities %}<option value="{{ key }}">{{ name }}</option>{% endfor %}
+        </select></label>
+      <input type="hidden" name="target" value="50">
+      <button type="submit" style="margin-top:8px;">חיפוש לפי התחום</button>
+    </form>
+
+    <form method="post" action="{{ url_for('campaign_upload', campaign_id=campaign['id']) }}"
+          enctype="multipart/form-data">
+      <label class="field"><span>2. או העלאת רשימה משלך (CSV)</span>
+        <input type="file" name="contacts" accept=".csv" required></label>
+      <button type="submit" class="ghost" style="margin-top:8px;">העלאה</button>
+      <div class="muted" style="margin-top:6px;">עמודות: שם, מייל, טלפון</div>
+    </form>
+
+    <div>
+      <label class="field"><span>3. ומה לעשות עם הרשימה</span></label>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <a class="btn" href="{{ url_for('send_page', campaign_id=campaign['id']) }}">
+          שליחת מיילים</a>
+        <a class="btn ghost" href="{{ url_for('phones_page', campaign_id=campaign['id']) }}">
+          רשימת טלפונים</a>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div class="card tight">
   <form method="post" action="{{ url_for('campaign_delete', campaign_id=campaign['id']) }}"

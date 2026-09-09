@@ -42,6 +42,18 @@ def _rec(row) -> dict:
         return {}
 
 
+def _render(template_campaign: str, ctx: dict, custom=None):
+    """
+    מרנדר מייל: נוסח מותאם אם הוגדר לקמפיין, אחרת התבנית המובנית.
+    custom הוא (נושא, גוף, תחום־ברירת־מחדל).
+    """
+    if custom and (custom[0] or custom[1]):
+        hint = custom[2] if len(custom) > 2 else ""
+        return templates.render_custom(custom[0], custom[1],
+                                       profession_hint=hint, **ctx)
+    return templates.render(template_campaign, **ctx)
+
+
 def build_ctx(cfg: Config, campaign: str, lead) -> dict:
     """מרכיב את משתני התבנית מליד (שורת DB או מילון) לפי הקמפיין."""
     from_email, from_name, _, _ = cfg.sender_for(campaign)
@@ -196,6 +208,74 @@ def scan_retail(
     return summary
 
 
+def scan_by_query(cfg: Config, storage: Storage, query: str,
+                  city: str = "jerusalem", target_emails: int = 50,
+                  campaign: str = "agent") -> dict:
+    """
+    סורק לפי תחום שהוזן כטקסט חופשי ("יועצים עסקיים", "מאמן עסקי").
+
+    למה בנפרד מהסריקה הרגילה: ל-Google יש טקסונומיה סגורה של סוגי מקומות,
+    ותחומים כמו ייעוץ עסקי או אימון פשוט אינם בה. חיפוש הטקסט מגיע לתחומים
+    האלה, במחיר של תוצאות פחות אחידות — ולכן הסינון כאן מקל: עסק פעיל, לא
+    מוסד ולא רשת, ובעל ביקורות חיוביות לפי אותם תנאי סף.
+    """
+    from data.neighborhoods import neighborhoods_for
+
+    query = (query or "").strip()
+    if not query:
+        raise ValueError("צריך להזין תחום לחיפוש")
+
+    client = make_client(cfg, include_reviews=(campaign == "agent"))
+    neighborhoods = neighborhoods_for(city)
+    summary = {"נסרקו": 0, "עברו סינון": 0, "חדשים": 0,
+               "עם מייל": 0, "בלי מייל": 0, "עם המלצה": 0}
+
+    for nb in neighborhoods:
+        logger.info("מחפש \"%s\" ב%s (נאספו %d/%d)", query, nb.name,
+                    summary["עם מייל"], target_emails)
+        places = client.scan_text(query, nb.lat, nb.lng, cfg.search_radius_meters)
+        summary["נסרקו"] += len(places)
+
+        for place in places.values():
+            lead = BusinessLead.from_place(place, neighborhood=nb.name)
+            if not lead.place_id:
+                continue
+            if not passes_filters_agent(lead, cfg.agent_min_reviews,
+                                        cfg.require_operational,
+                                        cfg.agent_min_rating,
+                                        any_type=True):
+                continue
+            summary["עברו סינון"] += 1
+            if storage.exists(lead.place_id):
+                continue
+            summary["חדשים"] += 1
+
+            client.enrich_contact(lead)
+            rec = recommendations.collect(lead, cfg, cfg.request_delay_seconds)
+            lead.rec = rec.as_dict() if rec else {}
+            if rec:
+                summary["עם המלצה"] += 1
+
+            email = find_email(lead.website, cfg.request_delay_seconds) if lead.website else None
+            if email and is_blocked_email(email):
+                email = None
+            if email:
+                summary["עם מייל"] += 1
+                storage.upsert_lead(lead, email, status="found")
+                logger.info("  ✔ %s → %s", lead.name, email)
+            else:
+                summary["בלי מייל"] += 1
+                storage.upsert_lead(lead, None, status="no_email")
+
+            time.sleep(cfg.request_delay_seconds)
+            if summary["עם מייל"] >= target_emails:
+                logger.info("הושג היעד — עוצר")
+                return summary
+
+    logger.info("סיכום: %s", summary)
+    return summary
+
+
 def enrich_missing_emails(cfg: Config, storage: Storage, limit: int = 50) -> dict:
     """
     מנסה להשלים כתובות מייל ללידים שנסרקו בלי אתר. Google Places לא מחזיר
@@ -236,7 +316,7 @@ def enrich_missing_emails(cfg: Config, storage: Storage, limit: int = 50) -> dic
 def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
                 campaign: str = "funding", skip_contacted: bool = False,
                 limit: int | None = None, confirm=None, confirm_batch=None,
-                variant: str = "", only=None) -> dict:
+                variant: str = "", only=None, custom=None) -> dict:
     """
     שולח מייל ללידים חדשים שיש להם כתובת מייל (עד המכסה בהרצה).
     skip_contacted=True מדלג על כל מי שקיבל מייל באיזשהו קמפיין אחר
@@ -250,6 +330,8 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
     אחד בלבד, ומי שכבר קיבל נוסח לא ייכנס לקבוצה השנייה.
     only — אוסף place_id לשליחה. מסונן לפני חיתוך המכסה, כדי שבחירה מפורשת
     של נמענים לא תיחתך על ידי limit.
+    custom — (נושא, גוף) של נוסח שנכתב באפליקציה. אם הועבר, הוא מחליף את
+    התבניות המובנות.
     """
     # נוסח ב' הוא תבנית נפרדת; ברירת המחדל (ובנוסח א') היא תבנית הקמפיין
     template_campaign = f"{campaign}_offer" if variant == "b" else campaign
@@ -295,7 +377,7 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
         approved = []
         for index, lead in enumerate(leads, 1):
             ctx = build_ctx(cfg, campaign, lead)
-            subject, _html, text = templates.render(template_campaign, **ctx)
+            subject, _html, text = _render(template_campaign, ctx, custom)
             answer = confirm(lead, subject, text, index, len(leads), ctx.get("rec"))
             if answer == "quit":
                 # ביטול מלא: גם מה שאושר קודם לא נשלח
@@ -339,8 +421,8 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
         logo_path="",                # מייל אישי, ללא לוגו
     ) as mailer:
         for lead in leads:
-            subject, html, text = templates.render(
-                template_campaign, **build_ctx(cfg, campaign, lead))
+            subject, html, text = _render(
+                template_campaign, build_ctx(cfg, campaign, lead), custom)
             # פיקסל מעקב פתיחות (רק אם הוגדרה כתובת ציבורית)
             track_id = ""
             if cfg.tracking_base_url:

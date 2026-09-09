@@ -147,6 +147,21 @@ def _as_int(text) -> int | None:
         return None
 
 
+def custom_of(campaign):
+    """הנוסח המותאם של הקמפיין, אם נכתב לו כזה."""
+    subject = _col(campaign, "subject_tpl")
+    body = _col(campaign, "body_tpl")
+    query = _col(campaign, "search_query")
+    return (subject, body, query) if (subject or body) else None
+
+
+def _col(row, name: str) -> str:
+    try:
+        return (row[name] or "").strip()
+    except (IndexError, KeyError, TypeError):
+        return ""
+
+
 def campaign_view(campaign) -> dict:
     """
     כל מה שצריך להצגת עמודת קמפיין בלוח.
@@ -214,7 +229,10 @@ def campaign_edit(campaign_id):
                      kind=request.form.get("kind", "email"),
                      started_on=(request.form.get("started_on") or "").strip(),
                      source_campaign=(request.form.get("source_campaign") or "").strip(),
-                     variant=(request.form.get("variant") or "").strip())
+                     variant=(request.form.get("variant") or "").strip(),
+                     search_query=(request.form.get("search_query") or "").strip(),
+                     subject_tpl=(request.form.get("subject_tpl") or "").strip(),
+                     body_tpl=(request.form.get("body_tpl") or "").strip())
         for field in ALL_FIELDS:
             store.set_field(
                 campaign_id, field,
@@ -226,7 +244,9 @@ def campaign_edit(campaign_id):
 
     view = campaign_view(campaign)
     return render_template("campaign.html", **view, text_fields=TEXT_FIELDS,
-                           auto_fields=AUTO_FIELDS, manual_fields=MANUAL_FIELDS)
+                           auto_fields=AUTO_FIELDS, manual_fields=MANUAL_FIELDS,
+                           cities=CITIES,
+                           placeholders=list(mail_templates.PLACEHOLDERS))
 
 
 @app.route("/campaign/<int:campaign_id>/delete", methods=["POST"])
@@ -251,9 +271,10 @@ def send_page(campaign_id):
         template_campaign = (f"{campaign['source_campaign']}_offer"
                              if campaign["variant"] == "b"
                              else campaign["source_campaign"])
-        subject, _html, text = mail_templates.render(
+        subject, _html, text = pipeline._render(
             template_campaign,
-            **pipeline.build_ctx(config, campaign["source_campaign"], lead))
+            pipeline.build_ctx(config, campaign["source_campaign"], lead),
+            custom_of(campaign))
         previews.append({"lead": lead, "subject": subject, "text": text})
 
     return render_template("send.html", campaign=campaign, previews=previews,
@@ -281,7 +302,8 @@ def send_now(campaign_id):
 
     summary = pipeline.send_emails(
         config, st, campaign=campaign["source_campaign"],
-        limit=len(chosen), variant=campaign["variant"] or "", only=chosen)
+        limit=len(chosen), variant=campaign["variant"] or "", only=chosen,
+        custom=custom_of(campaign))
     flash(f"נשלחו {summary.get('sent', 0)} מיילים")
     return redirect(url_for("send_page", campaign_id=campaign_id))
 
@@ -358,6 +380,86 @@ def jobs_enrich():
     ok, msg = runner.start("enrich", f"השלמת מיילים ({limit} לידים)", work)
     flash(msg)
     return redirect(url_for("jobs_page"))
+
+
+@app.route("/campaign/<int:campaign_id>/scan", methods=["POST"])
+def campaign_scan(campaign_id):
+    """סורק לפי התחום שהוגדר בקמפיין."""
+    campaign = store.get(campaign_id)
+    query = _col(campaign, "search_query")
+    source = _col(campaign, "source_campaign") or "agent"
+    if not query:
+        flash("צריך למלא תחום לחיפוש בהגדרות הקמפיין")
+        return redirect(url_for("campaign_edit", campaign_id=campaign_id))
+    if not config.google_api_key:
+        flash("חסר GOOGLE_MAPS_API_KEY — בלעדיו אי אפשר לסרוק")
+        return redirect(url_for("campaign_edit", campaign_id=campaign_id))
+
+    city = request.form.get("city") or "jerusalem"
+    target = int(request.form.get("target") or 50)
+
+    def work(job):
+        storage = Storage(leads_db_path(source), campaign=source)
+        return pipeline.scan_by_query(config, storage, query, city, target, source)
+
+    ok, msg = runner.start("scan", f"חיפוש \"{query}\" ב{dict(CITIES).get(city, city)}",
+                           work)
+    flash(msg)
+    return redirect(url_for("jobs_page"))
+
+
+@app.route("/campaign/<int:campaign_id>/upload", methods=["POST"])
+def campaign_upload(campaign_id):
+    """
+    העלאת קובץ אנשי קשר (CSV) לקמפיין. עמודות מזוהות: name/שם,
+    email/מייל, phone/טלפון, first_name, city/עיר.
+    """
+    import csv
+    from egud_bot.jobscan import import_rows
+
+    campaign = store.get(campaign_id)
+    source = _col(campaign, "source_campaign") or "agent"
+    upload = request.files.get("contacts")
+    if not upload or not upload.filename:
+        flash("צריך לבחור קובץ")
+        return redirect(url_for("campaign_edit", campaign_id=campaign_id))
+    if not upload.filename.lower().endswith(".csv"):
+        flash("כרגע נתמך CSV בלבד. באקסל: קובץ → שמירה בשם → CSV UTF-8")
+        return redirect(url_for("campaign_edit", campaign_id=campaign_id))
+
+    text = upload.stream.read().decode("utf-8-sig", errors="replace")
+    rows = list(csv.DictReader(io.StringIO(text)))
+    storage = Storage(leads_db_path(source), campaign=source)
+    summary = import_rows(storage, rows, prefix=f"c{campaign_id}")
+    flash("ייבוא: " + " · ".join(f"{k} {v}" for k, v in summary.items()))
+    return redirect(url_for("campaign_edit", campaign_id=campaign_id))
+
+
+@app.route("/campaign/<int:campaign_id>/phones")
+def phones_page(campaign_id):
+    """רשימת טלפונים — למי שאין לו מייל, או לכל הקמפיין."""
+    campaign = store.get(campaign_id)
+    st = leads_store(_col(campaign, "source_campaign"))
+    leads = st.leads_with_phone() if st else []
+    return render_template("phones.html", campaign=campaign, leads=leads)
+
+
+@app.route("/campaign/<int:campaign_id>/phones.csv")
+def phones_csv(campaign_id):
+    import csv
+    campaign = store.get(campaign_id)
+    st = leads_store(_col(campaign, "source_campaign"))
+    leads = st.leads_with_phone() if st else []
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["שם", "טלפון", "אזור", "ביקורות", "דירוג", "מייל"])
+    for lead in leads:
+        writer.writerow([lead["name"], lead["phone"], lead["neighborhood"],
+                         lead["review_count"], lead["rating"] or "",
+                         lead["email"] or ""])
+    data = "\ufeff" + buf.getvalue()      # BOM כדי שאקסל יציג עברית נכון
+    return Response(data, mimetype="text/csv", headers={
+        "Content-Disposition": f'attachment; filename="phones-{campaign_id}.csv"'})
 
 
 # ---------------------------- גיבוי ושחזור ----------------------------

@@ -27,6 +27,9 @@ CREATE TABLE IF NOT EXISTS campaigns (
     started_on      TEXT,                   -- שורת "תאריך"
     source_campaign TEXT,                   -- מאיזה DB לידים נמדד (agent/crm/...)
     variant         TEXT,                   -- איזה נוסח (a/b). ריק = הכול
+    search_query    TEXT,                   -- תחום לחיפוש חופשי ("יועצים עסקיים")
+    subject_tpl     TEXT,                   -- נושא המייל, עם מציני מקום
+    body_tpl        TEXT,                   -- גוף המייל, עם מציני מקום
     position        INTEGER DEFAULT 0,
     archived        INTEGER DEFAULT 0,
     created_at      TEXT
@@ -70,6 +73,12 @@ class CampaignStore:
         self.db_path = db_path
         with self._conn() as conn:
             conn.executescript(SCHEMA)
+            # מיגרציה למאגר שנוצר לפני שהשדות האלה נוספו
+            for column in ("search_query", "subject_tpl", "body_tpl"):
+                try:
+                    conn.execute(f"ALTER TABLE campaigns ADD COLUMN {column} TEXT")
+                except Exception:  # noqa: BLE001 — העמודה כבר קיימת
+                    pass
 
     @contextmanager
     def _conn(self):
@@ -95,7 +104,8 @@ class CampaignStore:
 
     def update(self, campaign_id: int, **fields) -> None:
         allowed = {"title", "kind", "started_on", "source_campaign", "variant",
-                   "archived", "position"}
+                   "archived", "position", "search_query", "subject_tpl",
+                   "body_tpl"}
         sets = {k: v for k, v in fields.items() if k in allowed}
         if not sets:
             return
