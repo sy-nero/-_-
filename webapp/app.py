@@ -17,8 +17,13 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import io
+import zipfile
+from functools import wraps
+from datetime import datetime
+
 from flask import (Flask, request, render_template, redirect,  # noqa: E402
-                   url_for, Response, flash)
+                   url_for, Response, flash, session, send_file)
 
 from config import config  # noqa: E402
 from egud_bot import pipeline, templates as mail_templates, tracking  # noqa: E402
@@ -28,14 +33,61 @@ from egud_bot.storage import Storage  # noqa: E402
 
 app = Flask(__name__)
 app.secret_key = config.flask_secret_key
+app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax")
 store = CampaignStore()
+
+
+# ---------------------------- הגנה בסיסמה ----------------------------
+# האפליקציה מציגה לידים ושולחת מיילים בשם החברה, ולכן היא לא נשארת פתוחה
+# לכל מי שמגיע לכתובת. הפיקסל ובדיקת הבריאות נשארים ציבוריים בכוונה:
+# הפיקסל נטען מתוכנת המייל של הנמען, שאין לה סשן.
+PUBLIC_ENDPOINTS = {"pixel", "health", "login", "static"}
+
+
+def login_required(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if not config.app_password or session.get("ok"):
+            return view(*args, **kwargs)
+        return redirect(url_for("login", next=request.path))
+    return wrapped
+
+
+@app.before_request
+def guard():
+    if request.endpoint in PUBLIC_ENDPOINTS or not config.app_password:
+        return None
+    if not session.get("ok"):
+        return redirect(url_for("login", next=request.path))
+    return None
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if not config.app_password:
+        return redirect(url_for("board"))
+    error = ""
+    if request.method == "POST":
+        if (request.form.get("password") or "") == config.app_password:
+            session["ok"] = True
+            session.permanent = True
+            return redirect(request.args.get("next") or url_for("board"))
+        error = "סיסמה שגויה"
+    return render_template("login.html", error=error)
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
 
 # מיפוי שם הקמפיין ב-DB הלידים -> נתיב הקובץ
 def leads_db_path(source_campaign: str) -> str:
     if not source_campaign:
         return ""
     return (config.db_path if source_campaign == "funding"
-            else f"data/leads_{source_campaign}.db")
+            else os.path.join(config.data_dir, f"leads_{source_campaign}.db"))
 
 
 def leads_store(source_campaign: str):
@@ -208,6 +260,64 @@ def pixel(track_id):
     return Response(tracking.TRANSPARENT_GIF, mimetype="image/gif",
                     headers={"Cache-Control": "no-store, no-cache, must-revalidate",
                              "Pragma": "no-cache"})
+
+
+# ---------------------------- גיבוי ושחזור ----------------------------
+def _data_files() -> list:
+    """קובצי הנתונים: מאגרי הלידים, הקמפיינים, ויומני השליחה."""
+    if not os.path.isdir(config.data_dir):
+        return []
+    return sorted(f for f in os.listdir(config.data_dir)
+                  if f.endswith(".db") or f.startswith("sent_"))
+
+
+@app.route("/backup")
+def backup_page():
+    files = [(f, os.path.getsize(os.path.join(config.data_dir, f)))
+             for f in _data_files()]
+    return render_template("backup.html", files=files, data_dir=config.data_dir)
+
+
+@app.route("/backup/download")
+def backup_download():
+    """מוריד את כל הנתונים כקובץ zip אחד."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for name in _data_files():
+            z.write(os.path.join(config.data_dir, name), name)
+    buf.seek(0)
+    stamp = datetime.now().strftime("%Y-%m-%d")
+    return send_file(buf, mimetype="application/zip", as_attachment=True,
+                     download_name=f"sy-nero-data-{stamp}.zip")
+
+
+@app.route("/backup/upload", methods=["POST"])
+def backup_upload():
+    """
+    משחזר נתונים מקובץ zip. כך מעבירים את המאגר מהמחשב לענן: מורידים
+    גיבוי מהמחשב, ומעלים אותו כאן. קבצים קיימים נדרסים.
+    """
+    upload = request.files.get("archive")
+    if not upload or not upload.filename.endswith(".zip"):
+        flash("צריך לבחור קובץ zip")
+        return redirect(url_for("backup_page"))
+
+    os.makedirs(config.data_dir, exist_ok=True)
+    restored = 0
+    with zipfile.ZipFile(upload.stream) as z:
+        for info in z.infolist():
+            name = os.path.basename(info.filename)
+            # רק קובצי נתונים, ורק בשם קובץ נקי — בלי נתיבים מהארכיון
+            if info.is_dir() or not name:
+                continue
+            if not (name.endswith(".db") or name.startswith("sent_")):
+                continue
+            with z.open(info) as src, \
+                    open(os.path.join(config.data_dir, name), "wb") as dst:
+                dst.write(src.read())
+            restored += 1
+    flash(f"שוחזרו {restored} קבצים")
+    return redirect(url_for("board"))
 
 
 @app.route("/health")

@@ -170,7 +170,11 @@
 <body>
 <header class="top">
   <div class="brand">לוח הקמפיינים <span>סינרו טק</span></div>
-  <nav><a href="{{ url_for('board') }}">כל הקמפיינים</a></nav>
+  <nav style="display:flex; gap:18px; margin-inline-start:auto;">
+    <a href="{{ url_for('board') }}">כל הקמפיינים</a>
+    <a href="{{ url_for('backup_page') }}">גיבוי</a>
+    {% if session.get('ok') %}<a href="{{ url_for('logout') }}">יציאה</a>{% endif %}
+  </nav>
 </header>
 <main>
   {% with msgs = get_flashed_messages() %}

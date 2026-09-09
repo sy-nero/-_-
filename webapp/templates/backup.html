@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}גיבוי ושחזור{% endblock %}
+{% block body %}
+
+<div class="card">
+  <h2>גיבוי ושחזור</h2>
+  <p class="sub">
+    כל הנתונים יושבים בקבצים בתיקייה <code>{{ data_dir }}</code>. כך מעבירים
+    אותם בין המחשב לענן, וכך שומרים עותק לפני שינוי גדול.
+  </p>
+  <a class="btn" href="{{ url_for('backup_download') }}">הורדת גיבוי מלא</a>
+</div>
+
+<div class="card">
+  <h2>שחזור מקובץ גיבוי</h2>
+  <p class="sub">
+    העלאת קובץ zip שהורד מכאן. <b>קבצים קיימים באותו שם יידרסו</b> — כדאי
+    להוריד גיבוי לפני.
+  </p>
+  <form method="post" action="{{ url_for('backup_upload') }}"
+        enctype="multipart/form-data"
+        onsubmit="return confirm('הנתונים הקיימים יידרסו. להמשיך?');">
+    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+      <input type="file" name="archive" accept=".zip" required
+             style="flex:1; min-width:220px;">
+      <button type="submit">שחזור</button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <h2>הקבצים שיש כרגע</h2>
+  {% if not files %}<p class="muted">אין עדיין קובצי נתונים.</p>{% else %}
+  <div class="scroll">
+    <table>
+      <thead><tr><th>קובץ</th><th>גודל</th></tr></thead>
+      <tbody>
+      {% for name, size in files %}
+        <tr><td class="remail">{{ name }}</td>
+            <td class="num">{{ (size / 1024) | round | int }} KB</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

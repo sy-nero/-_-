@@ -34,9 +34,16 @@ def _campaign(args) -> str:
     return getattr(args, "campaign", "funding") or "funding"
 
 
+def _leads_db(campaign: str) -> str:
+    """נתיב מאגר הלידים של הקמפיין, בתוך תיקיית הנתונים."""
+    import os
+    return (config.db_path if campaign == "funding"
+            else os.path.join(config.data_dir, f"leads_{campaign}.db"))
+
+
 def _storage(args) -> Storage:
     c = _campaign(args)
-    path = config.db_path if c == "funding" else f"data/leads_{c}.db"
+    path = _leads_db(c)
     # שני הנוסחים חולקים יומן שליחות אחד, כדי שאיש לא יקבל את שניהם
     return Storage(path, campaign=c)
 
@@ -384,8 +391,7 @@ def cmd_stats(args) -> int:
 
 
 def cmd_export(args) -> int:
-    c = _campaign(args)
-    db_path = config.db_path if c == "funding" else f"data/leads_{c}.db"
+    db_path = _leads_db(_campaign(args))
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     rows = conn.execute("SELECT * FROM leads ORDER BY found_at").fetchall()

@@ -16,7 +16,7 @@ import sqlite3
 from datetime import datetime, timezone
 from contextlib import contextmanager
 
-DB_PATH = "data/campaigns.db"
+DB_PATH = os.path.join(os.getenv("DATA_DIR", "data"), "campaigns.db")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS campaigns (

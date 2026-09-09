@@ -89,7 +89,15 @@ class Config:
     request_delay_seconds: float = float(os.getenv("REQUEST_DELAY_SECONDS", "1.0"))
 
     # Storage
-    db_path: str = os.getenv("DB_PATH", "data/leads.db")
+    # תיקיית הנתונים. בענן מצביעים אותה לדיסק קבוע, אחרת הנתונים נמחקים
+    # בכל פריסה מחדש.
+    data_dir: str = os.getenv("DATA_DIR", "data")
+    db_path: str = os.getenv("DB_PATH", "") or os.path.join(
+        os.getenv("DATA_DIR", "data"), "leads.db")
+
+    # סיסמת הכניסה לאפליקציה. חובה כשהיא חשופה לאינטרנט —
+    # בלעדיה כל מי שיש לו את הקישור יכול לראות לידים ולשלוח מיילים.
+    app_password: str = os.getenv("APP_PASSWORD", "")
 
     # Landing
     flask_secret_key: str = os.getenv("FLASK_SECRET_KEY", "change-me")

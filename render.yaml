@@ -1,0 +1,38 @@
+# פריסה ל-Render: מחברים את הריפו, והשירות נבנה לפי הקובץ הזה.
+# הסודות (סיסמאות, מפתחות) מוזנים בלוח הבקרה ולא נשמרים כאן.
+services:
+  - type: web
+    name: sy-nero-campaigns
+    runtime: python
+    plan: starter          # דיסק קבוע דורש תוכנית בתשלום; ב-free הנתונים נמחקים
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn webapp.app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    healthCheckPath: /health
+    disk:
+      name: data
+      mountPath: /var/data   # הדיסק הקבוע — כאן יושבים כל קובצי ה-SQLite
+      sizeGB: 1
+    envVars:
+      - key: DATA_DIR
+        value: /var/data
+      - key: PYTHON_VERSION
+        value: "3.11"
+      # כל השאר מוזנים ידנית בלוח הבקרה של Render:
+      - key: APP_PASSWORD          # סיסמת הכניסה לאפליקציה
+        sync: false
+      - key: FLASK_SECRET_KEY      # מפתח לחתימת העוגיות
+        generateValue: true
+      - key: TRACKING_BASE_URL     # כתובת השירות עצמו, למעקב פתיחות
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: AGENT_FROM_EMAIL
+        sync: false
+      - key: AGENT_SMTP_USER
+        sync: false
+      - key: AGENT_SMTP_PASSWORD
+        sync: false
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
