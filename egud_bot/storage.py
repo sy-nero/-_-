@@ -213,6 +213,21 @@ class Storage:
                 (limit,),
             ).fetchall()
 
+    def pending_count(self) -> int:
+        """
+        כמה ממתינים לשליחה — ספירה ב-SQL ולא שליפה של השורות.
+
+        הלוח קרא קודם את כל השורות רק כדי לספור אותן. מול D1 זו העברה של
+        כל המאגר ברשת, לכל קמפיין בלוח בנפרד — ומשם הטעינה האיטית.
+        """
+        with self._conn() as conn:
+            return conn.execute(
+                """SELECT COUNT(DISTINCT lower(email)) FROM {leads}
+                   WHERE email IS NOT NULL AND email != ''
+                     AND status IN ('found', 'no_email')
+                     AND (variant IS NULL OR variant = '')"""
+            ).fetchone()[0]
+
     def leads_without_email(self, limit: int) -> list[sqlite3.Row]:
         """לידים שנסרקו אך לא נמצאה להם כתובת מייל — מועמדים להעשרה."""
         with self._conn() as conn:

@@ -223,7 +223,10 @@ def campaign_view(campaign) -> dict:
     reply_pct = (metrics["replied"] * 100 // metrics["sent"]) if metrics["sent"] else 0
 
     st = leads_store(campaign["source_campaign"])
-    pending = len(st.leads_to_email(10 ** 6)) if st else 0
+    try:
+        pending = st.pending_count() if st else 0
+    except Exception:  # noqa: BLE001 — מאגר ישן/לא נגיש לא מפיל את הלוח
+        pending = 0
 
     return {"campaign": campaign, "fields": fields, "metrics": metrics,
             "open_rate": f"{open_pct}%" if metrics["sent"] else "—",
