@@ -6,7 +6,9 @@ services:
     runtime: python
     plan: starter          # דיסק קבוע דורש תוכנית בתשלום; ב-free הנתונים נמחקים
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn webapp.app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    # worker אחד בכוונה: הסריקה רצה כ-thread בתוך התהליך, ועם שני workers
+    # הבקשה הבאה מגיעה לתהליך אחר שלא מכיר את ההרצה — וההתקדמות נעלמת
+    startCommand: gunicorn webapp.app:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120
     healthCheckPath: /health
     disk:
       name: data

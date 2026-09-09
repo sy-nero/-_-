@@ -159,6 +159,7 @@
   .grid { display:grid; gap:14px; }
   .grid.c2 { grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); }
   .grid.c3 { grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); }
+  .grid.c4 { grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); }
 
   .btn, button {
       background:var(--brand); color:#fff; border:1px solid var(--brand);
@@ -219,6 +220,12 @@
   .pool b { display:block; font-size:20px; font-weight:700; color:var(--ink);
             line-height:1.2; }
   .pool span { font-size:11.5px; color:var(--muted); }
+  .subsec { border-top:1px solid var(--line); padding-top:14px; margin-top:14px; }
+  .subsec h3 { font-size:14.5px; font-weight:700; margin:0 0 4px; }
+  details.card > summary { list-style:none; }
+  details.card > summary::-webkit-details-marker { display:none; }
+  details.card > summary::before { content:"\25b8 "; color:var(--muted); }
+  details.card[open] > summary::before { content:"\25be "; }
   .editlink { font-weight:600; color:var(--brand); margin-inline-start:6px; }
   .flashfield { border-color:var(--good) !important;
                 box-shadow:0 0 0 3px var(--good-soft) !important; }

@@ -264,6 +264,8 @@ def campaign_edit(campaign_id):
     return render_template("campaign.html", **view, text_fields=TEXT_FIELDS,
                            auto_fields=AUTO_FIELDS, manual_fields=MANUAL_FIELDS,
                            cities=CITIES, pool=pool_of(campaign),
+                           min_reviews=config.agent_min_reviews,
+                           min_rating=config.agent_min_rating,
                            terms=pipeline.split_query(_col(campaign, "search_query")),
                            just_saved=bool(request.args.get("saved")),
                            busy=runner.busy,
@@ -419,15 +421,27 @@ def campaign_scan(campaign_id):
         return redirect(url_for("campaign_edit", campaign_id=campaign_id))
 
     city = request.form.get("city") or "jerusalem"
-    target = _as_int(request.form.get("target")) or 50
-    target = max(1, min(target, 500))
+    target = max(1, min(_as_int(request.form.get("target")) or 50, 500))
     terms = pipeline.split_query(query)
+
+    # תנאי הסף לביקורות — נקבעים כאן לכל סריקה, וברירת המחדל מהסביבה
+    min_reviews = _as_int(request.form.get("min_reviews"))
+    if min_reviews is None:
+        min_reviews = config.agent_min_reviews
+    min_reviews = max(0, min(min_reviews, 100))
+    try:
+        min_rating = float(request.form.get("min_rating") or config.agent_min_rating)
+    except ValueError:
+        min_rating = config.agent_min_rating
+    min_rating = max(0.0, min(min_rating, 5.0))
 
     def work(job):
         storage = Storage(leads_db_path(source), campaign=source)
-        return pipeline.scan_by_query(config, storage, query, city, target, source)
+        return pipeline.scan_by_query(config, storage, query, city, target, source,
+                                      min_reviews=min_reviews, min_rating=min_rating)
 
-    title = f"חיפוש {' · '.join(terms)} ב{dict(CITIES).get(city, city)} (יעד {target})"
+    title = (f"חיפוש {' · '.join(terms)} ב{dict(CITIES).get(city, city)} "
+             f"(יעד {target}, מ-{min_reviews} ביקורות, דירוג {min_rating:g}+)")
     ok, msg = runner.start("scan", title, work)
     flash(msg)
     return redirect(url_for("jobs_page", campaign=campaign_id))

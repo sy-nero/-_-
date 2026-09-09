@@ -234,7 +234,9 @@ def split_query(query: str) -> list[str]:
 
 def scan_by_query(cfg: Config, storage: Storage, query: str,
                   city: str = "jerusalem", target_emails: int = 50,
-                  campaign: str = "agent") -> dict:
+                  campaign: str = "agent",
+                  min_reviews: int | None = None,
+                  min_rating: float | None = None) -> dict:
     """
     סורק לפי תחום שהוזן כטקסט חופשי ("יועצים עסקיים", "מאמן עסקי").
 
@@ -245,6 +247,9 @@ def scan_by_query(cfg: Config, storage: Storage, query: str,
 
     השדה יכול להכיל כמה תחומים מופרדים בפסיקים; כל אחד נסרק בנפרד
     (split_query), והעצירה היא כשמגיעים ליעד המיילים — לא בסוף הרשימה.
+
+    min_reviews / min_rating — תנאי הסף לביקורות. אם לא הועברו, נלקחים
+    מהגדרות הסביבה (AGENT_MIN_REVIEWS / AGENT_MIN_RATING).
     """
     from data.neighborhoods import neighborhoods_for
 
@@ -252,11 +257,15 @@ def scan_by_query(cfg: Config, storage: Storage, query: str,
     if not terms:
         raise ValueError("צריך להזין תחום לחיפוש")
 
+    reviews_floor = cfg.agent_min_reviews if min_reviews is None else min_reviews
+    rating_floor = cfg.agent_min_rating if min_rating is None else min_rating
+
     client = make_client(cfg, include_reviews=(campaign == "agent"))
     neighborhoods = neighborhoods_for(city)
     summary = {"נסרקו": 0, "עברו סינון": 0, "חדשים": 0,
                "עם מייל": 0, "בלי מייל": 0, "עם המלצה": 0}
-    logger.info("תחומים לחיפוש: %s", " · ".join(terms))
+    logger.info("תחומים לחיפוש: %s (לפחות %d ביקורות, דירוג %.1f ומעלה)",
+                " · ".join(terms), reviews_floor, rating_floor)
 
     for nb in neighborhoods:
         for term in terms:
@@ -269,9 +278,9 @@ def scan_by_query(cfg: Config, storage: Storage, query: str,
                 lead = BusinessLead.from_place(place, neighborhood=nb.name)
                 if not lead.place_id:
                     continue
-                if not passes_filters_agent(lead, cfg.agent_min_reviews,
+                if not passes_filters_agent(lead, reviews_floor,
                                             cfg.require_operational,
-                                            cfg.agent_min_rating,
+                                            rating_floor,
                                             any_type=True):
                     continue
                 summary["עברו סינון"] += 1

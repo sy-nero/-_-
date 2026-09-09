@@ -12,4 +12,5 @@ COPY . .
 RUN mkdir -p /var/data
 
 EXPOSE 8080
-CMD ["sh", "-c", "gunicorn webapp.app:app --bind 0.0.0.0:${PORT:-8080} --workers 2 --timeout 120"]
+# worker אחד: הסריקה רצה כ-thread בתוך התהליך (ראו render.yaml)
+CMD ["sh", "-c", "gunicorn webapp.app:app --bind 0.0.0.0:${PORT:-8080} --workers 1 --timeout 120"]

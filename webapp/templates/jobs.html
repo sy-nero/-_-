@@ -16,39 +16,6 @@
 </div>
 {% endif %}
 
-<div class="card">
-  <h2>סריקת עסקים חדשים</h2>
-  <p class="sub">
-    מחפשת בעלי מקצוע (רו״ח, עו״ד, סוכני ביטוח, מתווכים) בשכונות החרדיות של
-    העיר שנבחרה, מאתרת מייל, ומחפשת המלצות. נמשך כמה דקות.
-  </p>
-  <form method="post" action="{{ url_for('jobs_scan') }}" class="grid c3">
-    <label class="field"><span>עיר</span>
-      <select name="city">
-        {% for key, name in cities %}<option value="{{ key }}">{{ name }}</option>{% endfor %}
-      </select></label>
-    <label class="field"><span>כמה מיילים לאסוף</span>
-      <input type="text" name="target" value="50"></label>
-    <label class="field"><span>&nbsp;</span>
-      <button type="submit" {{ 'disabled' if busy or not has_key }}>התחלת סריקה</button>
-    </label>
-  </form>
-</div>
-
-<div class="card">
-  <h2>השלמת מיילים</h2>
-  <p class="sub">
-    לוקחת לידים שנסרקו בלי כתובת מייל, מחפשת את אתר המשרד ברשת ומחלצת ממנו
-    מייל. מי שנמצא לו מייל נכנס לרשימת השליחה.
-  </p>
-  <form method="post" action="{{ url_for('jobs_enrich') }}" class="grid c3">
-    <label class="field"><span>כמה לידים לנסות</span>
-      <input type="text" name="limit" value="50"></label>
-    <label class="field"><span>&nbsp;</span>
-      <button type="submit" {{ 'disabled' if busy }}>התחלת השלמה</button></label>
-  </form>
-</div>
-
 {% if job %}
 <div class="card">
   <h2>{{ job.title }}</h2>
@@ -66,11 +33,72 @@
   </div>
   {% endif %}
 
+  {% if job.lines %}
   <div class="mail" style="max-height:340px; overflow:auto; padding:12px 14px;
        background:#fbfcfe; border:1px solid var(--line); border-radius:8px;">{% for line in job.lines %}{{ line }}
 {% endfor %}</div>
+  {% endif %}
+
+  {% if job.status != 'running' and back_campaign %}
+  <div class="actionbar">
+    <a class="btn" href="{{ url_for('campaign_edit', campaign_id=back_campaign) }}#scan">
+      חזרה לקמפיין</a>
+    <span class="muted">התוצאות כבר במאגר — המספרים בקמפיין מעודכנים.</span>
+  </div>
+  {% endif %}
+</div>
+{% else %}
+<div class="warn">
+  <b>אין כרגע הרצה להציג.</b>
+  אם התחלת סריקה ולא רואה אותה כאן, השירות הופעל מחדש באמצע (בתוכנית
+  החינמית של Render הוא נרדם אחרי חוסר פעילות) — מה שנסרק עד אז נשמר.
+  {% if back_campaign %}
+  <a href="{{ url_for('campaign_edit', campaign_id=back_campaign) }}#scan">לחזור לקמפיין
+  ולהתחיל שוב</a>.
+  {% endif %}
 </div>
 {% endif %}
+
+<details class="card tight">
+  <summary style="cursor:pointer; font-weight:700;">סריקה כללית (לא לפי קמפיין)</summary>
+  <p class="sub" style="margin-top:12px;">
+    שני הכלים האלה עובדים על כל המאגר ולא לפי תחום של קמפיין מסוים.
+    בדרך כלל לא צריך אותם — הסריקה מתחילה מעמוד הקמפיין.
+  </p>
+<div class="subsec">
+  <h3>סריקת עסקים חדשים</h3>
+  <p class="sub">
+    מחפשת בעלי מקצוע (רו״ח, עו״ד, סוכני ביטוח, מתווכים) בשכונות החרדיות של
+    העיר שנבחרה, מאתרת מייל, ומחפשת המלצות. נמשך כמה דקות.
+  </p>
+  <form method="post" action="{{ url_for('jobs_scan') }}" class="grid c3">
+    <label class="field"><span>עיר</span>
+      <select name="city">
+        {% for key, name in cities %}<option value="{{ key }}">{{ name }}</option>{% endfor %}
+      </select></label>
+    <label class="field"><span>כמה מיילים לאסוף</span>
+      <input type="text" name="target" value="50"></label>
+    <label class="field"><span>&nbsp;</span>
+      <button type="submit" {{ 'disabled' if busy or not has_key }}>התחלת סריקה</button>
+    </label>
+  </form>
+</div>
+
+<div class="subsec">
+  <h3>השלמת מיילים</h3>
+  <p class="sub">
+    לוקחת לידים שנסרקו בלי כתובת מייל, מחפשת את אתר המשרד ברשת ומחלצת ממנו
+    מייל. מי שנמצא לו מייל נכנס לרשימת השליחה.
+  </p>
+  <form method="post" action="{{ url_for('jobs_enrich') }}" class="grid c3">
+    <label class="field"><span>כמה לידים לנסות</span>
+      <input type="text" name="limit" value="50"></label>
+    <label class="field"><span>&nbsp;</span>
+      <button type="submit" {{ 'disabled' if busy }}>התחלת השלמה</button></label>
+  </form>
+</div>
+
+</details>
 
 <div class="card tight">
   <p class="muted" style="margin:0;">
