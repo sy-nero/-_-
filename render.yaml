@@ -7,8 +7,11 @@ services:
     plan: starter          # דיסק קבוע דורש תוכנית בתשלום; ב-free הנתונים נמחקים
     buildCommand: pip install -r requirements.txt
     # worker אחד בכוונה: הסריקה רצה כ-thread בתוך התהליך, ועם שני workers
-    # הבקשה הבאה מגיעה לתהליך אחר שלא מכיר את ההרצה — וההתקדמות נעלמת
-    startCommand: gunicorn webapp.app:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120
+    # הבקשה הבאה מגיעה לתהליך אחר שלא מכיר את ההרצה — וההתקדמות נעלמת.
+    # threads: ה-worker הסינכרוני מטפל בבקשה אחת בכל רגע, ולכן בזמן סריקה
+    # ארוכה העמוד לא נענה בכלל. gthread מאפשר להגיש את עמוד ההתקדמות
+    # במקביל. timeout ארוך יותר כדי שהארביטר לא יהרוג את ה-worker באמצע.
+    startCommand: gunicorn webapp.app:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 300
     healthCheckPath: /health
     disk:
       name: data
