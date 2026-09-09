@@ -2,6 +2,11 @@
 {% block title %}סריקה והשלמת מיילים{% endblock %}
 {% block body %}
 
+{% if back_campaign %}
+<p><a href="{{ url_for('campaign_edit', campaign_id=back_campaign) }}#scan">
+  &#8592; חזרה לקמפיין</a></p>
+{% endif %}
+
 {% if busy %}<meta http-equiv="refresh" content="5">{% endif %}
 
 {% if not has_key %}

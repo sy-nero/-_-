@@ -162,6 +162,22 @@ def _col(row, name: str) -> str:
         return ""
 
 
+def pool_of(campaign) -> dict:
+    """
+    מצב מאגר הלידים של הקמפיין: כמה נסרקו, לכמה יש מייל, כמה ממתינים.
+
+    נקרא רק בעמוד הקמפיין הבודד ולא בלוח — ב-D1 כל שאילתה היא קריאת רשת,
+    ובלוח זה היה מכפיל את זמן הטעינה במספר הקמפיינים.
+    """
+    st = leads_store(_col(campaign, "source_campaign") or "agent")
+    if not st:
+        return {}
+    try:
+        return st.funnel()
+    except Exception:  # noqa: BLE001 — מאגר חסר לא מפיל את העמוד
+        return {}
+
+
 def campaign_view(campaign) -> dict:
     """
     כל מה שצריך להצגת עמודת קמפיין בלוח.
@@ -240,12 +256,17 @@ def campaign_edit(campaign_id):
                 note=request.form.get(f"note::{field}", ""),
                 improve=request.form.get(f"improve::{field}", ""))
         flash("נשמר")
-        return redirect(url_for("campaign_edit", campaign_id=campaign_id))
+        # חוזרים ישר לבלוק הסריקה — זה הצעד הבא אחרי שמירת ההגדרות
+        return redirect(url_for("campaign_edit", campaign_id=campaign_id,
+                                saved=1) + "#scan")
 
     view = campaign_view(campaign)
     return render_template("campaign.html", **view, text_fields=TEXT_FIELDS,
                            auto_fields=AUTO_FIELDS, manual_fields=MANUAL_FIELDS,
-                           cities=CITIES,
+                           cities=CITIES, pool=pool_of(campaign),
+                           terms=pipeline.split_query(_col(campaign, "search_query")),
+                           just_saved=bool(request.args.get("saved")),
+                           busy=runner.busy,
                            placeholders=list(mail_templates.PLACEHOLDERS))
 
 
@@ -342,7 +363,9 @@ CITIES = [("jerusalem", "ירושלים"), ("bnei-brak", "בני ברק"),
 
 @app.route("/jobs")
 def jobs_page():
+    back = request.args.get("campaign", type=int)
     return render_template("jobs.html", job=runner.current or runner.last,
+                           back_campaign=back,
                            busy=runner.busy, cities=CITIES,
                            has_key=bool(config.google_api_key))
 
@@ -396,16 +419,18 @@ def campaign_scan(campaign_id):
         return redirect(url_for("campaign_edit", campaign_id=campaign_id))
 
     city = request.form.get("city") or "jerusalem"
-    target = int(request.form.get("target") or 50)
+    target = _as_int(request.form.get("target")) or 50
+    target = max(1, min(target, 500))
+    terms = pipeline.split_query(query)
 
     def work(job):
         storage = Storage(leads_db_path(source), campaign=source)
         return pipeline.scan_by_query(config, storage, query, city, target, source)
 
-    ok, msg = runner.start("scan", f"חיפוש \"{query}\" ב{dict(CITIES).get(city, city)}",
-                           work)
+    title = f"חיפוש {' · '.join(terms)} ב{dict(CITIES).get(city, city)} (יעד {target})"
+    ok, msg = runner.start("scan", title, work)
     flash(msg)
-    return redirect(url_for("jobs_page"))
+    return redirect(url_for("jobs_page", campaign=campaign_id))
 
 
 @app.route("/campaign/<int:campaign_id>/upload", methods=["POST"])

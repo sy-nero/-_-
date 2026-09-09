@@ -135,37 +135,65 @@
 </div>
 </form>
 
-<div class="card">
+<div class="card" id="scan">
   <h2>מה עושים עכשיו</h2>
+  {% if just_saved %}
+  <div class="saved">ההגדרות נשמרו. הצעד הבא: סריקה לפי התחום שכתבת.</div>
+  {% else %}
   <p class="sub">שמרי קודם את ההגדרות למעלה, ואז בחרי פעולה.</p>
+  {% endif %}
 
-  <div class="grid c3">
-    <form method="post" action="{{ url_for('campaign_scan', campaign_id=campaign['id']) }}">
-      <label class="field"><span>1. חיפוש נמענים בגוגל</span>
-        <select name="city">
-          {% for key, name in cities %}<option value="{{ key }}">{{ name }}</option>{% endfor %}
-        </select></label>
-      <input type="hidden" name="target" value="50">
-      <button type="submit" style="margin-top:8px;">חיפוש לפי התחום</button>
-    </form>
-
-    <form method="post" action="{{ url_for('campaign_upload', campaign_id=campaign['id']) }}"
-          enctype="multipart/form-data">
-      <label class="field"><span>2. או העלאת רשימה משלך (CSV)</span>
-        <input type="file" name="contacts" accept=".csv" required></label>
-      <button type="submit" class="ghost" style="margin-top:8px;">העלאה</button>
-      <div class="muted" style="margin-top:6px;">עמודות: שם, מייל, טלפון</div>
-    </form>
-
-    <div>
-      <label class="field"><span>3. ומה לעשות עם הרשימה</span></label>
-      <div style="display:flex; gap:8px; flex-wrap:wrap;">
-        <a class="btn" href="{{ url_for('send_page', campaign_id=campaign['id']) }}">
-          שליחת מיילים</a>
-        <a class="btn ghost" href="{{ url_for('phones_page', campaign_id=campaign['id']) }}">
-          רשימת טלפונים</a>
-      </div>
+  <h3 class="step">1. חיפוש נמענים בגוגל</h3>
+  {% if terms %}
+  <form method="post" action="{{ url_for('campaign_scan', campaign_id=campaign['id']) }}"
+        class="grid c3">
+    <label class="field"><span>עיר</span>
+      <select name="city">
+        {% for key, name in cities %}<option value="{{ key }}">{{ name }}</option>{% endfor %}
+      </select></label>
+    <label class="field"><span>כמה נמענים לאסוף</span>
+      <input type="number" name="target" value="50" min="1" max="500" step="10"></label>
+    <label class="field"><span>&nbsp;</span>
+      <button type="submit" {{ 'disabled' if busy }}>התחלת סריקה</button></label>
+    <div style="grid-column:1/-1;" class="muted">
+      יחפש בגוגל:
+      {% for t in terms %}<span class="tag">{{ t }}</span>{% endfor %}
+      &middot; בשכונות החרדיות של העיר שנבחרה, עם לפחות 2 ביקורות ודירוג 4.0 ומעלה.
+      {% if busy %}<b>יש כרגע סריקה שרצה</b> — <a href="{{ url_for('jobs_page') }}">להתקדמות</a>.
+      {% else %}התוצאות נכנסות למאגר <code>{{ campaign['source_campaign'] or 'agent' }}</code>
+      והמספרים בטבלה מתעדכנים לבד.{% endif %}
     </div>
+  </form>
+  {% else %}
+  <div class="warn">
+    עוד לא הוגדר <b>תחום לחיפוש</b>. מלאי אותו למעלה, שמרי — ואז יופיע כאן כפתור סריקה.
+  </div>
+  {% endif %}
+
+  {% if pool %}
+  <div class="pool">
+    {% for name, count in pool.items() %}
+    <div><b>{{ count }}</b><span>{{ name }}</span></div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <h3 class="step">2. או העלאת רשימה משלך</h3>
+  <form method="post" action="{{ url_for('campaign_upload', campaign_id=campaign['id']) }}"
+        enctype="multipart/form-data" class="grid c3">
+    <label class="field"><span>קובץ CSV</span>
+      <input type="file" name="contacts" accept=".csv" required></label>
+    <label class="field"><span>&nbsp;</span>
+      <button type="submit" class="ghost">העלאה</button></label>
+    <div class="muted" style="align-self:center;">עמודות: שם, מייל, טלפון, עיר</div>
+  </form>
+
+  <h3 class="step">3. ומה לעשות עם הרשימה</h3>
+  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+    <a class="btn" href="{{ url_for('send_page', campaign_id=campaign['id']) }}">
+      שליחת מיילים</a>
+    <a class="btn ghost" href="{{ url_for('phones_page', campaign_id=campaign['id']) }}">
+      רשימת טלפונים</a>
   </div>
 </div>
 

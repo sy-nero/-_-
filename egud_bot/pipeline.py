@@ -2,6 +2,7 @@
 תזמור התהליך המלא: סריקה -> סינון -> איתור מייל -> שמירה -> שליחה.
 """
 import json
+import re
 import time
 import logging
 
@@ -208,6 +209,29 @@ def scan_retail(
     return summary
 
 
+# מילות סיום שנספחות לרשימת תחומים ואינן תחום בפני עצמן
+_NOISE_RE = re.compile(r"\s*(?:וכדומה|וכולי|וכדו|וכד|וכו|ועוד)['\u2019\u05f3]?\s*$")
+_EDGE = "-\u2013\u2014,.\"'\u201c\u201d\u05f4\u05f3 "
+
+
+def split_query(query: str) -> list[str]:
+    """
+    מפרק את שדה "תחום לחיפוש" לרשימת מונחי חיפוש.
+
+    מירי כותבת שם רשימה בשפה חופשית — "עורכי דין מסחריים, עובד מעביד,
+    חוזים וכדו' -". חיפוש של המחרוזת הזאת כמו שהיא כמעט לא מחזיר תוצאות,
+    כי Google מחפש את כל המילים יחד. לכן מפרידים בפסיקים, מנקים את מילות
+    הסיום ואת הקווים והמרכאות שנשארו, ומחפשים כל מונח בנפרד. תקציב היעד
+    משותף לכל המונחים, ולכן הפירוק לא מכפיל את עלות ה-API.
+    """
+    terms: list[str] = []
+    for part in re.split(r"[,;\n/|]+", query or ""):
+        term = _NOISE_RE.sub("", part.strip().strip(_EDGE)).strip(_EDGE)
+        if len(term) >= 2 and term not in terms:
+            terms.append(term)
+    return terms
+
+
 def scan_by_query(cfg: Config, storage: Storage, query: str,
                   city: str = "jerusalem", target_emails: int = 50,
                   campaign: str = "agent") -> dict:
@@ -218,59 +242,65 @@ def scan_by_query(cfg: Config, storage: Storage, query: str,
     ותחומים כמו ייעוץ עסקי או אימון פשוט אינם בה. חיפוש הטקסט מגיע לתחומים
     האלה, במחיר של תוצאות פחות אחידות — ולכן הסינון כאן מקל: עסק פעיל, לא
     מוסד ולא רשת, ובעל ביקורות חיוביות לפי אותם תנאי סף.
+
+    השדה יכול להכיל כמה תחומים מופרדים בפסיקים; כל אחד נסרק בנפרד
+    (split_query), והעצירה היא כשמגיעים ליעד המיילים — לא בסוף הרשימה.
     """
     from data.neighborhoods import neighborhoods_for
 
-    query = (query or "").strip()
-    if not query:
+    terms = split_query(query)
+    if not terms:
         raise ValueError("צריך להזין תחום לחיפוש")
 
     client = make_client(cfg, include_reviews=(campaign == "agent"))
     neighborhoods = neighborhoods_for(city)
     summary = {"נסרקו": 0, "עברו סינון": 0, "חדשים": 0,
                "עם מייל": 0, "בלי מייל": 0, "עם המלצה": 0}
+    logger.info("תחומים לחיפוש: %s", " · ".join(terms))
 
     for nb in neighborhoods:
-        logger.info("מחפש \"%s\" ב%s (נאספו %d/%d)", query, nb.name,
-                    summary["עם מייל"], target_emails)
-        places = client.scan_text(query, nb.lat, nb.lng, cfg.search_radius_meters)
-        summary["נסרקו"] += len(places)
+        for term in terms:
+            logger.info("מחפש \"%s\" ב%s (נאספו %d/%d)", term, nb.name,
+                        summary["עם מייל"], target_emails)
+            places = client.scan_text(term, nb.lat, nb.lng, cfg.search_radius_meters)
+            summary["נסרקו"] += len(places)
 
-        for place in places.values():
-            lead = BusinessLead.from_place(place, neighborhood=nb.name)
-            if not lead.place_id:
-                continue
-            if not passes_filters_agent(lead, cfg.agent_min_reviews,
-                                        cfg.require_operational,
-                                        cfg.agent_min_rating,
-                                        any_type=True):
-                continue
-            summary["עברו סינון"] += 1
-            if storage.exists(lead.place_id):
-                continue
-            summary["חדשים"] += 1
+            for place in places.values():
+                lead = BusinessLead.from_place(place, neighborhood=nb.name)
+                if not lead.place_id:
+                    continue
+                if not passes_filters_agent(lead, cfg.agent_min_reviews,
+                                            cfg.require_operational,
+                                            cfg.agent_min_rating,
+                                            any_type=True):
+                    continue
+                summary["עברו סינון"] += 1
+                if storage.exists(lead.place_id):
+                    continue
+                summary["חדשים"] += 1
 
-            client.enrich_contact(lead)
-            rec = recommendations.collect(lead, cfg, cfg.request_delay_seconds)
-            lead.rec = rec.as_dict() if rec else {}
-            if rec:
-                summary["עם המלצה"] += 1
+                client.enrich_contact(lead)
+                rec = recommendations.collect(lead, cfg, cfg.request_delay_seconds)
+                lead.rec = rec.as_dict() if rec else {}
+                if rec:
+                    summary["עם המלצה"] += 1
 
-            email = find_email(lead.website, cfg.request_delay_seconds) if lead.website else None
-            if email and is_blocked_email(email):
-                email = None
-            if email:
-                summary["עם מייל"] += 1
-                storage.upsert_lead(lead, email, status="found")
-                logger.info("  ✔ %s → %s", lead.name, email)
-            else:
-                summary["בלי מייל"] += 1
-                storage.upsert_lead(lead, None, status="no_email")
+                email = (find_email(lead.website, cfg.request_delay_seconds)
+                         if lead.website else None)
+                if email and is_blocked_email(email):
+                    email = None
+                if email:
+                    summary["עם מייל"] += 1
+                    storage.upsert_lead(lead, email, status="found")
+                    logger.info("  \u2714 %s \u2192 %s", lead.name, email)
+                else:
+                    summary["בלי מייל"] += 1
+                    storage.upsert_lead(lead, None, status="no_email")
 
-            time.sleep(cfg.request_delay_seconds)
-            if summary["עם מייל"] >= target_emails:
-                logger.info("הושג היעד — עוצר")
-                return summary
+                time.sleep(cfg.request_delay_seconds)
+                if summary["עם מייל"] >= target_emails:
+                    logger.info("הושג היעד — עוצר")
+                    return summary
 
     logger.info("סיכום: %s", summary)
     return summary
