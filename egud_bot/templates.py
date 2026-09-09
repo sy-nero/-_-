@@ -403,8 +403,12 @@ def _agent_opening(sender_name, sender_title, first_name, intro_how,
 def _agent_html(lines, sign):
     p = "margin:0 0 14px;"
     body = "\n".join(f'    <p style="{p}">{line}</p>' for line in lines)
-    sign = [(f'<a href="{v}" style="color:#1a2e4a;">{v}</a>'
-             if v.startswith("http") else v) for v in sign]
+    # כתובות ומיילים הם טקסט לטיני בתוך פסקה בעברית: בלי dir="ltr" הדפדפן
+    # מזיז את הלוכסן הסוגר לתחילת השורה ("/https://...").
+    sign = [(f'<a href="{v}" dir="ltr" style="color:#1a2e4a;'
+             f'unicode-bidi:embed;">{v}</a>' if v.startswith("http")
+             else (f'<span dir="ltr">{v}</span>' if "@" in v else v))
+            for v in sign]
     return f"""<!DOCTYPE html>
 <html lang="he" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"></head>

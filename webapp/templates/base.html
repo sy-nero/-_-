@@ -46,7 +46,9 @@
           padding:10px 14px; border-radius:6px; margin-bottom:16px; font-size:14px; }
   .scroll { overflow-x:auto; }
   .mail { background:#fbfcfd; border:1px solid var(--line); border-radius:6px;
-          padding:12px 14px; white-space:pre-wrap; font-size:14px; }
+          padding:12px 14px; white-space:pre-wrap; font-size:14px;
+          /* כל שורה לפי הכיווניות שלה, כדי שכתובות לטיניות לא יתהפכו */
+          unicode-bidi:plaintext; }
   .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
   .stat { display:inline-block; margin-left:22px; }
   .stat b { font-size:22px; display:block; }
