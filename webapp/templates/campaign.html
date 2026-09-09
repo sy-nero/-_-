@@ -64,9 +64,10 @@
     על המדידה. למחיקת הערך הידני מרוקנים את השדה.
   </p>
   <div class="scroll">
-  <table>
+  <table class="sheet edit">
+    <colgroup><col class="label"><col><col><col></colgroup>
     <thead><tr>
-      <th class="rowhead" style="width:140px; background:#f7f9fc;"></th>
+      <th class="rowhead"></th>
       <th>פרטים</th><th>הערות</th><th>המלצות לשיפור</th>
     </tr></thead>
     <tbody>
@@ -84,8 +85,8 @@
       <td class="auto">
         <input type="text" name="value::{{ field }}" value="{{ fields[field].value }}"
                style="text-align:center;">
-        <div class="muted" style="text-align:center; margin-top:4px;">
-          {% if fields[field].manual %}הוזן ידנית · נמדד: {{ fields[field].measured }}
+        <div class="muted" style="text-align:center; font-size:11.5px;">
+          {% if fields[field].manual %}ידני · נמדד {{ fields[field].measured }}
           {% else %}נמדד אוטומטית{% endif %}</div></td>
       <td><textarea name="note::{{ field }}">{{ fields[field].note }}</textarea></td>
       <td><textarea name="improve::{{ field }}">{{ fields[field].improve }}</textarea></td>

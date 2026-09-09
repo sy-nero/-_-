@@ -35,7 +35,33 @@ from egud_bot.storage import Storage  # noqa: E402
 app = Flask(__name__)
 app.secret_key = config.flask_secret_key
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax")
-store = CampaignStore()
+
+# מסד הנתונים נפתח בבקשה הראשונה ולא בטעינת הקוד: הגדרה שגויה של D1 הפילה
+# את כל הפריסה, ואי אפשר היה אפילו להיכנס ולראות מה השגיאה. עכשיו השירות
+# עולה, ומוצגת הודעה שמסבירה מה לתקן.
+_store = None
+
+
+def get_store() -> CampaignStore:
+    global _store
+    if _store is None:
+        _store = CampaignStore()
+    return _store
+
+
+class _StoreProxy:
+    """מפנה כל קריאה למאגר הקמפיינים, שנפתח רק כשצריך."""
+
+    def __getattr__(self, name):
+        return getattr(get_store(), name)
+
+
+store = _StoreProxy()
+
+
+@app.errorhandler(500)
+def internal_error(exc):
+    return render_template("dberror.html", error=str(exc)), 500
 
 
 # ---------------------------- הגנה בסיסמה ----------------------------
