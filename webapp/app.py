@@ -193,6 +193,22 @@ def _col(row, name: str) -> str:
         return ""
 
 
+def ready_to_send(campaign, run) -> int:
+    """
+    כמה נמענים יישלחו בשליחה הבאה — המספר היחיד שבאמת מעניין.
+
+    זה מי שיצא מהסריקה האחרונה, יש לו מייל, ועדיין לא נשלח אליו. לא כל
+    המאגר, שהוא מצטבר וקיים רק כדי למנוע שליחה כפולה.
+    """
+    st, _ = leads_store_or_error(_col(campaign, "source_campaign") or "agent")
+    if not st:
+        return 0
+    try:
+        return st.pending_count_for(str(run["id"]) if run else "")
+    except Exception:  # noqa: BLE001 — מאגר לא נגיש לא מפיל את העמוד
+        return 0
+
+
 def pool_of(campaign) -> tuple[dict, str]:
     """
     מצב מאגר הלידים של הקמפיין: כמה נסרקו, לכמה יש מייל, כמה ממתינים.
@@ -297,14 +313,16 @@ def campaign_edit(campaign_id):
 
     view = campaign_view(campaign)
     pool = pool_of(campaign)
+    run = store.run_of(campaign_id)
     return render_template("campaign.html", **view, text_fields=TEXT_FIELDS,
+                           ready=ready_to_send(campaign, run),
                            auto_fields=AUTO_FIELDS, manual_fields=MANUAL_FIELDS,
                            cities=CITIES, pool=pool[0], pool_error=pool[1],
                            min_reviews=config.agent_min_reviews,
                            min_rating=config.agent_min_rating,
                            terms=pipeline.split_query(_col(campaign, "search_query")),
                            just_saved=bool(request.args.get("saved")),
-                           busy=runner.busy, run=store.run_of(campaign_id),
+                           busy=runner.busy, run=run,
                            placeholders=list(mail_templates.PLACEHOLDERS))
 
 

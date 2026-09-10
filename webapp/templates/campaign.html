@@ -187,27 +187,40 @@
 
   {% if pool_error %}
   <div class="warn">
-    <b>מאגר הלידים לא נגיש, ולכן המספרים כאן ובטבלה נשארים אפס.</b><br>
-    <code style="unicode-bidi:plaintext;">{{ pool_error }}</code><br>
-    אם כתוב "Could not route" — ה-<code>D1_ACCOUNT_ID</code> וה-<code>D1_DATABASE_ID</code>
-    מוחלפים במשתני הסביבה. ה-Account ID הוא 32 תווים בלי מקפים, ה-Database ID הוא
-    UUID עם מקפים.
+    <b>מאגר הלידים לא נגיש, ולכן אי אפשר לדעת כמה מוכנים לשליחה.</b><br>
+    <code style="unicode-bidi:plaintext;">{{ pool_error }}</code>
   </div>
   {% endif %}
+
   {% if pool %}
-  <div class="pool">
-    {% for name, count in pool.items() %}
-    <div><b>{{ count }}</b><span>{{ name }}</span></div>
-    {% endfor %}
+  <div class="ready">
+    <div>
+      <b>{{ ready }}</b>
+      <span>{{ "נמענים מוכנים לשליחה" if ready != 1 else "נמען מוכן לשליחה" }}</span>
+    </div>
+    {% if ready %}
+    <a class="btn" href="{{ url_for('send_page', campaign_id=campaign['id']) }}">
+      לשליחה</a>
+    {% endif %}
   </div>
-  <p class="muted" style="margin:10px 0 0;">
-    "ממתינים לשליחה" קטן מ"עם כתובת מייל" כי יורדים ממנו מי שכבר נשלח אליו,
-    מי ששויך לנוסח, וכתובות כפולות.
-    <a href="{{ url_for('recipients_page', campaign_id=campaign['id']) }}">
-      לראות מי בדיוק</a>
-    &middot;
-    <a href="{{ url_for('cleanup_page', campaign_id=campaign['id']) }}">
-      ניקוי מי שאינו מהתחום</a>
+  <p class="muted" style="margin:8px 0 0;">
+    {% if run and ready %}
+      אלה מי שיצאו מהסריקה האחרונה, יש להם מייל, ועדיין לא נשלח אליהם.
+    {% elif ready %}
+      ממתינים במאגר. סריקה חדשה תיתן רשימה נקייה.
+    {% else %}
+      אין כרגע מי לשלוח. סריקה חדשה תמצא נמענים.
+    {% endif %}
+    <details style="display:inline;">
+      <summary style="display:inline; cursor:pointer;">מספרים נוספים</summary>
+      <span>
+        {% for name, count in pool.items() %}{{ name }}: <b>{{ count }}</b>{{ " · " if not loop.last }}{% endfor %}
+        &middot;
+        <a href="{{ url_for('recipients_page', campaign_id=campaign['id']) }}">מי בדיוק</a>
+        &middot;
+        <a href="{{ url_for('cleanup_page', campaign_id=campaign['id']) }}">ניקוי</a>
+      </span>
+    </details>
   </p>
   {% endif %}
 
@@ -224,7 +237,7 @@
   <h3 class="step">3. ומה לעשות עם הרשימה</h3>
   <div style="display:flex; gap:8px; flex-wrap:wrap;">
     <a class="btn" href="{{ url_for('send_page', campaign_id=campaign['id']) }}">
-      שליחת מיילים</a>
+      שליחת מיילים{% if ready %} ({{ ready }}){% endif %}</a>
     <a class="btn ghost" href="{{ url_for('phones_page', campaign_id=campaign['id']) }}">
       רשימת טלפונים</a>
   </div>
