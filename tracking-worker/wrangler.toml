@@ -1,0 +1,10 @@
+name = "sy-nero-tracking"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+
+# חיבור לאותו מסד D1 שהאפליקציה משתמשת בו.
+# את database_id לוקחים מלוח הבקרה של Cloudflare (Storage & Databases -> D1).
+[[d1_databases]]
+binding = "DB"
+database_name = "sy-nero"
+database_id = "PUT-YOUR-D1-DATABASE-ID-HERE"
