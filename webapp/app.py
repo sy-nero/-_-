@@ -320,7 +320,8 @@ def campaign_edit(campaign_id):
                            cities=CITIES, pool=pool[0], pool_error=pool[1],
                            min_reviews=config.agent_min_reviews,
                            min_rating=config.agent_min_rating,
-                           terms=pipeline.split_query(_col(campaign, "search_query")),
+                           parsed=pipeline.parse_prompt(_col(campaign, "search_query")),
+                           describe=pipeline.describe_prompt,
                            just_saved=bool(request.args.get("saved")),
                            busy=runner.busy, run=run,
                            placeholders=list(mail_templates.PLACEHOLDERS))
@@ -495,19 +496,20 @@ def campaign_scan(campaign_id):
         flash("חסר GOOGLE_MAPS_API_KEY — בלעדיו אי אפשר לסרוק")
         return redirect(url_for("campaign_edit", campaign_id=campaign_id))
 
-    min_reviews = _as_int(request.form.get("min_reviews"))
+    # מה שנכתב בפרומפט גובר; מה שלא נאמר בו נשאר בברירת המחדל
+    parsed = pipeline.parse_prompt(query)
+    min_reviews = parsed["min_reviews"]
     if min_reviews is None:
         min_reviews = config.agent_min_reviews
-    try:
-        min_rating = float(request.form.get("min_rating") or config.agent_min_rating)
-    except ValueError:
+    min_rating = parsed["min_rating"]
+    if min_rating is None:
         min_rating = config.agent_min_rating
 
     store.start_run(campaign_id, source=source, query=query,
-                    city=request.form.get("city") or "jerusalem",
-                    target=max(1, min(_as_int(request.form.get("target")) or 50, 500)),
-                    min_reviews=max(0, min(min_reviews, 100)),
-                    min_rating=max(0.0, min(min_rating, 5.0)))
+                    city=parsed["city"] or "jerusalem",
+                    target=max(1, min(parsed["target"] or 50, 500)),
+                    min_reviews=max(0, min(int(min_reviews), 100)),
+                    min_rating=max(0.0, min(float(min_rating), 5.0)))
     return redirect(url_for("scan_progress", campaign_id=campaign_id))
 
 
@@ -522,7 +524,8 @@ def scan_progress(campaign_id):
         return redirect(url_for("campaign_edit", campaign_id=campaign_id))
     return render_template("scan.html", campaign=campaign, run=run,
                            counters=_run_counters(run),
-                           terms=pipeline.split_query(_col(run, "query")))
+                           terms=(pipeline.parse_prompt(_col(run, "query"))["terms"]
+                                  or pipeline.split_query(_col(run, "query"))))
 
 
 def _run_counters(run) -> dict:
@@ -552,7 +555,8 @@ def scan_step(campaign_id):
     try:
         result = pipeline.scan_chunk(
             config, storage,
-            terms=pipeline.split_query(_col(run, "query")),
+            terms=(pipeline.parse_prompt(_col(run, "query"))["terms"]
+                   or pipeline.split_query(_col(run, "query"))),
             city=_col(run, "city") or "jerusalem",
             target_emails=run["target"] or 50,
             campaign=_col(run, "source") or "agent",

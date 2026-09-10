@@ -306,6 +306,131 @@ def new_counters() -> dict:
             "חדשים": 0, "עם מייל": 0, "בלי מייל": 0, "עם המלצה": 0}
 
 
+# ---------------------------------------------------------------------------
+# פרומפט חופשי -> פרמטרי חיפוש
+# ---------------------------------------------------------------------------
+# במקום חמישה שדות נפרדים, כותבים משפט אחד:
+#   "תחפש עורכי דין מסחריים בירושלים עם לפחות 3 ביקורות, תביאי 30"
+# ומכאן נשלפים העיר, הכמות, תנאי הסף והתחום. מה שלא נאמר -- נשאר בברירת
+# המחדל, ואף פעם לא מומצא.
+#
+# הפירוק מוצג למשתמשת לפני שהחיפוש רץ, כי מנתח שטועה בשקט גרוע משדות.
+PROMPT_CITIES = {
+    "jerusalem": ("ירושלים", "בירושלים", "י-ם"),
+    "bnei-brak": ("בני ברק", "בבני ברק", "בני-ברק"),
+    "beitar": ("ביתר עילית", "ביתר"),
+    "modiin-illit": ("מודיעין עילית", "קרית ספר", "קריית ספר"),
+    "elad": ("אלעד",),
+    "beit-shemesh": ("בית שמש", "רמת בית שמש"),
+    "ashdod": ("אשדוד",),
+    "all": ("כל הערים החרדיות", "כל הערים", "כל הארץ", "בכל הארץ"),
+}
+
+# מילים שמסמנות למה מתייחס מספר שמופיע לידן
+_REVIEW_WORDS = ("ביקורות", "ביקורת", "תגובות", "תגובה", "המלצות", "המלצה", "חוות דעת")
+_RATING_WORDS = ("דירוג", "כוכבים", "כוכב", "ציון")
+_TARGET_WORDS = ("נמענים", "לידים", "תוצאות", "אנשים", "עסקים", "שמות", "כתובות")
+
+# ביטויים שהם הוראה ולא תחום, ויורדים לפני שנשארים עם המקצוע
+_PROMPT_NOISE = (
+    "תחפש", "תחפשי", "חפש", "חפשי", "תביא", "תביאי", "הבא", "הביאי",
+    "תמצא", "תמצאי", "מצא", "מצאי", "אני רוצה", "רוצה", "בבקשה",
+    "לפחות", "מינימום", "לכל הפחות", "ומעלה", "טובות", "טובים", "חיוביות",
+    "חיוביים", "באזור", "אזור", "בעיר", "עם", "של", "שיש להם", "שיש",
+    "ב", "מ", "עד", "לי", "לנו", "לך", "כאלה", "כאלו",
+)
+
+
+def _to_float(text: str) -> float | None:
+    try:
+        return float(text.replace(",", "."))
+    except ValueError:
+        return None
+
+
+def parse_prompt(prompt: str) -> dict:
+    """
+    מפרק משפט חופשי לפרמטרי חיפוש.
+
+    מחזיר תמיד את כל המפתחות; ערך None פירושו "לא נאמר", והקורא משאיר
+    את ברירת המחדל שלו.
+    """
+    text = " " + re.sub(r"\s+", " ", prompt or "").strip() + " "
+    found = {"city": None, "target": None, "min_reviews": None,
+             "min_rating": None, "terms": [], "raw": (prompt or "").strip()}
+    if not found["raw"]:
+        return found
+
+    # --- עיר ---
+    lowered = text
+    for key, names in PROMPT_CITIES.items():
+        for name in sorted(names, key=len, reverse=True):
+            if name in lowered:
+                found["city"] = key
+                text = text.replace(name, " ")
+                break
+        if found["city"]:
+            break
+
+    # --- מספרים, לפי המילה שלידם ---
+    def take(words, cast, store):
+        """
+        קושר מספר למילה שלידו. קודם הצורה המפורשת ("דירוג 4.5") ורק אחריה
+        המספר שלפני המילה ("3 ביקורות") -- ושם אסור שיהיה פסיק או מספר
+        אחר בדרך, אחרת "20 נמענים, דירוג 4.5" היה קורא 20 כדירוג.
+        """
+        nonlocal text
+        for word in words:
+            for pattern in (rf"{word}\s*(?:של\s*)?[:־–-]?\s*(\d+(?:[.,]\d+)?)",
+                            rf"(\d+(?:[.,]\d+)?)\s*[^\d,.]{{0,12}}?{word}"):
+                match = re.search(pattern, text)
+                if match:
+                    value = cast(match.group(1))
+                    if value is not None:
+                        found[store] = value
+                        text = text[:match.start()] + " " + text[match.end():]
+                        return
+
+    take(_RATING_WORDS, _to_float, "min_rating")
+    take(_REVIEW_WORDS, lambda v: int(float(v.replace(",", "."))), "min_reviews")
+    take(_TARGET_WORDS, lambda v: int(float(v.replace(",", "."))), "target")
+
+    # דירוג יכול להיכתב כמספר עשרוני לבדו ("4.5"), וכמות כמספר שלם שנשאר
+    if found["min_rating"] is None:
+        match = re.search(r"(\d+[.,]\d+)", text)
+        if match:
+            found["min_rating"] = _to_float(match.group(1))
+            text = text[:match.start()] + " " + text[match.end():]
+    if found["target"] is None:
+        match = re.search(r"\b(\d{1,3})\b", text)
+        if match:
+            found["target"] = int(match.group(1))
+            text = text[:match.start()] + " " + text[match.end():]
+
+    # --- מה שנשאר הוא התחום ---
+    for word in sorted(_PROMPT_NOISE, key=len, reverse=True):
+        text = re.sub(rf"(?<![א-ת]){re.escape(word)}(?![א-ת])", " ", text)
+    found["terms"] = split_query(re.sub(r"[ \t]{2,}", " ", text))
+    return found
+
+
+def describe_prompt(parsed: dict, cfg=None) -> str:
+    """תיאור קריא של מה שהובן מהפרומפט, להצגה לפני שמריצים."""
+    from data.neighborhoods import CITIES as CITY_MAP  # noqa: F401
+    city_names = {k: v[0] for k, v in PROMPT_CITIES.items()}
+    parts = []
+    if parsed["terms"]:
+        parts.append(" · ".join(parsed["terms"]))
+    parts.append(city_names.get(parsed["city"] or "jerusalem", "ירושלים"))
+    if parsed["target"]:
+        parts.append(f"{parsed['target']} נמענים")
+    if parsed["min_reviews"] is not None:
+        parts.append(f"לפחות {parsed['min_reviews']} ביקורות")
+    if parsed["min_rating"] is not None:
+        parts.append(f"דירוג {parsed['min_rating']:g}+")
+    return " · ".join(parts)
+
+
 def scan_by_query(cfg: Config, storage: Storage, query: str,
                   city: str = "jerusalem", target_emails: int = 50,
                   campaign: str = "agent",

@@ -59,14 +59,19 @@
 <div class="card" id="what">
   <h2>מה לחפש ומה לשלוח</h2>
   <p class="sub">
-    התחום נשלח לחיפוש בגוגל כפי שהוא — אפשר לכתוב "יועצים עסקיים",
-    "מאמן עסקי", "רואה חשבון". הנוסח הוא מה שיישלח; אם נשאר ריק, יישלח
-    הנוסח המובנה של הקמפיין.
+    את החיפוש כותבים כמשפט אחד, בשפה רגילה. אפשר לציין תחום, עיר, כמות
+    ותנאי סף — ומה שלא נכתב יישאר בברירת המחדל (ירושלים, 50 נמענים,
+    לפחות 2 ביקורות ודירוג 4.0).
+  </p>
+  <label class="field"><span>מה לחפש</span>
+    <textarea name="search_query" id="search_query" style="min-height:70px;"
+      placeholder="תחפש עורכי דין מסחריים בירושלים עם לפחות 3 ביקורות, תביאי 30">{{ campaign['search_query'] or '' }}</textarea></label>
+  <p class="muted" style="margin:6px 0 16px;">
+    דוגמאות: <code>רואי חשבון בבני ברק</code> ·
+    <code>יועצים עסקיים באזור בית שמש, 20 נמענים, דירוג 4.5 ומעלה</code> ·
+    <code>תביא לי 15 סוכני ביטוח באלעד שיש להם לפחות 5 תגובות</code>
   </p>
   <div class="grid c2">
-    <label class="field"><span>תחום לחיפוש</span>
-      <input type="text" name="search_query" id="search_query" placeholder="יועצים עסקיים"
-             value="{{ campaign['search_query'] or '' }}"></label>
     <label class="field"><span>נושא המייל</span>
       <input type="text" name="subject_tpl" placeholder="{{ '{{שם}}' }}, בקשר לשיתוף פעולה"
              value="{{ campaign['subject_tpl'] or '' }}"></label>
@@ -144,44 +149,28 @@
   {% endif %}
 
   <h3 class="step">1. חיפוש נמענים בגוגל</h3>
-  {% if terms %}
+  {% if parsed.terms %}
   <form method="post" action="{{ url_for('campaign_scan', campaign_id=campaign['id']) }}">
-    <div class="grid c4">
-      <label class="field"><span>עיר</span>
-        <select name="city">
-          {% for key, name in cities %}<option value="{{ key }}">{{ name }}</option>{% endfor %}
-        </select></label>
-      <label class="field"><span>כמה נמענים לאסוף</span>
-        <input type="number" name="target" value="50" min="1" max="500" step="10"></label>
-      <label class="field"><span>מינימום ביקורות</span>
-        <input type="number" name="min_reviews" value="{{ min_reviews }}" min="0" max="100"></label>
-      <label class="field"><span>דירוג מינימלי</span>
-        <input type="number" name="min_rating" value="{{ min_rating }}"
-               min="0" max="5" step="0.1"></label>
+    <div class="prompt-read">
+      <span class="muted">הבנתי:</span>
+      {% for t in parsed.terms %}<span class="tag">{{ t }}</span>{% endfor %}
+      <span class="sep">·</span> {{ describe(parsed).split(' · ')[parsed.terms|length:]|join(' · ') }}
     </div>
-    <div class="actionbar">
-      <button type="submit" {{ 'disabled' if busy }}>התחלת סריקה</button>
-      <span class="muted">
-        יחפש בגוגל:
-        {% for t in terms %}<span class="tag">{{ t }}</span>{% endfor %}
-        <a href="#what" class="editlink" onclick="return editQuery()">שינוי התחום</a>
-      </span>
+    <div class="actionbar" style="border:0; padding-top:0; margin-top:12px;">
+      <button type="submit" {{ 'disabled' if busy }}>התחלת חיפוש</button>
+      <a href="#what" class="editlink" onclick="return editQuery()">שינוי מה שכתוב</a>
+      {% if run and run['status'] == 'running' %}
+      <span class="muted"><b>יש חיפוש שלא הסתיים</b> —
+        <a href="{{ url_for('scan_progress', campaign_id=campaign['id']) }}">להמשיך אותו</a>
+        ({{ run['progress'] or 0 }}%).</span>
+      {% endif %}
     </div>
-    <p class="muted" style="margin:10px 0 0;">
-      "מינימום ביקורות" ו"דירוג מינימלי" הם תנאי הסף — מי שיש לו פחות ביקורות
-      מזה, או דירוג נמוך מזה, לא נכנס לרשימה. כך המייל שכותב "ראיתי המלצות
-      עליך" נשלח רק למי שבאמת יש עליו.
-      {% if run and run['status'] == 'running' %}<b>יש סריקה שלא הסתיימה</b> —
-      <a href="{{ url_for('scan_progress', campaign_id=campaign['id']) }}">להמשיך אותה</a>
-      ({{ run['progress'] or 0 }}%).
-      {% else %}התוצאות נכנסות למאגר <code>{{ campaign['source_campaign'] or 'agent' }}</code>
-      והמספרים בטבלה מתעדכנים לבד.{% endif %}
-    </p>
   </form>
   {% else %}
   <div class="warn">
-    עוד לא הוגדר <b>תחום לחיפוש</b>.
-    <a href="#what" onclick="return editQuery()">להגדרת התחום</a> — ואחרי שמירה יופיע כאן כפתור סריקה.
+    עוד לא כתבת מה לחפש.
+    <a href="#what" onclick="return editQuery()">לכתוב עכשיו</a> — ואחרי שמירה
+    יופיע כאן כפתור חיפוש.
   </div>
   {% endif %}
 
