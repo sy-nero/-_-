@@ -15,7 +15,8 @@ from egud_bot.places import (make_client, SERVICE_BUSINESS_TYPES_QUERY,
                              AGENT_BUSINESS_TYPES_QUERY)
 from egud_bot.filters import (BusinessLead, passes_filters,
                               passes_filters_service, passes_filters_grant,
-                              passes_filters_agent,
+                              passes_filters_agent, family_of_query,
+                              matches_query,
                               is_blocked_email, looks_established)
 from egud_bot.email_finder import find_email
 from egud_bot import recommendations, tracking
@@ -253,7 +254,7 @@ def split_query(query: str) -> list[str]:
 
 def _handle_place(cfg: Config, storage: Storage, client, place: dict,
                   nb, counters: dict, reviews_floor: int,
-                  rating_floor: float) -> None:
+                  rating_floor: float, family: str = "") -> None:
     """
     מטפל בעסק אחד מתוצאות החיפוש: סינון, המלצה, מייל ושמירה.
 
@@ -267,6 +268,11 @@ def _handle_place(cfg: Config, storage: Storage, client, place: dict,
     if lead.lat and lead.lng and _distance_km(
             nb.lat, nb.lng, lead.lat, lead.lng) > MAX_DISTANCE_KM:
         counters["רחוקים מדי"] += 1
+        return
+    # חיפוש הטקסט מחזיר "מה שמזכיר" ולא "מה שביקשת" -- כאן נפסל מי שאינו
+    # מהתחום, כדי שלא נכתוב למשרד תיווך "ראיתי את ההמלצות עליך כעורך דין"
+    if not matches_query(lead, family):
+        counters["לא מהתחום"] += 1
         return
     if not passes_filters_agent(lead, reviews_floor, cfg.require_operational,
                                 rating_floor, any_type=True):
@@ -295,8 +301,8 @@ def _handle_place(cfg: Config, storage: Storage, client, place: dict,
 
 
 def new_counters() -> dict:
-    return {"נסרקו": 0, "רחוקים מדי": 0, "עברו סינון": 0, "חדשים": 0,
-            "עם מייל": 0, "בלי מייל": 0, "עם המלצה": 0}
+    return {"נסרקו": 0, "רחוקים מדי": 0, "לא מהתחום": 0, "עברו סינון": 0,
+            "חדשים": 0, "עם מייל": 0, "בלי מייל": 0, "עם המלצה": 0}
 
 
 def scan_by_query(cfg: Config, storage: Storage, query: str,
@@ -359,6 +365,7 @@ def scan_chunk(cfg: Config, storage: Storage, *, terms: list[str], city: str,
     rating_floor = cfg.agent_min_rating if min_rating is None else min_rating
     neighborhoods = neighborhoods_for(city)
     client = make_client(cfg, include_reviews=(campaign == "agent"))
+    family = family_of_query(" ".join(terms))
     nb_index, term_index, place_index = cursor
     deadline = None if budget_seconds is None else time.monotonic() + budget_seconds
 
@@ -382,7 +389,7 @@ def scan_chunk(cfg: Config, storage: Storage, *, terms: list[str], city: str,
 
             while place_index < len(places):
                 _handle_place(cfg, storage, client, places[place_index], nb,
-                              counters, reviews_floor, rating_floor)
+                              counters, reviews_floor, rating_floor, family)
                 place_index += 1
                 if counters["עם מייל"] >= target_emails:
                     return out(True, "הושג היעד")

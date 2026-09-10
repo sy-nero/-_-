@@ -377,6 +377,69 @@ AGENT_MIN_REVIEWS = 2
 AGENT_MIN_RATING = 4.0
 
 
+# ---------------------------------------------------------------------------
+# התאמת התוצאה לתחום שחיפשנו
+# ---------------------------------------------------------------------------
+# חיפוש הטקסט של Google מחזיר "מה שמזכיר", לא "מה שביקשת": חיפוש עורכי דין
+# בירושלים החזיר משרדי תיווך, השכרת דירות ורואי חשבון. המייל אז כותב להם
+# "ראיתי את ההמלצות עליך כעורך דין" -- והם מבינים מיד שזו רשימה אוטומטית.
+#
+# לכל משפחת מקצוע יש סוגי מקום של Google ומילים שמופיעות בשם העסק. תוצאה
+# מתקבלת אם היא מתאימה לאחד מהם.
+PROFESSION_FAMILIES = {
+    "lawyer": {
+        "types": {"lawyer", "legal_services"},
+        "words": ("עורך דין", "עורכי דין", "עורכת דין", "עו\"ד", "עו״ד",
+                  "משרד עריכת דין", "טוען רבני", "נוטריון", "law", "lawyer",
+                  "attorney", "advocate", "legal"),
+    },
+    "accounting": {
+        "types": {"accounting"},
+        "words": ("רואה חשבון", "רואי חשבון", "רו\"ח", "רו״ח", "יועץ מס",
+                  "יועצי מס", "ייעוץ מס", "הנהלת חשבונות", "accounting",
+                  "accountant", "bookkeep", "tax", "cpa"),
+    },
+    "insurance_agency": {
+        "types": {"insurance_agency"},
+        "words": ("ביטוח", "insurance"),
+    },
+    "real_estate_agency": {
+        "types": {"real_estate_agency"},
+        "words": ("תיווך", "מתווך", "נדל\"ן", "נדל״ן", "real estate", "realty"),
+    },
+}
+
+
+def _normalized(text: str) -> str:
+    return (text or "").replace("״", '"').replace("׳", "'").lower()
+
+
+def family_of_query(query: str) -> str:
+    """
+    לאיזו משפחת מקצוע שייך מה שחיפשנו. ריק = תחום שאין לו סוג מקום בגוגל
+    (יועץ עסקי, מאמן), ואז לא מסננים לפי התאמה -- עדיף תוצאה רועשת מאשר
+    אפס תוצאות.
+    """
+    text = _normalized(query)
+    for name, family in PROFESSION_FAMILIES.items():
+        if any(_normalized(word) in text for word in family["words"]):
+            return name
+    return ""
+
+
+def matches_query(lead: BusinessLead, family: str) -> bool:
+    """האם הליד באמת מהתחום שחיפשנו -- לפי סוג המקום או לפי שם העסק."""
+    if not family:
+        return True                      # תחום שלא מזוהה: לא מסננים
+    spec = PROFESSION_FAMILIES[family]
+    types = {(t or "").lower() for t in (lead.types or [])}
+    types.add((lead.primary_type or "").lower())
+    if types & spec["types"]:
+        return True
+    name = _normalized(lead.name)
+    return any(_normalized(word) in name for word in spec["words"])
+
+
 def passes_filters_agent(
     lead: BusinessLead,
     min_review_count: int = AGENT_MIN_REVIEWS,
