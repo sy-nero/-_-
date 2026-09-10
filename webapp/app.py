@@ -715,4 +715,8 @@ def status():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=config.app_port, debug=False)
+    # מאזינים רק למחשב עצמו. הרצה על 0.0.0.0 חושפת את הלוח -- ואיתו את כל
+    # רשימת הלידים -- לכל מי שנמצא באותה רשת, למשל wifi של בית קפה, ובלי
+    # סיסמה. מי שכן צריך גישה מבחוץ יגדיר APP_HOST=0.0.0.0 במודע.
+    app.run(host=os.getenv("APP_HOST", "127.0.0.1"),
+            port=config.app_port, debug=False)
