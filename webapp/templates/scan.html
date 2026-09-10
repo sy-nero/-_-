@@ -15,7 +15,9 @@
   </p>
 
   <div class="bar"><div id="fill" style="width:{{ run['progress'] or 0 }}%"></div></div>
-  <p id="state" class="sub" style="margin-top:10px;">מתחיל…</p>
+  <p id="state" class="sub" style="margin-top:10px;">
+    מתחיל… העדכון הראשון מגיע תוך כמה שניות, ואחריו כל כמה עשרות שניות.
+  </p>
 
   <div class="pool" id="counters">
     {% for name, value in counters.items() %}

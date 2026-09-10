@@ -197,14 +197,19 @@ def ready_to_send(campaign, run) -> int:
     """
     כמה נמענים יישלחו בשליחה הבאה — המספר היחיד שבאמת מעניין.
 
-    זה מי שיצא מהסריקה האחרונה, יש לו מייל, ועדיין לא נשלח אליו. לא כל
-    המאגר, שהוא מצטבר וקיים רק כדי למנוע שליחה כפולה.
+    זה מי שיצא מהסריקה האחרונה, יש לו מייל, ועדיין לא נשלח אליו.
+
+    בלי סריקה אין מה לשלוח — ובמכוון לא נופלים אחורה לכל המאגר. המאגר
+    מצטבר וקיים כדי למנוע שליחה כפולה; להציג את גודלו כ"מוכנים לשליחה"
+    לפני שחיפשת בכלל זה בדיוק מה שהיה מבלבל.
     """
+    if not run:
+        return 0
     st, _ = leads_store_or_error(_col(campaign, "source_campaign") or "agent")
     if not st:
         return 0
     try:
-        return st.pending_count_for(str(run["id"]) if run else "")
+        return st.pending_count_for(str(run["id"]))
     except Exception:  # noqa: BLE001 — מאגר לא נגיש לא מפיל את העמוד
         return 0
 
@@ -563,7 +568,11 @@ def scan_step(campaign_id):
             min_reviews=run["min_reviews"], min_rating=run["min_rating"],
             cursor=(run["nb_index"], run["term_index"], run["place_index"]),
             counters=_run_counters(run) or pipeline.new_counters(),
-            budget_seconds=SCAN_BUDGET_SECONDS, run_id=str(run["id"]))
+            # המנה הראשונה קצרה, כדי שהעמוד יראה סימן חיים תוך שניות
+            # ולא ייראה תקוע. אחריה עוברים לתקציב המלא.
+            budget_seconds=(8.0 if not _run_counters(run).get("נסרקו")
+                            else SCAN_BUDGET_SECONDS),
+            run_id=str(run["id"]))
     except Exception as exc:  # noqa: BLE001 — מדווחים לדפדפן ולא מפילים
         logger.exception("מנת סריקה נכשלה")
         store.save_run(run["id"], (run["nb_index"], run["term_index"],

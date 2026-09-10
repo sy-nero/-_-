@@ -181,35 +181,54 @@
   </div>
   {% endif %}
 
-  {% if pool %}
+  {% if run and run['status'] == 'running' %}
+  <div class="ready">
+    <div><b>…</b><span>החיפוש רץ עכשיו</span></div>
+    <a class="btn" href="{{ url_for('scan_progress', campaign_id=campaign['id']) }}">
+      לצפייה בהתקדמות</a>
+  </div>
+
+  {% elif run and ready %}
   <div class="ready">
     <div>
       <b>{{ ready }}</b>
       <span>{{ "נמענים מוכנים לשליחה" if ready != 1 else "נמען מוכן לשליחה" }}</span>
     </div>
-    {% if ready %}
     <a class="btn" href="{{ url_for('send_page', campaign_id=campaign['id']) }}">
       לשליחה</a>
-    {% endif %}
   </div>
   <p class="muted" style="margin:8px 0 0;">
-    {% if run and ready %}
-      אלה מי שיצאו מהסריקה האחרונה, יש להם מייל, ועדיין לא נשלח אליהם.
-    {% elif ready %}
-      ממתינים במאגר. סריקה חדשה תיתן רשימה נקייה.
-    {% else %}
-      אין כרגע מי לשלוח. סריקה חדשה תמצא נמענים.
-    {% endif %}
+    אלה מי שיצאו מהחיפוש האחרון, יש להם מייל, ועדיין לא נשלח אליהם.
+    {% if pool %}
     <details style="display:inline;">
       <summary style="display:inline; cursor:pointer;">מספרים נוספים</summary>
       <span>
         {% for name, count in pool.items() %}{{ name }}: <b>{{ count }}</b>{{ " · " if not loop.last }}{% endfor %}
         &middot;
         <a href="{{ url_for('recipients_page', campaign_id=campaign['id']) }}">מי בדיוק</a>
-        &middot;
-        <a href="{{ url_for('cleanup_page', campaign_id=campaign['id']) }}">ניקוי</a>
       </span>
     </details>
+    {% endif %}
+  </p>
+
+  {% elif run %}
+  <p class="sub" style="margin-top:14px;">
+    החיפוש האחרון לא הוסיף נמענים חדשים עם כתובת מייל.
+    {% if pool and pool['ממתינים לשליחה'] %}
+    במאגר יש {{ pool['ממתינים לשליחה'] }} ממתינים מחיפושים קודמים —
+    <a href="{{ url_for('send_page', campaign_id=campaign['id'], all=1) }}">להציג אותם</a>.
+    {% endif %}
+  </p>
+
+  {% else %}
+  <p class="sub" style="margin-top:14px;">
+    עוד לא הרצת חיפוש בקמפיין הזה. אחרי החיפוש יופיע כאן כמה נמענים
+    יצאו ממנו, וכפתור לשליחה.
+    {% if pool and pool['ממתינים לשליחה'] %}
+    <br><span class="muted">(במאגר יש {{ pool['ממתינים לשליחה'] }} ממתינים מחיפושים
+    קודמים —
+    <a href="{{ url_for('send_page', campaign_id=campaign['id'], all=1) }}">להציג אותם</a>)</span>
+    {% endif %}
   </p>
   {% endif %}
 

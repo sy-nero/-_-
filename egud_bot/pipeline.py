@@ -338,7 +338,16 @@ _PROMPT_NOISE = (
     "לפחות", "מינימום", "לכל הפחות", "ומעלה", "טובות", "טובים", "חיוביות",
     "חיוביים", "באזור", "אזור", "בעיר", "עם", "של", "שיש להם", "שיש",
     "ב", "מ", "עד", "לי", "לנו", "לך", "כאלה", "כאלו",
+    # תיאורים שמירי כותבת בסוף המשפט, ואינם חלק מהמקצוע
+    "באינטרנט", "באינרנטט", "ברשת", "בגוגל", "שיש להם", "שהם", "והם",
+    "נראים", "נראה", "רציניים", "רצינים", "רציני", "גדולים", "גדול",
+    "ותיקים", "ותיק", "מבוססים", "מבוסס", "מצליחים", "מצליח", "טוב",
+    "וגם", "גם", "או",
 )
+
+#: מונח חיפוש ל-Google Places צריך להיות קצר. יותר מזה כמעט תמיד אומר
+#: שנגררה לתוכו פרוזה מהמשפט, ואז גוגל מחפש את כל המילים יחד ולא מוצא דבר.
+MAX_TERM_WORDS = 4
 
 
 def _to_float(text: str) -> float | None:
@@ -408,9 +417,22 @@ def parse_prompt(prompt: str) -> dict:
             text = text[:match.start()] + " " + text[match.end():]
 
     # --- מה שנשאר הוא התחום ---
-    for word in sorted(_PROMPT_NOISE, key=len, reverse=True):
-        text = re.sub(rf"(?<![א-ת]){re.escape(word)}(?![א-ת])", " ", text)
-    found["terms"] = split_query(re.sub(r"[ \t]{2,}", " ", text))
+    # מילות המפתח עצמן ("ביקורות", "דירוג", "נמענים") אינן חלק ממקצוע, גם
+    # כשלא נצמד להן מספר -- אחרת "עורכי דין חוזים שיש להם ביקורות" הופך
+    # למונח חיפוש שכולל את המילה ביקורות.
+    for word in sorted(set(_PROMPT_NOISE) | set(_REVIEW_WORDS) |
+                       set(_RATING_WORDS) | set(_TARGET_WORDS),
+                       key=len, reverse=True):
+        # ו' החיבור נדבקת למילה ("ומבוססים"), ולכן היא חלק מהתבנית
+        text = re.sub(rf"(?<![א-ת])ו?{re.escape(word)}(?![א-ת])", " ", text)
+    terms = []
+    for term in split_query(re.sub(r"[ \t]{2,}", " ", text)):
+        words = term.split()
+        if len(words) > MAX_TERM_WORDS:
+            term = " ".join(words[:MAX_TERM_WORDS])
+        if term and term not in terms:
+            terms.append(term)
+    found["terms"] = terms
     return found
 
 
