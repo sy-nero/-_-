@@ -463,6 +463,76 @@ def matches_query(lead: BusinessLead, family: str) -> bool:
     return any(_normalized(word) in name for word in spec["words"])
 
 
+# ---------------------------------------------------------------------------
+# העיר שבכתובת
+# ---------------------------------------------------------------------------
+# מסנן מרחק לבדו לא מספיק: מודיעין עילית נמצאת 18.5 ק"מ משכונת רמות, בתוך
+# כל רדיוס סביר סביב ירושלים. הכתובת שגוגל מחזיר כוללת את שם העיר, וזו
+# הבדיקה המדויקת -- אם כתוב שם שם של עיר אחרת, זה לא מה שביקשנו.
+CITY_ALIASES = {
+    "jerusalem": ("ירושלים", "jerusalem"),
+    "bnei-brak": ("בני ברק", "בני-ברק", "bnei brak", "bene beraq", "b'nei brak"),
+    "beitar": ("ביתר עילית", "ביתר", "beitar"),
+    "modiin-illit": ("מודיעין עילית", "קרית ספר", "קריית ספר", "modi'in illit",
+                     "modiin illit", "kiryat sefer"),
+    "elad": ("אלעד", "el'ad", "elad"),
+    "beit-shemesh": ("בית שמש", "beit shemesh", "bet shemesh"),
+    "ashdod": ("אשדוד", "ashdod"),
+}
+
+# ערים אחרות שמופיעות בפועל בתוצאות ואינן ביעד של אף קמפיין
+OTHER_CITIES = (
+    "תל אביב", "tel aviv", "חיפה", "haifa", "ראשון לציון", "rishon",
+    "פתח תקווה", "petah tikva", "נתניה", "netanya", "רחובות", "rehovot",
+    "רמת גן", "ramat gan", "גבעתיים", "givatayim", "חולון", "holon",
+    "בת ים", "bat yam", "אשקלון", "ashkelon", "באר שבע", "beer sheva",
+    "מודיעין", "modi'in", "modiin", "כפר סבא", "kfar saba", "הרצליה",
+    "herzliya", "רעננה", "raanana", "לוד", "lod", "רמלה", "ramla",
+    "טבריה", "tiberias", "צפת", "safed", "עפולה", "afula", "אילת", "eilat",
+    "קרית גת", "kiryat gat", "יבנה", "yavne", "נס ציונה", "ness ziona",
+    "בית"  # לא לבד -- מסונן למטה יחד עם "בית שמש"
+)
+
+
+def _city_pairs():
+    """שמות ערים לזיהוי, הארוכים קודם ("מודיעין עילית" לפני "מודיעין")."""
+    pairs = [(name, key) for key, names in CITY_ALIASES.items() for name in names]
+    pairs += [(name, "other") for name in OTHER_CITIES if name != "בית"]
+    return sorted(pairs, key=lambda p: len(p[0]), reverse=True)
+
+
+def city_from_address(address: str) -> str:
+    """
+    שם העיר שמופיע בכתובת, אם מזוהה. ריק = לא ידוע.
+
+    סורקים מהסוף להתחלה, קטע-קטע: בכתובת ישראלית העיר היא החלק האחרון,
+    ורחוב יכול לשאת שם של עיר אחרת -- "שדרות ירושלים 8, אשדוד" הוא
+    באשדוד ולא בירושלים.
+    """
+    segments = [seg for seg in re.split(r"[,\n]", address or "") if seg.strip()]
+    for segment in reversed(segments):
+        text = _normalized(segment)
+        for name, key in _city_pairs():
+            if _normalized(name) in text:
+                return key
+    return ""
+
+
+def in_requested_city(lead: BusinessLead, city_key: str) -> bool:
+    """
+    האם הכתובת של הליד באמת בעיר שביקשנו.
+
+    כתובת שלא זוהתה בה עיר מתקבלת -- עדיף להסתמך על מסנן המרחק מאשר
+    לפסול עסק רק כי הכתובת שלו חלקית.
+    """
+    found = city_from_address(lead.address)
+    if not found:
+        return True
+    if city_key == "all":
+        return found != "other"       # כל הערים החרדיות, ולא מעבר להן
+    return found == (city_key or "jerusalem")
+
+
 def passes_filters_agent(
     lead: BusinessLead,
     min_review_count: int = AGENT_MIN_REVIEWS,

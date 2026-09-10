@@ -16,7 +16,7 @@ from egud_bot.places import (make_client, SERVICE_BUSINESS_TYPES_QUERY,
 from egud_bot.filters import (BusinessLead, passes_filters,
                               passes_filters_service, passes_filters_grant,
                               passes_filters_agent, family_of_query,
-                              matches_query,
+                              matches_query, in_requested_city,
                               is_blocked_email, looks_established)
 from egud_bot.email_finder import find_email
 from egud_bot import recommendations, tracking
@@ -221,7 +221,10 @@ _EDGE = "-\u2013\u2014,.\"'\u201c\u201d\u05f4\u05f3 "
 # חיפוש "עורכי דין" סביב שכונה בירושלים מחזיר גם משרדים בתל אביב ובחיפה.
 # המרחק נמדד כאן ומי שרחוק מדי נפסל — אחרת המייל כותב "באזור ירושלים"
 # למשרד בראשון לציון.
-MAX_DISTANCE_KM = float(os.getenv("SCAN_MAX_DISTANCE_KM", "20"))
+# 20 ק"מ היה רחב מדי: מודיעין עילית נמצאת 18.5 ק"מ משכונת רמות ועברה.
+# המרחק הגדול ביותר בין שתי שכונות בירושלים -- העיר הפרוסה ביותר ברשימה --
+# הוא 10.5 ק"מ, ולכן 13 מכסה כל עיר ברשימה וחוסם את השכנות.
+MAX_DISTANCE_KM = float(os.getenv("SCAN_MAX_DISTANCE_KM", "13"))
 
 
 def _distance_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -255,7 +258,7 @@ def split_query(query: str) -> list[str]:
 def _handle_place(cfg: Config, storage: Storage, client, place: dict,
                   nb, counters: dict, reviews_floor: int,
                   rating_floor: float, family: str = "",
-                  run_id: str = "") -> None:
+                  run_id: str = "", city: str = "") -> None:
     """
     מטפל בעסק אחד מתוצאות החיפוש: סינון, המלצה, מייל ושמירה.
 
@@ -265,7 +268,11 @@ def _handle_place(cfg: Config, storage: Storage, client, place: dict,
     lead = BusinessLead.from_place(place, neighborhood=nb.name)
     if not lead.place_id:
         return
-    # חיפוש הטקסט מחזיר גם עסקים בעיר אחרת לגמרי — פוסלים אותם
+    # חיפוש הטקסט מחזיר גם עסקים בעיר אחרת לגמרי. הכתובת היא הבדיקה
+    # המדויקת (שם העיר כתוב בה), והמרחק הוא רשת ביטחון לכתובת חלקית.
+    if not in_requested_city(lead, city):
+        counters["רחוקים מדי"] += 1
+        return
     if lead.lat and lead.lng and _distance_km(
             nb.lat, nb.lng, lead.lat, lead.lng) > MAX_DISTANCE_KM:
         counters["רחוקים מדי"] += 1
@@ -539,7 +546,7 @@ def scan_chunk(cfg: Config, storage: Storage, *, terms: list[str], city: str,
             while place_index < len(places):
                 _handle_place(cfg, storage, client, places[place_index], nb,
                               counters, reviews_floor, rating_floor, family,
-                              run_id)
+                              run_id, city)
                 place_index += 1
                 if counters["עם מייל"] >= target_emails:
                     return out(True, "הושג היעד")
