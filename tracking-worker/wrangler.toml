@@ -3,7 +3,10 @@ main = "worker.js"
 compatibility_date = "2026-09-01"
 
 # חיבור לאותו מסד D1 שהאפליקציה משתמשת בו.
-# את database_id לוקחים מלוח הבקרה של Cloudflare (Storage & Databases -> D1).
+#
+# setup.command ממלא את database_id לבד מתוך .env -- אין צורך לגעת כאן.
+# רק database_name צריך להתאים לשם המסד כפי שהוא מופיע ב-Cloudflare
+# (Storage & Databases -> D1). אם הפריסה מתלוננת על השם, זה המקום לתקן.
 [[d1_databases]]
 binding = "DB"
 database_name = "sy-nero"
