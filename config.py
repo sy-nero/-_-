@@ -56,6 +56,26 @@ class Config:
     grant_smtp_user: str = os.getenv("GRANT_SMTP_USER", "")
     # סיסמת אפליקציה של Gmail (רווחים מוסרים אוטומטית)
     grant_smtp_password: str = os.getenv("GRANT_SMTP_PASSWORD", "").replace(" ", "")
+    # קמפיין גיוס סוכנים (agent): נשלח אישית בשם מירי מסינרו — ראו docs/agents.md
+    agent_from_email: str = os.getenv("AGENT_FROM_EMAIL", "cto@sy-nero.com")
+    agent_from_name: str = os.getenv("AGENT_FROM_NAME", "מירי לודמיר")
+    agent_sender_title: str = os.getenv("AGENT_SENDER_TITLE", "מנהלת סינרו טק")
+    agent_company: str = os.getenv("AGENT_COMPANY", "סינרו טק")
+    agent_sender_phone: str = os.getenv("AGENT_SENDER_PHONE", "")
+    # כתובת ציבורית של אפליקציית הניהול — הבסיס לפיקסל מעקב הפתיחות.
+    # חייבת להיות נגישה מהאינטרנט, אחרת לא תירשם אף פתיחה.
+    tracking_base_url: str = os.getenv("TRACKING_BASE_URL", "")
+    # פורט אפליקציית הניהול
+    app_port: int = int(os.getenv("APP_PORT", "5001"))
+    # קישור לאתר שמופיע בחתימת המייל
+    agent_website: str = os.getenv("AGENT_WEBSITE", "https://tech.sy-nero.com/")
+    agent_smtp_user: str = os.getenv("AGENT_SMTP_USER", "")
+    agent_smtp_password: str = os.getenv("AGENT_SMTP_PASSWORD", "").replace(" ", "")
+    # אילו סוגי בעלי מקצוע לסרוק (סוגי Google, מופרדים בפסיק). ריק = ברירת המחדל
+    agent_types: str = os.getenv("AGENT_TYPES", "")
+    # תנאי סף לסוכן: לפחות 2 ביקורות, ובדירוג חיובי
+    agent_min_reviews: int = int(os.getenv("AGENT_MIN_REVIEWS", "2"))
+    agent_min_rating: float = float(os.getenv("AGENT_MIN_RATING", "4.0"))
     landing_page_url: str = os.getenv("LANDING_PAGE_URL", "https://example.co.il/register")
     unsubscribe_url: str = os.getenv("UNSUBSCRIBE_URL", "https://example.co.il/unsubscribe")
     # נתיב לקובץ הלוגו של האיגוד (PNG/JPG) שיוטמע במייל
@@ -69,7 +89,15 @@ class Config:
     request_delay_seconds: float = float(os.getenv("REQUEST_DELAY_SECONDS", "1.0"))
 
     # Storage
-    db_path: str = os.getenv("DB_PATH", "data/leads.db")
+    # תיקיית הנתונים. בענן מצביעים אותה לדיסק קבוע, אחרת הנתונים נמחקים
+    # בכל פריסה מחדש.
+    data_dir: str = os.getenv("DATA_DIR", "data")
+    db_path: str = os.getenv("DB_PATH", "") or os.path.join(
+        os.getenv("DATA_DIR", "data"), "leads.db")
+
+    # סיסמת הכניסה לאפליקציה. חובה כשהיא חשופה לאינטרנט —
+    # בלעדיה כל מי שיש לו את הקישור יכול לראות לידים ולשלוח מיילים.
+    app_password: str = os.getenv("APP_PASSWORD", "")
 
     # Landing
     flask_secret_key: str = os.getenv("FLASK_SECRET_KEY", "change-me")
@@ -77,7 +105,11 @@ class Config:
 
     def sender_for(self, campaign: str) -> tuple[str, str, str, str]:
         """מחזיר (from_email, from_name, smtp_user, smtp_password) לפי הקמפיין.
-        כל הקמפיינים (כולל grant) נשלחים כעת מכתובת האיגוד."""
+        agent נשלח בשם מירי מסינרו; שאר הקמפיינים (כולל grant) מכתובת האיגוד."""
+        if campaign == "agent" and self.agent_from_email:
+            return (self.agent_from_email, self.agent_from_name,
+                    self.agent_smtp_user or self.smtp_user,
+                    self.agent_smtp_password or self.smtp_password)
         return (self.from_email, self.sender_name, self.smtp_user, self.smtp_password)
 
     def validate_for_scan(self) -> list[str]:
@@ -94,11 +126,11 @@ class Config:
         if not self.smtp_host:
             errors.append("חסר ערך SMTP: smtp_host")
         if not smtp_user:
-            errors.append("חסר ערך SMTP: smtp_user (GRANT_SMTP_USER בקמפיין מענק)")
+            errors.append("חסר ערך SMTP: smtp_user (GRANT_/AGENT_SMTP_USER בקמפיינים ייעודיים)")
         if not smtp_password:
-            errors.append("חסר ערך SMTP: smtp_password (GRANT_SMTP_PASSWORD בקמפיין מענק)")
+            errors.append("חסר ערך SMTP: smtp_password (GRANT_/AGENT_SMTP_PASSWORD בקמפיינים ייעודיים)")
         if not from_email:
-            errors.append("חסר ערך SMTP: from_email (GRANT_FROM_EMAIL בקמפיין מענק)")
+            errors.append("חסר ערך SMTP: from_email (GRANT_/AGENT_FROM_EMAIL בקמפיינים ייעודיים)")
         return errors
 
 

@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+{% block title %}{{ campaign['title'] }}{% endblock %}
+{% block body %}
+
+<div class="card">
+  <div style="display:flex; align-items:flex-start; gap:24px; flex-wrap:wrap;">
+    <div style="flex:1; min-width:240px;">
+      <h2 style="font-size:20px;">{{ campaign['title'] }}</h2>
+      <p class="sub" style="margin:2px 0 0;">
+        <span class="chip {{ 'phone' if campaign['kind'] != 'email' }}">
+          {{ 'מיילים' if campaign['kind'] == 'email' else 'שיחות טלפון' }}</span>
+        {% if campaign['variant'] %}
+          <span class="chip">נוסח {{ 'א׳' if campaign['variant']=='a' else 'ב׳' }}</span>
+        {% endif %}
+        {% if campaign['started_on'] %}&nbsp;{{ campaign['started_on'] }}{% endif %}
+      </p>
+    </div>
+    <div class="kpis">
+      <div class="kpi"><b>{{ metrics.sent }}</b><span>נשלחו</span></div>
+      <div class="kpi"><b>{{ metrics.opened }}</b><span>נפתחו {{ open_rate }}</span></div>
+      <div class="kpi"><b>{{ metrics.replied }}</b><span>השיבו {{ reply_rate }}</span></div>
+    </div>
+    {% if campaign['source_campaign'] %}
+    <div>
+      <a class="btn" href="{{ url_for('send_page', campaign_id=campaign['id']) }}">
+        שליחה לנמענים</a>
+      <div class="muted" style="text-align:center; margin-top:6px;">
+        {{ pending }} ממתינים</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<form method="post">
+<div class="card">
+  <h2>הגדרות</h2>
+  <p class="sub">מאיזה מאגר נשלחים המיילים ובאיזה נוסח.</p>
+  <div class="grid c3">
+    <label class="field"><span>שם הקמפיין</span>
+      <input type="text" name="title" value="{{ campaign['title'] }}"></label>
+    <label class="field"><span>תאריך</span>
+      <input type="text" name="started_on" value="{{ campaign['started_on'] or '' }}"></label>
+    <label class="field"><span>סוג</span>
+      <select name="kind">
+        <option value="email" {{ 'selected' if campaign['kind']=='email' }}>מיילים</option>
+        <option value="phone" {{ 'selected' if campaign['kind']=='phone' }}>שיחות טלפון</option>
+      </select></label>
+    <label class="field"><span>מאגר הלידים</span>
+      <input type="text" name="source_campaign" value="{{ campaign['source_campaign'] or '' }}"></label>
+    <label class="field"><span>נוסח</span>
+      <select name="variant">
+        <option value="" {{ 'selected' if not campaign['variant'] }}>כל הנוסחים</option>
+        <option value="a" {{ 'selected' if campaign['variant']=='a' }}>נוסח א׳ — פנייה ראשונה</option>
+        <option value="b" {{ 'selected' if campaign['variant']=='b' }}>נוסח ב׳ — ההצעה ישירות</option>
+      </select></label>
+  </div>
+</div>
+
+<div class="card" id="what">
+  <h2>מה לחפש ומה לשלוח</h2>
+  <p class="sub">
+    את החיפוש כותבים כמשפט אחד, בשפה רגילה. אפשר לציין תחום, עיר, כמות
+    ותנאי סף — ומה שלא נכתב יישאר בברירת המחדל (ירושלים, 50 נמענים,
+    לפחות 2 ביקורות ודירוג 4.0).
+  </p>
+  <label class="field"><span>מה לחפש</span>
+    <textarea name="search_query" id="search_query" style="min-height:70px;"
+      placeholder="תחפש עורכי דין מסחריים בירושלים עם לפחות 3 ביקורות, תביאי 30">{{ campaign['search_query'] or '' }}</textarea></label>
+  <p class="muted" style="margin:6px 0 16px;">
+    דוגמאות: <code>רואי חשבון בבני ברק</code> ·
+    <code>יועצים עסקיים באזור בית שמש, 20 נמענים, דירוג 4.5 ומעלה</code> ·
+    <code>תביא לי 15 סוכני ביטוח באלעד שיש להם לפחות 5 תגובות</code>
+  </p>
+  <div class="grid c2">
+    <label class="field"><span>נושא המייל</span>
+      <input type="text" name="subject_tpl" placeholder="{{ '{{שם}}' }}, בקשר לשיתוף פעולה"
+             value="{{ campaign['subject_tpl'] or '' }}"></label>
+  </div>
+  <label class="field" style="margin-top:12px;"><span>גוף המייל</span>
+    <textarea name="body_tpl" style="min-height:170px;"
+      placeholder="היי {{ '{{שם_פרטי}}' }},&#10;&#10;מירי לודמיר, מנהלת סינרו טק - נעים להכיר.&#10;&#10;חיפשתי {{ '{{תחום}}' }} באזור {{ '{{עיר}}' }} ונתקלתי בך.&#10;&#10;תכתבו לי כאן את הטלפון שלכם ואחזור אליכם.">{{ campaign['body_tpl'] or '' }}</textarea></label>
+  <p class="muted" style="margin-top:8px;">
+    מציני מקום זמינים:
+    {% for key in placeholders %}<code>{{ '{{' }}{{ key }}{{ '}}' }}</code>{{ " · " if not loop.last }}{% endfor %}
+    — שורה ריקה בין פסקאות מפרידה פסקה במייל.
+  </p>
+</div>
+
+<div class="card">
+  <h2>פרטי הקמפיין</h2>
+  <p class="sub">
+    השורות בירוק מתמלאות לבד מהמיילים שנשלחו. אפשר להקליד בהן ערך ידני —
+    למשל לסבב שנשלח לפני שהאפליקציה הייתה, או לקמפיין טלפוני — והוא יגבר
+    על המדידה. למחיקת הערך הידני מרוקנים את השדה.
+  </p>
+  <div class="scroll">
+  <table class="sheet edit">
+    <colgroup><col class="label"><col><col><col></colgroup>
+    <thead><tr>
+      <th class="rowhead"></th>
+      <th>פרטים</th><th>הערות</th><th>המלצות לשיפור</th>
+    </tr></thead>
+    <tbody>
+    {% for field in text_fields %}
+    <tr>
+      <td class="rowhead">{{ field }}</td>
+      <td><textarea name="value::{{ field }}"
+            placeholder="{{ derived.get(field, '') }}">{{ fields[field].value }}</textarea></td>
+      <td><textarea name="note::{{ field }}">{{ fields[field].note }}</textarea></td>
+      <td><textarea name="improve::{{ field }}">{{ fields[field].improve }}</textarea></td>
+    </tr>
+    {% endfor %}
+    {% for field in auto_fields %}
+    <tr>
+      <td class="rowhead">{{ field }}</td>
+      <td class="auto">
+        <input type="text" name="value::{{ field }}" value="{{ fields[field].value }}"
+               style="text-align:center;">
+        <div class="muted" style="text-align:center; font-size:11.5px;">
+          {% if fields[field].manual %}ידני · נמדד {{ fields[field].measured }}
+          {% else %}נמדד אוטומטית{% endif %}</div></td>
+      <td><textarea name="note::{{ field }}">{{ fields[field].note }}</textarea></td>
+      <td><textarea name="improve::{{ field }}">{{ fields[field].improve }}</textarea></td>
+    </tr>
+    {% endfor %}
+    {% for field in manual_fields %}
+    <tr>
+      <td class="rowhead">{{ field }}</td>
+      <td><input type="text" name="value::{{ field }}" value="{{ fields[field].value }}"></td>
+      <td><textarea name="note::{{ field }}">{{ fields[field].note }}</textarea></td>
+      <td><textarea name="improve::{{ field }}">{{ fields[field].improve }}</textarea></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="actionbar">
+    <button type="submit">שמירה</button>
+    <span class="muted">השינויים נשמרים לכל השורות יחד.</span>
+  </div>
+</div>
+</form>
+
+<div class="card" id="scan">
+  <h2>מה עושים עכשיו</h2>
+  {% if just_saved %}
+  <div class="saved">ההגדרות נשמרו. הצעד הבא: סריקה לפי התחום שכתבת.</div>
+  {% else %}
+  <p class="sub">שמרי קודם את ההגדרות למעלה, ואז בחרי פעולה.</p>
+  {% endif %}
+
+  <h3 class="step">1. חיפוש נמענים בגוגל</h3>
+  {% if parsed.terms %}
+  <form method="post" action="{{ url_for('campaign_scan', campaign_id=campaign['id']) }}">
+    <div class="prompt-read">
+      <span class="muted">הבנתי:</span>
+      {% for t in parsed.terms %}<span class="tag">{{ t }}</span>{% endfor %}
+      <span class="sep">·</span> {{ describe(parsed).split(' · ')[parsed.terms|length:]|join(' · ') }}
+    </div>
+    <div class="actionbar" style="border:0; padding-top:0; margin-top:12px;">
+      <button type="submit" {{ 'disabled' if busy }}>התחלת חיפוש</button>
+      <a href="#what" class="editlink" onclick="return editQuery()">שינוי מה שכתוב</a>
+      {% if run and run['status'] == 'running' %}
+      <span class="muted"><b>יש חיפוש שלא הסתיים</b> —
+        <a href="{{ url_for('scan_progress', campaign_id=campaign['id']) }}">להמשיך אותו</a>
+        ({{ run['progress'] or 0 }}%).</span>
+      {% endif %}
+    </div>
+  </form>
+  {% else %}
+  <div class="warn">
+    עוד לא כתבת מה לחפש.
+    <a href="#what" onclick="return editQuery()">לכתוב עכשיו</a> — ואחרי שמירה
+    יופיע כאן כפתור חיפוש.
+  </div>
+  {% endif %}
+
+  {% if pool_error %}
+  <div class="warn">
+    <b>מאגר הלידים לא נגיש, ולכן אי אפשר לדעת כמה מוכנים לשליחה.</b><br>
+    <code style="unicode-bidi:plaintext;">{{ pool_error }}</code>
+  </div>
+  {% endif %}
+
+  {% if run and run['status'] == 'running' %}
+  <div class="ready">
+    <div><b>…</b><span>החיפוש רץ עכשיו</span></div>
+    <a class="btn" href="{{ url_for('scan_progress', campaign_id=campaign['id']) }}">
+      לצפייה בהתקדמות</a>
+  </div>
+
+  {% elif run and ready %}
+  <div class="ready">
+    <div>
+      <b>{{ ready }}</b>
+      <span>{{ "נמענים מוכנים לשליחה" if ready != 1 else "נמען מוכן לשליחה" }}</span>
+    </div>
+    <a class="btn" href="{{ url_for('send_page', campaign_id=campaign['id']) }}">
+      לשליחה</a>
+  </div>
+  <p class="muted" style="margin:8px 0 0;">
+    אלה מי שיצאו מהחיפוש האחרון, יש להם מייל, ועדיין לא נשלח אליהם.
+    {% if pool %}
+    <details style="display:inline;">
+      <summary style="display:inline; cursor:pointer;">מספרים נוספים</summary>
+      <span>
+        {% for name, count in pool.items() %}{{ name }}: <b>{{ count }}</b>{{ " · " if not loop.last }}{% endfor %}
+        &middot;
+        <a href="{{ url_for('recipients_page', campaign_id=campaign['id']) }}">מי בדיוק</a>
+      </span>
+    </details>
+    {% endif %}
+  </p>
+
+  {% elif run %}
+  <p class="sub" style="margin-top:14px;">
+    החיפוש האחרון לא הוסיף נמענים חדשים עם כתובת מייל.
+    {% if pool and pool['ממתינים לשליחה'] %}
+    במאגר יש {{ pool['ממתינים לשליחה'] }} ממתינים מחיפושים קודמים —
+    <a href="{{ url_for('send_page', campaign_id=campaign['id'], all=1) }}">להציג אותם</a>.
+    {% endif %}
+  </p>
+
+  {% else %}
+  <p class="sub" style="margin-top:14px;">
+    עוד לא הרצת חיפוש בקמפיין הזה. אחרי החיפוש יופיע כאן כמה נמענים
+    יצאו ממנו, וכפתור לשליחה.
+    {% if pool and pool['ממתינים לשליחה'] %}
+    <br><span class="muted">(במאגר יש {{ pool['ממתינים לשליחה'] }} ממתינים מחיפושים
+    קודמים —
+    <a href="{{ url_for('send_page', campaign_id=campaign['id'], all=1) }}">להציג אותם</a>)</span>
+    {% endif %}
+  </p>
+  {% endif %}
+
+  <h3 class="step">2. או העלאת רשימה משלך</h3>
+  <form method="post" action="{{ url_for('campaign_upload', campaign_id=campaign['id']) }}"
+        enctype="multipart/form-data" class="grid c3">
+    <label class="field"><span>קובץ CSV</span>
+      <input type="file" name="contacts" accept=".csv" required></label>
+    <label class="field"><span>&nbsp;</span>
+      <button type="submit" class="ghost">העלאה</button></label>
+    <div class="muted" style="align-self:center;">עמודות: שם, מייל, טלפון, עיר</div>
+  </form>
+
+  <h3 class="step">3. ומה לעשות עם הרשימה</h3>
+  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+    <a class="btn" href="{{ url_for('send_page', campaign_id=campaign['id']) }}">
+      שליחת מיילים{% if ready %} ({{ ready }}){% endif %}</a>
+    <a class="btn ghost" href="{{ url_for('phones_page', campaign_id=campaign['id']) }}">
+      רשימת טלפונים</a>
+  </div>
+</div>
+
+<div class="card tight">
+  <form method="post" action="{{ url_for('campaign_delete', campaign_id=campaign['id']) }}"
+        onsubmit="return confirm('למחוק את הקמפיין? הנתונים שנמדדו יישארו במאגר הלידים.');">
+    <button type="submit" class="danger small">מחיקת הקמפיין</button>
+  </form>
+</div>
+
+<script>
+  // "שינוי התחום" — גלילה לשדה, מיקוד והדגשה קצרה, כדי שלא צריך לחפש אותו למעלה.
+  // מחזיר false כדי שניווט העוגן של הדפדפן לא יבטל את המיקוד.
+  function editQuery() {
+    var el = document.getElementById('search_query');
+    if (!el) return true;
+    var card = document.getElementById('what') || el;
+    card.scrollIntoView({behavior: 'smooth', block: 'center'});
+    el.focus({preventScroll: true});
+    el.select();
+    el.classList.add('flashfield');
+    setTimeout(function () { el.classList.remove('flashfield'); }, 1600);
+    return false;
+  }
+</script>
+{% endblock %}

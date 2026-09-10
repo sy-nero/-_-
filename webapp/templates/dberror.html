@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}תקלה בחיבור לנתונים{% endblock %}
+{% block body %}
+<div class="card">
+  <h2>האפליקציה עלתה, אבל אין חיבור למסד הנתונים</h2>
+  <p class="sub">השירות רץ — מה שלא עובד זה הגישה לנתונים.</p>
+
+  <div class="warn">
+    <b>אם הוגדרה Cloudflare D1</b>, כדאי לבדוק את שלושת המשתנים:
+    <ul style="margin:8px 0 0; padding-inline-start:20px;">
+      <li><code>D1_ACCOUNT_ID</code> — 32 תווים <b>בלי</b> מקפים.</li>
+      <li><code>D1_DATABASE_ID</code> — UUID <b>עם</b> מקפים.</li>
+      <li><code>D1_API_TOKEN</code> — טוקן עם הרשאת <code>Account → D1 → Edit</code>.</li>
+    </ul>
+    השגיאה "Could not route to ... object identifier is invalid" אומרת
+    שאחד משני המזהים שגוי — לרוב שהם הוזנו הפוך.
+  </div>
+
+  <p class="muted" style="direction:ltr; text-align:left; background:#fbfcfe;
+     border:1px solid var(--line); border-radius:8px; padding:10px 12px;">{{ error }}</p>
+</div>
+{% endblock %}

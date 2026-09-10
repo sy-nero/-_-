@@ -215,6 +215,36 @@ class BusinessLead:
     primary_type: str
     neighborhood: str = ""
     types: list = field(default_factory=list)
+    # שדות אישיים לקמפיין הסוכנים (מגיעים מייבוא CSV ידני, לא מ-Google)
+    first_name: str = ""
+    intro_how: str = ""      # {{איך_הגעתי_אליו}} — ניסוח ידני שגובר על האוטומטי
+    intro_fact: str = ""     # {{עובדה_קונקרטית_עליו}}
+    intro_why: str = ""      # {{למה_דווקא_הוא}}
+    rec: dict = field(default_factory=dict)   # ההמלצה שנמצאה (recommendations.py)
+    reviews: list = field(default_factory=list)  # ביקורות Google (לא נשמר ב-DB)
+
+    @classmethod
+    def from_row(cls, row) -> "BusinessLead":
+        """בונה ליד משורת DB — לבדיקות שרצות על מה שכבר נשמר."""
+        def get(key, default=""):
+            try:
+                value = row[key]
+            except (IndexError, KeyError, TypeError):
+                return default
+            return default if value is None else value
+
+        raw_types = get("types", "")
+        return cls(
+            place_id=get("place_id"), name=get("name"), address=get("address"),
+            lat=get("lat", 0.0) or 0.0, lng=get("lng", 0.0) or 0.0,
+            phone=get("phone"), website=get("website"),
+            rating=get("rating", None), review_count=get("review_count", 0) or 0,
+            business_status=get("business_status"),
+            primary_type=get("primary_type"),
+            neighborhood=get("neighborhood"),
+            types=[t for t in str(raw_types).split(",") if t],
+            first_name=get("first_name"),
+        )
 
     @classmethod
     def from_place(cls, place: dict, neighborhood: str = "") -> "BusinessLead":
@@ -234,6 +264,7 @@ class BusinessLead:
             primary_type=place.get("primaryType", ""),
             neighborhood=neighborhood,
             types=place.get("types", []) or [],
+            reviews=place.get("reviews", []) or [],
         )
 
 
@@ -351,6 +382,182 @@ def passes_filters_grant(
     if ts & SERVICE_EXCLUDED_TYPES:          # מוסד ציבור/דת/חינוך/ממשל/בריאות ציבורי
         return False
     if not (ts & GRANT_ELIGIBLE_TYPES):
+        return False
+    if is_excluded_by_name_service(lead.name):
+        return False
+    return True
+
+
+# ============ קמפיין agent: גיוס סוכנים ממליצים ============
+# מי שיש לו כבר יחסי אמון עם בעלי עסקים מה-ICP שלנו. ראו docs/agents.md.
+# מ-Google אפשר לסרוק רק משרדי רואי חשבון; שאר הקטגוריות מיובאות מ-CSV.
+AGENT_TYPES = {"accounting", "lawyer", "insurance_agency", "real_estate_agency"}
+
+# ותק ויציבות עסקית: ל-Places אין שנת ייסוד, ולכן הפרוקסי לוותק הוא מספר
+# ביקורות מינימלי (הפוך משאר הקמפיינים, שמחפשים דווקא עסק חדש).
+AGENT_MIN_REVIEWS = 2
+# "ביקורות חיוביות" — דירוג ממוצע מינימלי
+AGENT_MIN_RATING = 4.0
+
+
+# ---------------------------------------------------------------------------
+# התאמת התוצאה לתחום שחיפשנו
+# ---------------------------------------------------------------------------
+# חיפוש הטקסט של Google מחזיר "מה שמזכיר", לא "מה שביקשת": חיפוש עורכי דין
+# בירושלים החזיר משרדי תיווך, השכרת דירות ורואי חשבון. המייל אז כותב להם
+# "ראיתי את ההמלצות עליך כעורך דין" -- והם מבינים מיד שזו רשימה אוטומטית.
+#
+# לכל משפחת מקצוע יש סוגי מקום של Google ומילים שמופיעות בשם העסק. תוצאה
+# מתקבלת אם היא מתאימה לאחד מהם.
+PROFESSION_FAMILIES = {
+    "lawyer": {
+        "types": {"lawyer", "legal_services"},
+        "words": ("עורך דין", "עורכי דין", "עורכת דין", "עו\"ד", "עו״ד",
+                  "משרד עריכת דין", "טוען רבני", "נוטריון", "law", "lawyer",
+                  "attorney", "advocate", "legal"),
+    },
+    "accounting": {
+        "types": {"accounting"},
+        "words": ("רואה חשבון", "רואי חשבון", "רו\"ח", "רו״ח", "יועץ מס",
+                  "יועצי מס", "ייעוץ מס", "הנהלת חשבונות", "accounting",
+                  "accountant", "bookkeep", "tax", "cpa"),
+    },
+    "insurance_agency": {
+        "types": {"insurance_agency"},
+        "words": ("ביטוח", "insurance"),
+    },
+    "real_estate_agency": {
+        "types": {"real_estate_agency"},
+        "words": ("תיווך", "מתווך", "נדל\"ן", "נדל״ן", "real estate", "realty"),
+    },
+}
+
+
+def _normalized(text: str) -> str:
+    return (text or "").replace("״", '"').replace("׳", "'").lower()
+
+
+def family_of_query(query: str) -> str:
+    """
+    לאיזו משפחת מקצוע שייך מה שחיפשנו. ריק = תחום שאין לו סוג מקום בגוגל
+    (יועץ עסקי, מאמן), ואז לא מסננים לפי התאמה -- עדיף תוצאה רועשת מאשר
+    אפס תוצאות.
+    """
+    text = _normalized(query)
+    for name, family in PROFESSION_FAMILIES.items():
+        if any(_normalized(word) in text for word in family["words"]):
+            return name
+    return ""
+
+
+def matches_query(lead: BusinessLead, family: str) -> bool:
+    """האם הליד באמת מהתחום שחיפשנו -- לפי סוג המקום או לפי שם העסק."""
+    if not family:
+        return True                      # תחום שלא מזוהה: לא מסננים
+    spec = PROFESSION_FAMILIES[family]
+    types = {(t or "").lower() for t in (lead.types or [])}
+    types.add((lead.primary_type or "").lower())
+    if types & spec["types"]:
+        return True
+    name = _normalized(lead.name)
+    return any(_normalized(word) in name for word in spec["words"])
+
+
+# ---------------------------------------------------------------------------
+# העיר שבכתובת
+# ---------------------------------------------------------------------------
+# מסנן מרחק לבדו לא מספיק: מודיעין עילית נמצאת 18.5 ק"מ משכונת רמות, בתוך
+# כל רדיוס סביר סביב ירושלים. הכתובת שגוגל מחזיר כוללת את שם העיר, וזו
+# הבדיקה המדויקת -- אם כתוב שם שם של עיר אחרת, זה לא מה שביקשנו.
+CITY_ALIASES = {
+    "jerusalem": ("ירושלים", "jerusalem"),
+    "bnei-brak": ("בני ברק", "בני-ברק", "bnei brak", "bene beraq", "b'nei brak"),
+    "beitar": ("ביתר עילית", "ביתר", "beitar"),
+    "modiin-illit": ("מודיעין עילית", "קרית ספר", "קריית ספר", "modi'in illit",
+                     "modiin illit", "kiryat sefer"),
+    "elad": ("אלעד", "el'ad", "elad"),
+    "beit-shemesh": ("בית שמש", "beit shemesh", "bet shemesh"),
+    "ashdod": ("אשדוד", "ashdod"),
+}
+
+# ערים אחרות שמופיעות בפועל בתוצאות ואינן ביעד של אף קמפיין
+OTHER_CITIES = (
+    "תל אביב", "tel aviv", "חיפה", "haifa", "ראשון לציון", "rishon",
+    "פתח תקווה", "petah tikva", "נתניה", "netanya", "רחובות", "rehovot",
+    "רמת גן", "ramat gan", "גבעתיים", "givatayim", "חולון", "holon",
+    "בת ים", "bat yam", "אשקלון", "ashkelon", "באר שבע", "beer sheva",
+    "מודיעין", "modi'in", "modiin", "כפר סבא", "kfar saba", "הרצליה",
+    "herzliya", "רעננה", "raanana", "לוד", "lod", "רמלה", "ramla",
+    "טבריה", "tiberias", "צפת", "safed", "עפולה", "afula", "אילת", "eilat",
+    "קרית גת", "kiryat gat", "יבנה", "yavne", "נס ציונה", "ness ziona",
+    "בית"  # לא לבד -- מסונן למטה יחד עם "בית שמש"
+)
+
+
+def _city_pairs():
+    """שמות ערים לזיהוי, הארוכים קודם ("מודיעין עילית" לפני "מודיעין")."""
+    pairs = [(name, key) for key, names in CITY_ALIASES.items() for name in names]
+    pairs += [(name, "other") for name in OTHER_CITIES if name != "בית"]
+    return sorted(pairs, key=lambda p: len(p[0]), reverse=True)
+
+
+def city_from_address(address: str) -> str:
+    """
+    שם העיר שמופיע בכתובת, אם מזוהה. ריק = לא ידוע.
+
+    סורקים מהסוף להתחלה, קטע-קטע: בכתובת ישראלית העיר היא החלק האחרון,
+    ורחוב יכול לשאת שם של עיר אחרת -- "שדרות ירושלים 8, אשדוד" הוא
+    באשדוד ולא בירושלים.
+    """
+    segments = [seg for seg in re.split(r"[,\n]", address or "") if seg.strip()]
+    for segment in reversed(segments):
+        text = _normalized(segment)
+        for name, key in _city_pairs():
+            if _normalized(name) in text:
+                return key
+    return ""
+
+
+def in_requested_city(lead: BusinessLead, city_key: str) -> bool:
+    """
+    האם הכתובת של הליד באמת בעיר שביקשנו.
+
+    כתובת שלא זוהתה בה עיר מתקבלת -- עדיף להסתמך על מסנן המרחק מאשר
+    לפסול עסק רק כי הכתובת שלו חלקית.
+    """
+    found = city_from_address(lead.address)
+    if not found:
+        return True
+    if city_key == "all":
+        return found != "other"       # כל הערים החרדיות, ולא מעבר להן
+    return found == (city_key or "jerusalem")
+
+
+def passes_filters_agent(
+    lead: BusinessLead,
+    min_review_count: int = AGENT_MIN_REVIEWS,
+    require_operational: bool = True,
+    min_rating: float = AGENT_MIN_RATING,
+    any_type: bool = False,
+) -> bool:
+    """
+    קריטריונים לסוכן ממליץ: משרד פעיל מהקטגוריות המתאימות, עם לפחות
+    min_review_count ביקורות **חיוביות** (דירוג מעל min_rating), שאינו מוסד
+    ציבורי, רשת גדולה או מהמגזר הערבי.
+    """
+    if require_operational and lead.business_status not in ("", "OPERATIONAL"):
+        return False
+    if lead.review_count < min_review_count:      # אין מספיק ביקורות
+        return False
+    # "ביקורות חיוביות": בלי זה היינו כותבים על ביקורות חיוביות למי שאין לו
+    if lead.rating is not None and lead.rating < min_rating:
+        return False
+    ts = {(t or "").lower() for t in (lead.types or [])}
+    ts.add((lead.primary_type or "").lower())
+    if ts & SERVICE_EXCLUDED_TYPES:
+        return False
+    # בחיפוש טקסט חופשי אין סוג מקום מובטח, ולכן שם לא דורשים אותו
+    if not any_type and not (ts & AGENT_TYPES):
         return False
     if is_excluded_by_name_service(lead.name):
         return False
