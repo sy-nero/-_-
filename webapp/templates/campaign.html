@@ -205,6 +205,9 @@
     מי ששויך לנוסח, וכתובות כפולות.
     <a href="{{ url_for('recipients_page', campaign_id=campaign['id']) }}">
       לראות מי בדיוק</a>
+    &middot;
+    <a href="{{ url_for('cleanup_page', campaign_id=campaign['id']) }}">
+      ניקוי מי שאינו מהתחום</a>
   </p>
   {% endif %}
 

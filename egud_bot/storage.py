@@ -368,6 +368,26 @@ class Storage:
                 }
         return out
 
+    def delete_leads(self, place_ids: list) -> int:
+        """מוחק לידים מהמאגר. לניקוי תוצאות שאינן מהתחום שחיפשנו."""
+        if not place_ids:
+            return 0
+        removed = 0
+        with self._conn() as conn:
+            for pid in place_ids:
+                # שורה-שורה ולא IN (...) -- ב-D1 אין תמיכה בפרמטרים מרובים
+                # בכמות משתנה, וכמות הניקויים קטנה ממילא
+                cur = conn.execute("DELETE FROM {leads} WHERE place_id=?", (pid,))
+                removed += cur.rowcount or 0
+        return removed
+
+    def all_leads(self, limit: int = 5000):
+        """כל הלידים במאגר — לסקירה ולניקוי."""
+        with self._conn() as conn:
+            return conn.execute(
+                "SELECT * FROM {leads} ORDER BY found_at DESC LIMIT ?",
+                (limit,)).fetchall()
+
     def leads_with_phone(self, limit: int = 1000):
         """לידים שיש להם טלפון — לפנייה טלפונית. מי שאין לו מייל קודם."""
         with self._conn() as conn:

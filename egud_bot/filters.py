@@ -224,6 +224,29 @@ class BusinessLead:
     reviews: list = field(default_factory=list)  # ביקורות Google (לא נשמר ב-DB)
 
     @classmethod
+    def from_row(cls, row) -> "BusinessLead":
+        """בונה ליד משורת DB — לבדיקות שרצות על מה שכבר נשמר."""
+        def get(key, default=""):
+            try:
+                value = row[key]
+            except (IndexError, KeyError, TypeError):
+                return default
+            return default if value is None else value
+
+        raw_types = get("types", "")
+        return cls(
+            place_id=get("place_id"), name=get("name"), address=get("address"),
+            lat=get("lat", 0.0) or 0.0, lng=get("lng", 0.0) or 0.0,
+            phone=get("phone"), website=get("website"),
+            rating=get("rating", None), review_count=get("review_count", 0) or 0,
+            business_status=get("business_status"),
+            primary_type=get("primary_type"),
+            neighborhood=get("neighborhood"),
+            types=[t for t in str(raw_types).split(",") if t],
+            first_name=get("first_name"),
+        )
+
+    @classmethod
     def from_place(cls, place: dict, neighborhood: str = "") -> "BusinessLead":
         loc = place.get("location", {}) or {}
         return cls(

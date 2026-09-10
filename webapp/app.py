@@ -28,7 +28,7 @@ from flask import (Flask, request, render_template, redirect, jsonify,  # noqa: 
                    url_for, Response, flash, session, send_file)
 
 from config import config  # noqa: E402
-from egud_bot import db, pipeline, templates as mail_templates, tracking  # noqa: E402
+from egud_bot import db, filters, pipeline, templates as mail_templates, tracking  # noqa: E402
 
 logger = logging.getLogger(__name__)
 from webapp.jobs import runner  # noqa: E402
@@ -608,6 +608,41 @@ def recipients_page(campaign_id):
                            counts=st.state_counts(),
                            leads=st.leads_by_state(state, 500),
                            states=Storage.STATES)
+
+
+@app.route("/campaign/<int:campaign_id>/cleanup", methods=["GET", "POST"])
+def cleanup_page(campaign_id):
+    """
+    ניקוי לידים שאינם מהתחום שהקמפיין מחפש.
+
+    מאגר הלידים מצטבר: כל סריקה מוסיפה אליו ושום דבר לא יורד ממנו. לכן
+    אחרי שהוספנו סינון התאמה, המאגר עדיין מכיל תוצאות ישנות שנסרקו לפניו
+    -- משרדי תיווך ברשימת עורכי דין וכדומה. כאן רואים אותן לפני שמוחקים.
+    """
+    campaign = store.get(campaign_id)
+    st = leads_store(_col(campaign, "source_campaign")) if campaign else None
+    if not st:
+        flash("לקמפיין הזה אין מאגר לידים מקושר")
+        return redirect(url_for("campaign_edit", campaign_id=campaign_id))
+
+    family = filters.family_of_query(_col(campaign, "search_query"))
+    if not family:
+        flash("התחום של הקמפיין אינו אחד מהתחומים המזוהים, ולכן אין לפי מה לנקות")
+        return redirect(url_for("campaign_edit", campaign_id=campaign_id))
+
+    leads = st.all_leads()
+    stray = [lead for lead in leads if not filters.matches_query(
+        filters.BusinessLead.from_row(lead), family)]
+
+    if request.method == "POST":
+        keep = set(request.form.getlist("keep"))
+        doomed = [lead["place_id"] for lead in stray if lead["place_id"] not in keep]
+        removed = st.delete_leads(doomed)
+        flash(f"הוסרו {removed} לידים שאינם מהתחום")
+        return redirect(url_for("campaign_edit", campaign_id=campaign_id))
+
+    return render_template("cleanup.html", campaign=campaign, stray=stray,
+                           total=len(leads), family=family)
 
 
 @app.route("/campaign/<int:campaign_id>/phones")
