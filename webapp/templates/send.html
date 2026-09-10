@@ -13,6 +13,28 @@
     חזרה לקמפיין</a>
 </div>
 
+<div class="card tight">
+  {% if scan_only %}
+  <b>מוצגים כאן רק הנמענים שיצאו מהסריקה האחרונה.</b>
+  <span class="muted">
+    במאגר יש עוד {{ pool_total }} ממתינים מסריקות קודמות — הוא נשמר רק כדי
+    שלא יישלח מייל פעמיים לאותה כתובת.
+    <a href="{{ url_for('send_page', campaign_id=campaign['id'], all=1) }}">
+      להציג את כולם</a>
+  </span>
+  {% elif has_run %}
+  <b>מוצגים כל הממתינים במאגר</b>, מכל הסריקות.
+  <span class="muted">
+    <a href="{{ url_for('send_page', campaign_id=campaign['id']) }}">
+      חזרה להצגת הסריקה האחרונה בלבד</a>
+  </span>
+  {% else %}
+  <span class="muted">
+    עוד לא רצה סריקה לקמפיין הזה, ולכן מוצגים כל הממתינים במאגר.
+  </span>
+  {% endif %}
+</div>
+
 {% if sample %}
 <div class="card">
   <h2>כך ייראה המייל</h2>

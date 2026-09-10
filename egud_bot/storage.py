@@ -131,7 +131,8 @@ class Storage:
                 # מיגרציה: הוספת עמודות למאגר ישן (אם חסרות)
                 for column in ("types", "first_name", "intro_how", "intro_fact",
                                "intro_why", "rec_json", "variant", "replied_at",
-                               "reply_note", "track_id", "opened_at", "open_count"):
+                               "reply_note", "track_id", "opened_at", "open_count",
+                           "run_id"):
                     try:
                         conn.execute(
                             f"ALTER TABLE {self.leads} ADD COLUMN {column} TEXT")
@@ -162,15 +163,20 @@ class Storage:
             ).fetchone()
             return row is not None
 
-    def upsert_lead(self, lead: BusinessLead, email: str | None, status: str) -> None:
+    def upsert_lead(self, lead: BusinessLead, email: str | None, status: str,
+                    run_id: str = "") -> None:
+        """
+        שומר ליד. run_id מסמן מאיזו סריקה הוא הגיע, כדי שמסך השליחה יציג
+        רק את מה שיצא מהסריקה האחרונה ולא את כל המאגר המצטבר.
+        """
         with self._conn() as conn:
             conn.execute(
                 """
                 INSERT INTO {leads} (place_id, name, address, neighborhood, lat, lng,
                     phone, website, email, rating, review_count, business_status,
                     primary_type, types, first_name, intro_how, intro_fact,
-                    intro_why, rec_json, status, found_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    intro_why, rec_json, status, run_id, found_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(place_id) DO UPDATE SET
                     email=excluded.email,
                     status=excluded.status
@@ -183,7 +189,7 @@ class Storage:
                     lead.first_name, lead.intro_how, lead.intro_fact,
                     lead.intro_why,
                     json.dumps(lead.rec, ensure_ascii=False) if lead.rec else "",
-                    status, _now(),
+                    status, str(run_id or ""), _now(),
                 ),
             )
 
@@ -208,21 +214,42 @@ class Storage:
                     (status, error, _now(), place_id),
                 )
 
-    def leads_to_email(self, limit: int) -> list[sqlite3.Row]:
+    def leads_to_email(self, limit: int, run_id: str = "") -> list[sqlite3.Row]:
         """
         לידים עם מייל שעדיין לא נשלח אליהם (ללא כפילויות מייל).
         מי שכבר שויך לנוסח כלשהו לא חוזר לרשימה — כך שתי הקבוצות נפרדות.
+
+        run_id מצמצם לסריקה אחת. המאגר מצטבר ואף פעם לא מתאפס -- תפקידו
+        למנוע שליחה כפולה -- אבל מסך השליחה צריך להראות את מה שיצא
+        מהסריקה, לא את כל מה שנאסף אי פעם.
         """
+        where = ("email IS NOT NULL AND email != '' "
+                 "AND status IN ('found', 'no_email') "
+                 "AND (variant IS NULL OR variant = '')")
+        params = []
+        if run_id:
+            where += " AND run_id = ?"
+            params.append(str(run_id))
+        params.append(limit)
         with self._conn() as conn:
             return conn.execute(
-                """SELECT * FROM {leads}
-                   WHERE email IS NOT NULL AND email != ''
-                     AND status IN ('found', 'no_email')
-                     AND (variant IS NULL OR variant = '')
-                   GROUP BY lower(email)
-                   ORDER BY found_at ASC LIMIT ?""",
-                (limit,),
-            ).fetchall()
+                f"""SELECT * FROM {{leads}} WHERE {where}
+                    GROUP BY lower(email)
+                    ORDER BY found_at ASC LIMIT ?""", params).fetchall()
+
+    def pending_count_for(self, run_id: str = "") -> int:
+        """כמה ממתינים לשליחה, אופציונלית בסריקה מסוימת."""
+        where = ("email IS NOT NULL AND email != '' "
+                 "AND status IN ('found', 'no_email') "
+                 "AND (variant IS NULL OR variant = '')")
+        params = []
+        if run_id:
+            where += " AND run_id = ?"
+            params.append(str(run_id))
+        with self._conn() as conn:
+            return conn.execute(
+                f"SELECT COUNT(DISTINCT lower(email)) FROM {{leads}} WHERE {where}",
+                params).fetchone()[0]
 
     def pending_count(self) -> int:
         """

@@ -254,7 +254,8 @@ def split_query(query: str) -> list[str]:
 
 def _handle_place(cfg: Config, storage: Storage, client, place: dict,
                   nb, counters: dict, reviews_floor: int,
-                  rating_floor: float, family: str = "") -> None:
+                  rating_floor: float, family: str = "",
+                  run_id: str = "") -> None:
     """
     מטפל בעסק אחד מתוצאות החיפוש: סינון, המלצה, מייל ושמירה.
 
@@ -293,11 +294,11 @@ def _handle_place(cfg: Config, storage: Storage, client, place: dict,
         email = None
     if email:
         counters["עם מייל"] += 1
-        storage.upsert_lead(lead, email, status="found")
+        storage.upsert_lead(lead, email, status="found", run_id=run_id)
         logger.info("  \u2714 %s \u2192 %s", lead.name, email)
     else:
         counters["בלי מייל"] += 1
-        storage.upsert_lead(lead, None, status="no_email")
+        storage.upsert_lead(lead, None, status="no_email", run_id=run_id)
 
 
 def new_counters() -> dict:
@@ -346,7 +347,8 @@ def scan_chunk(cfg: Config, storage: Storage, *, terms: list[str], city: str,
                target_emails: int, campaign: str,
                min_reviews: int | None, min_rating: float | None,
                cursor: tuple[int, int, int], counters: dict,
-               budget_seconds: float | None = 45.0) -> dict:
+               budget_seconds: float | None = 45.0,
+               run_id: str = "") -> dict:
     """
     מריץ פיסת סריקה בתוך תקציב זמן, וחוזר עם סמן שממנו ממשיכים.
 
@@ -389,7 +391,8 @@ def scan_chunk(cfg: Config, storage: Storage, *, terms: list[str], city: str,
 
             while place_index < len(places):
                 _handle_place(cfg, storage, client, places[place_index], nb,
-                              counters, reviews_floor, rating_floor, family)
+                              counters, reviews_floor, rating_floor, family,
+                              run_id)
                 place_index += 1
                 if counters["עם מייל"] >= target_emails:
                     return out(True, "הושג היעד")

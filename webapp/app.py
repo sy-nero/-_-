@@ -324,7 +324,12 @@ def send_page(campaign_id):
         return redirect(url_for("campaign_edit", campaign_id=campaign_id))
 
     limit = int(request.args.get("limit", 50))
-    pending = st.leads_to_email(limit)
+    # ברירת המחדל: רק מי שיצא מהסריקה האחרונה של הקמפיין. המאגר מצטבר
+    # ותפקידו למנוע שליחה כפולה, אבל אין סיבה להציג כאן את כל מה שנאסף אי פעם.
+    run = store.run_of(campaign_id)
+    all_pool = request.args.get("all") == "1"
+    run_id = "" if all_pool or not run else str(run["id"])
+    pending = st.leads_to_email(limit, run_id=run_id)
     previews = []
     for lead in pending:
         template_campaign = (f"{campaign['source_campaign']}_offer"
@@ -337,6 +342,8 @@ def send_page(campaign_id):
         previews.append({"lead": lead, "subject": subject, "text": text})
 
     return render_template("send.html", campaign=campaign, previews=previews,
+                           scan_only=bool(run_id), has_run=bool(run),
+                           pool_total=st.pending_count_for(),
                            sample=previews[0] if previews else None,
                            sent=st.sent_leads(campaign["variant"] or "", 200),
                            tracking_on=bool(config.tracking_base_url))
@@ -534,7 +541,7 @@ def scan_step(campaign_id):
             min_reviews=run["min_reviews"], min_rating=run["min_rating"],
             cursor=(run["nb_index"], run["term_index"], run["place_index"]),
             counters=_run_counters(run) or pipeline.new_counters(),
-            budget_seconds=SCAN_BUDGET_SECONDS)
+            budget_seconds=SCAN_BUDGET_SECONDS, run_id=str(run["id"]))
     except Exception as exc:  # noqa: BLE001 — מדווחים לדפדפן ולא מפילים
         logger.exception("מנת סריקה נכשלה")
         store.save_run(run["id"], (run["nb_index"], run["term_index"],
