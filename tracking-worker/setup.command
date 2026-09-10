@@ -35,7 +35,17 @@ case "$DB_ID" in
    ייתכן ששמת שם את D1_ACCOUNT_ID (32 תווים בלי מקפים). תבדקי ב-Cloudflare." ;;
 esac
 
-command -v npx >/dev/null 2>&1 || die "אין Node.js במחשב. להתקין מ-https://nodejs.org ואז להריץ שוב."
+command -v node >/dev/null 2>&1 || die "אין Node.js במחשב.
+   להוריד את גרסת LTS מ-https://nodejs.org, להתקין, לפתוח טרמינל חדש ולהריץ שוב."
+
+# wrangler העדכני דורש Node 22. על גרסה ישנה הוא לפעמים "כמעט עובד"
+# ונופל באמצע בצורה לא ברורה, ולכן עוצרים כאן עם הסבר.
+NODE_MAJOR="$(node -v | sed 's/^v//; s/\..*//')"
+if [ "${NODE_MAJOR:-0}" -lt 22 ]; then
+  die "יש לך Node $(node -v), ו-wrangler דורש 22 ומעלה.
+   להוריד LTS מ-https://nodejs.org, להתקין, לסגור את הטרמינל,
+   לפתוח חדש, ולהריץ את הקובץ הזה שוב."
+fi
 
 say "מכניס את מזהה המסד ל-wrangler.toml…"
 TMP="$(mktemp)"
