@@ -121,6 +121,11 @@ def leads_db_path(source_campaign: str) -> str:
             else os.path.join(config.data_dir, f"leads_{source_campaign}.db"))
 
 
+#: Storage לכל קמפיין, נוצר פעם אחת. האובייקט לא מחזיק חיבור פתוח — כל
+#: שאילתה פותחת וסוגרת — ולכן שמירתו רק חוסכת את הכנת הסכימה מחדש.
+_STORES: dict = {}
+
+
 def leads_store_or_error(source_campaign: str) -> tuple[Storage | None, str]:
     """
     מאגר הלידים של הקמפיין, ואם הוא לא נגיש — הסיבה.
@@ -134,11 +139,16 @@ def leads_store_or_error(source_campaign: str) -> tuple[Storage | None, str]:
         return None, ""
     if not db.d1_configured() and not os.path.exists(path):
         return None, ""       # עוד לא נסרק כלום — לא שגיאה
+    cached = _STORES.get(source_campaign)
+    if cached is not None:
+        return cached, ""
     try:
-        return Storage(path, campaign=source_campaign), ""
+        store_obj = Storage(path, campaign=source_campaign)
     except Exception as exc:  # noqa: BLE001 — כשל אחסון לא מפיל את העמוד
         logger.warning("מאגר הלידים %s לא נגיש: %s", source_campaign, exc)
         return None, str(exc)
+    _STORES[source_campaign] = store_obj
+    return store_obj, ""
 
 
 def leads_store(source_campaign: str):

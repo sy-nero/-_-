@@ -100,6 +100,11 @@ class _TableNames:
         return self._conn.close()
 
 
+#: מאגרים שהסכימה שלהם כבר הוכנה בתהליך הזה. ריק בכל הפעלה מחדש, ולכן
+#: מיגרציה חדשה עדיין רצה -- רק לא שוב ושוב באותה ריצה.
+_PREPARED: set = set()
+
+
 def _safe(name: str) -> str:
     """שם קמפיין -> סיומת חוקית לשם טבלה."""
     return "".join(c if c.isalnum() else "_" for c in (name or "x"))
@@ -115,18 +120,24 @@ class Storage:
         self.registrations = f"registrations{suffix}"
         self.sent_log = "sent_emails"
 
-        with self._conn() as conn:
-            conn.executescript(schema_for(self.leads, self.registrations,
-                                          self.sent_log))
-            # מיגרציה: הוספת עמודות למאגר ישן (אם חסרות)
-            for column in ("types", "first_name", "intro_how", "intro_fact",
-                           "intro_why", "rec_json", "variant", "replied_at",
-                           "reply_note", "track_id", "opened_at", "open_count"):
-                try:
-                    conn.execute(
-                        f"ALTER TABLE {self.leads} ADD COLUMN {column} TEXT")
-                except sqlite3.OperationalError:
-                    pass  # העמודה כבר קיימת
+        # הכנת הסכימה היא 15 פקודות, וב-D1 כל אחת היא קריאת רשת. בלי הזיכרון
+        # הזה כל יצירת Storage הייתה משלמת אותן שוב -- וטעינת הלוח, שיוצרת
+        # Storage לכל קמפיין, הגיעה לעשרות שניות מול מסד בענן.
+        key = (self.db_path, self.leads)
+        if key not in _PREPARED:
+            with self._conn() as conn:
+                conn.executescript(schema_for(self.leads, self.registrations,
+                                              self.sent_log))
+                # מיגרציה: הוספת עמודות למאגר ישן (אם חסרות)
+                for column in ("types", "first_name", "intro_how", "intro_fact",
+                               "intro_why", "rec_json", "variant", "replied_at",
+                               "reply_note", "track_id", "opened_at", "open_count"):
+                    try:
+                        conn.execute(
+                            f"ALTER TABLE {self.leads} ADD COLUMN {column} TEXT")
+                    except sqlite3.OperationalError:
+                        pass  # העמודה כבר קיימת
+            _PREPARED.add(key)
 
     @contextmanager
     def _conn(self):
