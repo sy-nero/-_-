@@ -110,7 +110,8 @@
       <tr>
         <td class="rowhead">{{ field }}</td>
         {% for col in columns %}
-          <td>{{ col.fields[field].value }}</td>
+          <td>{% if col.fields[field].value %}{{ col.fields[field].value }}
+              {%- else %}<span class="muted">{{ col.derived.get(field, '') }}</span>{% endif %}</td>
           <td>{{ col.fields[field].note }}</td>
           <td>{{ col.fields[field].improve }}</td>
         {% endfor %}

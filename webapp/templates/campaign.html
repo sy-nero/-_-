@@ -104,7 +104,8 @@
     {% for field in text_fields %}
     <tr>
       <td class="rowhead">{{ field }}</td>
-      <td><textarea name="value::{{ field }}">{{ fields[field].value }}</textarea></td>
+      <td><textarea name="value::{{ field }}"
+            placeholder="{{ derived.get(field, '') }}">{{ fields[field].value }}</textarea></td>
       <td><textarea name="note::{{ field }}">{{ fields[field].note }}</textarea></td>
       <td><textarea name="improve::{{ field }}">{{ fields[field].improve }}</textarea></td>
     </tr>

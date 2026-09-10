@@ -244,6 +244,37 @@ def pool_of(campaign) -> tuple[dict, str]:
         return {}, str(exc)
 
 
+def derived_fields(campaign) -> dict:
+    """
+    שורות התיאור שהאפליקציה כבר יודעת לענות עליהן בעצמה.
+
+    "קהל יעד", "מקום חיפוש" ו"מאפיין" נגזרים ישירות מהחיפוש שהוגדר, ואין
+    סיבה להקליד אותם ביד. הם מוצגים כברירת מחדל בלבד -- לא נשמרים -- כדי
+    שישתנו לבד כשמשנים את החיפוש, וכל טקסט שנכתב ידנית גובר עליהם.
+
+    "כאב" ו"הנעה לפעולה" נשארים ריקים בכוונה: אלה שיקולים שיווקיים
+    שהמערכת לא יכולה לנחש.
+    """
+    parsed = pipeline.parse_prompt(_col(campaign, "search_query"))
+    city = dict(CITIES).get(parsed["city"] or "jerusalem", "")
+    out = {}
+    if parsed["terms"]:
+        out["קהל יעד"] = " · ".join(parsed["terms"])
+    if city:
+        out["מקום חיפוש"] = f"גוגל מפות — {city}"
+    reviews = parsed["min_reviews"]
+    rating = parsed["min_rating"]
+    out["מאפיין"] = (f"לפחות {reviews if reviews is not None else config.agent_min_reviews} "
+                     f"ביקורות, דירוג "
+                     f"{rating if rating is not None else config.agent_min_rating:g} ומעלה")
+    subject = _col(campaign, "subject_tpl")
+    if subject:
+        out["נוסח"] = subject
+    elif _col(campaign, "variant"):
+        out["נוסח"] = f"נוסח {_col(campaign, 'variant').upper()}"
+    return out
+
+
 def campaign_view(campaign) -> dict:
     """
     כל מה שצריך להצגת עמודת קמפיין בלוח.
@@ -274,6 +305,7 @@ def campaign_view(campaign) -> dict:
         pending = 0
 
     return {"campaign": campaign, "fields": fields, "metrics": metrics,
+            "derived": derived_fields(campaign),
             "open_rate": f"{open_pct}%" if metrics["sent"] else "—",
             "reply_rate": f"{reply_pct}%" if metrics["sent"] else "—",
             "open_pct": open_pct, "reply_pct": reply_pct, "pending": pending}
