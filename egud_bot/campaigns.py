@@ -11,11 +11,18 @@
   * ידניים — התאמה, פגישת מו"מ, הסכמה עקרונית, חתימה, הפניות בפועל. אלה
     שלבים שקורים בשיחה ולא במייל, ולכן מוזנים ביד.
 """
+import json
 import os
 from datetime import datetime, timezone
 from contextlib import contextmanager
 
 from egud_bot import db
+
+
+def pipeline_counters() -> dict:
+    """ספירות ריקות לסריקה חדשה. ייבוא עצל -- pipeline מייבא הרבה."""
+    from egud_bot.pipeline import new_counters
+    return new_counters()
 
 DB_PATH = os.path.join(os.getenv("DATA_DIR", "data"), "campaigns.db")
 
@@ -33,6 +40,29 @@ CREATE TABLE IF NOT EXISTS campaigns (
     position        INTEGER DEFAULT 0,
     archived        INTEGER DEFAULT 0,
     created_at      TEXT
+);
+
+-- מצב סריקה שרצה במנות. הסריקה נמשכת עשר דקות ויותר ואין סביבת ריצה
+-- שמרשה בקשת HTTP כזאת, ולכן היא מחולקת למנות קצרות; כאן נשמר המקום
+-- שאליו הגיעה, כדי שהמנה הבאה תמשיך בדיוק משם.
+CREATE TABLE IF NOT EXISTS scan_runs (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id  INTEGER NOT NULL,
+    source       TEXT,                    -- מאגר הלידים שאליו נשמר
+    query        TEXT,
+    city         TEXT,
+    target       INTEGER,
+    min_reviews  INTEGER,
+    min_rating   REAL,
+    nb_index     INTEGER DEFAULT 0,       -- הסמן: שכונה
+    term_index   INTEGER DEFAULT 0,       --        תחום
+    place_index  INTEGER DEFAULT 0,       --        עסק בתוך התוצאות
+    counters     TEXT,                    -- JSON של הספירות
+    progress     INTEGER DEFAULT 0,
+    status       TEXT DEFAULT 'running',  -- running | done | stopped | failed
+    message      TEXT,
+    started_at   TEXT,
+    updated_at   TEXT
 );
 
 CREATE TABLE IF NOT EXISTS campaign_fields (
@@ -88,6 +118,52 @@ class CampaignStore:
             conn.commit()
         finally:
             conn.close()
+
+    # ---------- סריקה במנות ----------
+    def start_run(self, campaign_id: int, **spec) -> int:
+        """פותח הרצת סריקה חדשה, ועוצר הרצה קודמת של אותו קמפיין."""
+        with self._conn() as conn:
+            conn.execute("UPDATE scan_runs SET status='stopped' "
+                         "WHERE campaign_id=? AND status='running'", (campaign_id,))
+            cur = conn.execute(
+                """INSERT INTO scan_runs
+                   (campaign_id, source, query, city, target, min_reviews,
+                    min_rating, counters, status, started_at, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,'running',?,?)""",
+                (campaign_id, spec.get("source", ""), spec.get("query", ""),
+                 spec.get("city", ""), spec.get("target", 50),
+                 spec.get("min_reviews", 2), spec.get("min_rating", 4.0),
+                 json.dumps(pipeline_counters(), ensure_ascii=False),
+                 _now(), _now()))
+            return cur.lastrowid
+
+    def run_of(self, campaign_id: int):
+        """ההרצה האחרונה של הקמפיין, אם יש."""
+        with self._conn() as conn:
+            return conn.execute(
+                "SELECT * FROM scan_runs WHERE campaign_id=? "
+                "ORDER BY id DESC LIMIT 1", (campaign_id,)).fetchone()
+
+    def get_run(self, run_id: int):
+        with self._conn() as conn:
+            return conn.execute(
+                "SELECT * FROM scan_runs WHERE id=?", (run_id,)).fetchone()
+
+    def save_run(self, run_id: int, cursor, counters: dict, progress: int,
+                 status: str, message: str = "") -> None:
+        with self._conn() as conn:
+            conn.execute(
+                """UPDATE scan_runs SET nb_index=?, term_index=?, place_index=?,
+                       counters=?, progress=?, status=?, message=?, updated_at=?
+                   WHERE id=?""",
+                (cursor[0], cursor[1], cursor[2],
+                 json.dumps(counters, ensure_ascii=False), progress, status,
+                 message, _now(), run_id))
+
+    def stop_run(self, run_id: int) -> None:
+        with self._conn() as conn:
+            conn.execute("UPDATE scan_runs SET status='stopped', updated_at=? "
+                         "WHERE id=? AND status='running'", (_now(), run_id))
 
     # ---------- קמפיינים ----------
     def create(self, title: str, kind: str = "email", source_campaign: str = "",

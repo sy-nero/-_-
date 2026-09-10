@@ -251,6 +251,54 @@ def split_query(query: str) -> list[str]:
     return terms
 
 
+def _handle_place(cfg: Config, storage: Storage, client, place: dict,
+                  nb, counters: dict, reviews_floor: int,
+                  rating_floor: float) -> None:
+    """
+    מטפל בעסק אחד מתוצאות החיפוש: סינון, המלצה, מייל ושמירה.
+
+    משותף לסריקה הרציפה (scan_by_query) ולסריקה במנות (scan_chunk), כדי
+    ששתיהן יסננו וישמרו בדיוק אותו דבר.
+    """
+    lead = BusinessLead.from_place(place, neighborhood=nb.name)
+    if not lead.place_id:
+        return
+    # חיפוש הטקסט מחזיר גם עסקים בעיר אחרת לגמרי — פוסלים אותם
+    if lead.lat and lead.lng and _distance_km(
+            nb.lat, nb.lng, lead.lat, lead.lng) > MAX_DISTANCE_KM:
+        counters["רחוקים מדי"] += 1
+        return
+    if not passes_filters_agent(lead, reviews_floor, cfg.require_operational,
+                                rating_floor, any_type=True):
+        return
+    counters["עברו סינון"] += 1
+    if storage.exists(lead.place_id):
+        return
+    counters["חדשים"] += 1
+
+    client.enrich_contact(lead)
+    rec = recommendations.collect(lead, cfg, cfg.request_delay_seconds)
+    lead.rec = rec.as_dict() if rec else {}
+    if rec:
+        counters["עם המלצה"] += 1
+
+    email = find_email(lead.website, cfg.request_delay_seconds) if lead.website else None
+    if email and is_blocked_email(email):
+        email = None
+    if email:
+        counters["עם מייל"] += 1
+        storage.upsert_lead(lead, email, status="found")
+        logger.info("  \u2714 %s \u2192 %s", lead.name, email)
+    else:
+        counters["בלי מייל"] += 1
+        storage.upsert_lead(lead, None, status="no_email")
+
+
+def new_counters() -> dict:
+    return {"נסרקו": 0, "רחוקים מדי": 0, "עברו סינון": 0, "חדשים": 0,
+            "עם מייל": 0, "בלי מייל": 0, "עם המלצה": 0}
+
+
 def scan_by_query(cfg: Config, storage: Storage, query: str,
                   city: str = "jerusalem", target_emails: int = 50,
                   campaign: str = "agent",
@@ -267,77 +315,90 @@ def scan_by_query(cfg: Config, storage: Storage, query: str,
     השדה יכול להכיל כמה תחומים מופרדים בפסיקים; כל אחד נסרק בנפרד
     (split_query), והעצירה היא כשמגיעים ליעד המיילים — לא בסוף הרשימה.
 
-    min_reviews / min_rating — תנאי הסף לביקורות. אם לא הועברו, נלקחים
-    מהגדרות הסביבה (AGENT_MIN_REVIEWS / AGENT_MIN_RATING).
+    זו הריצה הרציפה, לשימוש מהטרמינל. באפליקציה משתמשים ב-scan_chunk.
     """
-    from data.neighborhoods import neighborhoods_for
-
     terms = split_query(query)
     if not terms:
         raise ValueError("צריך להזין תחום לחיפוש")
 
+    counters = new_counters()
+    cursor = (0, 0, 0)
+    while True:
+        result = scan_chunk(cfg, storage, terms=terms, city=city,
+                            target_emails=target_emails, campaign=campaign,
+                            min_reviews=min_reviews, min_rating=min_rating,
+                            cursor=cursor, counters=counters,
+                            budget_seconds=None)
+        counters = result["counters"]
+        cursor = result["cursor"]
+        if result["done"]:
+            logger.info("סיכום: %s", counters)
+            return counters
+
+
+def scan_chunk(cfg: Config, storage: Storage, *, terms: list[str], city: str,
+               target_emails: int, campaign: str,
+               min_reviews: int | None, min_rating: float | None,
+               cursor: tuple[int, int, int], counters: dict,
+               budget_seconds: float | None = 45.0) -> dict:
+    """
+    מריץ פיסת סריקה בתוך תקציב זמן, וחוזר עם סמן שממנו ממשיכים.
+
+    למה במנות: סריקה מלאה נמשכת עשר דקות ויותר, ואין סביבת ריצה שמרשה
+    בקשת HTTP כזאת — Vercel קוטע ב-5 דקות, ו-Render החינמי נרדם באמצע.
+    כאן כל קריאה עושה כמה עשרות שניות של עבודה, שומרת מה שנמצא, ומחזירה
+    את מיקומה. הקריאה הבאה ממשיכה בדיוק משם, ולכן הפסקה באמצע — סגירת
+    לשונית, פריסה מחדש, נפילה — לא מאבדת דבר.
+
+    הסמן הוא (שכונה, תחום, עסק). על חידוש מריצים שוב את אותו חיפוש
+    ומדלגים לעסק שבו עצרנו; מה שכבר טופל שמור ב-DB ממילא.
+    """
+    from data.neighborhoods import neighborhoods_for
+
     reviews_floor = cfg.agent_min_reviews if min_reviews is None else min_reviews
     rating_floor = cfg.agent_min_rating if min_rating is None else min_rating
-
-    client = make_client(cfg, include_reviews=(campaign == "agent"))
     neighborhoods = neighborhoods_for(city)
-    summary = {"נסרקו": 0, "רחוקים מדי": 0, "עברו סינון": 0, "חדשים": 0,
-               "עם מייל": 0, "בלי מייל": 0, "עם המלצה": 0}
-    logger.info("תחומים לחיפוש: %s (לפחות %d ביקורות, דירוג %.1f ומעלה, "
-                "עד %g ק\"מ מהשכונה)",
-                " · ".join(terms), reviews_floor, rating_floor, MAX_DISTANCE_KM)
+    client = make_client(cfg, include_reviews=(campaign == "agent"))
+    nb_index, term_index, place_index = cursor
+    deadline = None if budget_seconds is None else time.monotonic() + budget_seconds
 
-    for nb in neighborhoods:
-        for term in terms:
+    def out(done: bool, message: str = "") -> dict:
+        total = max(len(neighborhoods) * len(terms), 1)
+        step = min(nb_index * len(terms) + term_index, total)
+        return {"cursor": (nb_index, term_index, place_index),
+                "counters": counters, "done": done, "message": message,
+                "progress": int(step * 100 / total)}
+
+    while nb_index < len(neighborhoods):
+        nb = neighborhoods[nb_index]
+        while term_index < len(terms):
+            term = terms[term_index]
             logger.info("מחפש \"%s\" ב%s (נאספו %d/%d)", term, nb.name,
-                        summary["עם מייל"], target_emails)
-            places = client.scan_text(term, nb.lat, nb.lng, cfg.search_radius_meters)
-            summary["נסרקו"] += len(places)
+                        counters["עם מייל"], target_emails)
+            places = list(client.scan_text(term, nb.lat, nb.lng,
+                                           cfg.search_radius_meters).values())
+            if place_index == 0:          # סופרים פעם אחת, גם אם נחדש כאן
+                counters["נסרקו"] += len(places)
 
-            for place in places.values():
-                lead = BusinessLead.from_place(place, neighborhood=nb.name)
-                if not lead.place_id:
-                    continue
-                # חיפוש הטקסט מחזיר גם עסקים בעיר אחרת לגמרי — פוסלים אותם
-                if lead.lat and lead.lng and _distance_km(
-                        nb.lat, nb.lng, lead.lat, lead.lng) > MAX_DISTANCE_KM:
-                    summary["רחוקים מדי"] += 1
-                    continue
-                if not passes_filters_agent(lead, reviews_floor,
-                                            cfg.require_operational,
-                                            rating_floor,
-                                            any_type=True):
-                    continue
-                summary["עברו סינון"] += 1
-                if storage.exists(lead.place_id):
-                    continue
-                summary["חדשים"] += 1
-
-                client.enrich_contact(lead)
-                rec = recommendations.collect(lead, cfg, cfg.request_delay_seconds)
-                lead.rec = rec.as_dict() if rec else {}
-                if rec:
-                    summary["עם המלצה"] += 1
-
-                email = (find_email(lead.website, cfg.request_delay_seconds)
-                         if lead.website else None)
-                if email and is_blocked_email(email):
-                    email = None
-                if email:
-                    summary["עם מייל"] += 1
-                    storage.upsert_lead(lead, email, status="found")
-                    logger.info("  \u2714 %s \u2192 %s", lead.name, email)
-                else:
-                    summary["בלי מייל"] += 1
-                    storage.upsert_lead(lead, None, status="no_email")
-
+            while place_index < len(places):
+                _handle_place(cfg, storage, client, places[place_index], nb,
+                              counters, reviews_floor, rating_floor)
+                place_index += 1
+                if counters["עם מייל"] >= target_emails:
+                    return out(True, "הושג היעד")
                 time.sleep(cfg.request_delay_seconds)
-                if summary["עם מייל"] >= target_emails:
-                    logger.info("הושג היעד — עוצר")
-                    return summary
+                if deadline and time.monotonic() > deadline:
+                    return out(False, f"{term} ב{nb.name}")
 
-    logger.info("סיכום: %s", summary)
-    return summary
+            place_index = 0
+            term_index += 1
+            if deadline and time.monotonic() > deadline:
+                return out(False, f"{term} ב{nb.name}")
+
+        term_index = 0
+        nb_index += 1
+
+    return out(True, "נסרקו כל השכונות")
 
 
 def enrich_missing_emails(cfg: Config, storage: Storage, limit: int = 50) -> dict:

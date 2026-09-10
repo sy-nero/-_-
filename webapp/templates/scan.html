@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}סריקה — {{ campaign['title'] }}{% endblock %}
+{% block body %}
+
+<p><a href="{{ url_for('campaign_edit', campaign_id=campaign['id']) }}#scan">
+  &#8592; חזרה לקמפיין</a></p>
+
+<div class="card">
+  <h2>סריקה מתבצעת</h2>
+  <p class="sub">
+    מחפש
+    {% for t in terms %}<span class="tag">{{ t }}</span>{% endfor %}
+    &middot; יעד {{ run['target'] }} נמענים &middot; לפחות {{ run['min_reviews'] }}
+    ביקורות, דירוג {{ run['min_rating'] }} ומעלה.
+  </p>
+
+  <div class="bar"><div id="fill" style="width:{{ run['progress'] or 0 }}%"></div></div>
+  <p id="state" class="sub" style="margin-top:10px;">מתחיל…</p>
+
+  <div class="pool" id="counters">
+    {% for name, value in counters.items() %}
+    <div><b data-k="{{ name }}">{{ value }}</b><span>{{ name }}</span></div>
+    {% endfor %}
+  </div>
+
+  <div class="actionbar">
+    <form method="post" action="{{ url_for('scan_stop', campaign_id=campaign['id']) }}">
+      <button type="submit" class="ghost">עצירה</button>
+    </form>
+    <span class="muted">
+      מה שנסרק כבר נשמר. אפשר לעצור ולהמשיך אחר כך — הסריקה תמשיך מהמקום שבו עצרה.
+    </span>
+  </div>
+</div>
+
+<div class="warn" id="paused" hidden>
+  <b>הסריקה מושהית.</b> העמוד הזה הוא שמריץ אותה, ולכן צריך להשאיר אותו פתוח.
+  <button class="small" onclick="resume()">להמשיך</button>
+</div>
+
+<script>
+  // העמוד הזה מריץ את הסריקה: כל קריאה ל-/scan/step עושה מנת עבודה קצרה,
+  // שומרת אותה, וחוזרת. כך אין בקשה ארוכה שאפשר לקטוע, וסגירת הלשונית רק
+  // משהה -- היא לא מאבדת דבר.
+  const STEP = "{{ url_for('scan_step', campaign_id=campaign['id']) }}";
+  const DONE = "{{ url_for('campaign_edit', campaign_id=campaign['id']) }}#scan";
+  let running = true, failures = 0;
+
+  function paint(d) {
+    if (d.progress != null) document.getElementById('fill').style.width = d.progress + '%';
+    for (const [k, v] of Object.entries(d.counters || {})) {
+      const el = document.querySelector(`#counters b[data-k="${CSS.escape(k)}"]`);
+      if (el) el.textContent = v;
+    }
+    if (d.message) document.getElementById('state').textContent = d.message;
+  }
+
+  async function step() {
+    if (!running) return;
+    try {
+      const res = await fetch(STEP, {method: 'POST'});
+      const d = await res.json();
+      failures = 0;
+      paint(d);
+      if (d.done) {
+        running = false;
+        document.getElementById('state').textContent =
+          d.status === 'failed' ? ('הסריקה נכשלה: ' + (d.error || '')) : 'הסריקה הסתיימה.';
+        if (d.status !== 'failed') setTimeout(() => location.href = DONE, 1500);
+        return;
+      }
+    } catch (err) {
+      // ניתוק זמני או השהיית השרת -- מנסים שוב, ומוותרים אחרי כמה כישלונות
+      if (++failures >= 4) {
+        running = false;
+        document.getElementById('paused').hidden = false;
+        return;
+      }
+      document.getElementById('state').textContent =
+        'החיבור נקטע, מנסה שוב… (' + failures + ')';
+      await new Promise(r => setTimeout(r, 3000 * failures));
+    }
+    step();
+  }
+
+  function resume() {
+    document.getElementById('paused').hidden = true;
+    running = true; failures = 0; step();
+  }
+
+  step();
+</script>
+{% endblock %}

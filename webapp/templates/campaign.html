@@ -171,8 +171,9 @@
       "מינימום ביקורות" ו"דירוג מינימלי" הם תנאי הסף — מי שיש לו פחות ביקורות
       מזה, או דירוג נמוך מזה, לא נכנס לרשימה. כך המייל שכותב "ראיתי המלצות
       עליך" נשלח רק למי שבאמת יש עליו.
-      {% if busy %}<b>יש כרגע סריקה שרצה</b> —
-      <a href="{{ url_for('jobs_page') }}">להתקדמות</a>.
+      {% if run and run['status'] == 'running' %}<b>יש סריקה שלא הסתיימה</b> —
+      <a href="{{ url_for('scan_progress', campaign_id=campaign['id']) }}">להמשיך אותה</a>
+      ({{ run['progress'] or 0 }}%).
       {% else %}התוצאות נכנסות למאגר <code>{{ campaign['source_campaign'] or 'agent' }}</code>
       והמספרים בטבלה מתעדכנים לבד.{% endif %}
     </p>

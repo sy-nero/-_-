@@ -12,6 +12,7 @@
   * שליחת מיילים מתוך האפליקציה, עם תצוגה מקדימה לפני כל שליחה.
   * מדידה אוטומטית: נשלחו, נפתחו (פיקסל), השיבו.
 """
+import json
 import logging
 import os
 import sys
@@ -23,7 +24,7 @@ import zipfile
 from functools import wraps
 from datetime import datetime
 
-from flask import (Flask, request, render_template, redirect,  # noqa: E402
+from flask import (Flask, request, render_template, redirect, jsonify,  # noqa: E402
                    url_for, Response, flash, session, send_file)
 
 from config import config  # noqa: E402
@@ -293,7 +294,7 @@ def campaign_edit(campaign_id):
                            min_rating=config.agent_min_rating,
                            terms=pipeline.split_query(_col(campaign, "search_query")),
                            just_saved=bool(request.args.get("saved")),
-                           busy=runner.busy,
+                           busy=runner.busy, run=store.run_of(campaign_id),
                            placeholders=list(mail_templates.PLACEHOLDERS))
 
 
@@ -382,6 +383,10 @@ def pixel(track_id):
 
 
 # ---------------------------- סריקה והעשרה ----------------------------
+# תקציב הזמן של מנת סריקה אחת. חייב להיות קצר בהרבה מהמגבלה של סביבת
+# הריצה (Vercel קוטע ב-300 שניות), כדי שתמיד נספיק לשמור ולחזור.
+SCAN_BUDGET_SECONDS = float(os.getenv("SCAN_BUDGET_SECONDS", "40"))
+
 CITIES = [("jerusalem", "ירושלים"), ("bnei-brak", "בני ברק"),
           ("beitar", "ביתר עילית"), ("modiin-illit", "מודיעין עילית"),
           ("elad", "אלעד"), ("beit-shemesh", "בית שמש"),
@@ -444,7 +449,7 @@ def jobs_enrich():
 
 @app.route("/campaign/<int:campaign_id>/scan", methods=["POST"])
 def campaign_scan(campaign_id):
-    """סורק לפי התחום שהוגדר בקמפיין."""
+    """פותח הרצת סריקה. העבודה עצמה נעשית במנות, מעמוד ההתקדמות."""
     campaign = store.get(campaign_id)
     query = _col(campaign, "search_query")
     source = _col(campaign, "source_campaign") or "agent"
@@ -455,31 +460,95 @@ def campaign_scan(campaign_id):
         flash("חסר GOOGLE_MAPS_API_KEY — בלעדיו אי אפשר לסרוק")
         return redirect(url_for("campaign_edit", campaign_id=campaign_id))
 
-    city = request.form.get("city") or "jerusalem"
-    target = max(1, min(_as_int(request.form.get("target")) or 50, 500))
-    terms = pipeline.split_query(query)
-
-    # תנאי הסף לביקורות — נקבעים כאן לכל סריקה, וברירת המחדל מהסביבה
     min_reviews = _as_int(request.form.get("min_reviews"))
     if min_reviews is None:
         min_reviews = config.agent_min_reviews
-    min_reviews = max(0, min(min_reviews, 100))
     try:
         min_rating = float(request.form.get("min_rating") or config.agent_min_rating)
     except ValueError:
         min_rating = config.agent_min_rating
-    min_rating = max(0.0, min(min_rating, 5.0))
 
-    def work(job):
-        storage = Storage(leads_db_path(source), campaign=source)
-        return pipeline.scan_by_query(config, storage, query, city, target, source,
-                                      min_reviews=min_reviews, min_rating=min_rating)
+    store.start_run(campaign_id, source=source, query=query,
+                    city=request.form.get("city") or "jerusalem",
+                    target=max(1, min(_as_int(request.form.get("target")) or 50, 500)),
+                    min_reviews=max(0, min(min_reviews, 100)),
+                    min_rating=max(0.0, min(min_rating, 5.0)))
+    return redirect(url_for("scan_progress", campaign_id=campaign_id))
 
-    title = (f"חיפוש {' · '.join(terms)} ב{dict(CITIES).get(city, city)} "
-             f"(יעד {target}, מ-{min_reviews} ביקורות, דירוג {min_rating:g}+)")
-    ok, msg = runner.start("scan", title, work)
-    flash(msg)
-    return redirect(url_for("jobs_page", campaign=campaign_id))
+
+@app.route("/campaign/<int:campaign_id>/scan/progress")
+def scan_progress(campaign_id):
+    campaign = store.get(campaign_id)
+    if not campaign:
+        return redirect(url_for("board"))
+    run = store.run_of(campaign_id)
+    if not run:
+        flash("לא נמצאה סריקה לקמפיין הזה")
+        return redirect(url_for("campaign_edit", campaign_id=campaign_id))
+    return render_template("scan.html", campaign=campaign, run=run,
+                           counters=_run_counters(run),
+                           terms=pipeline.split_query(_col(run, "query")))
+
+
+def _run_counters(run) -> dict:
+    try:
+        return json.loads(_col(run, "counters") or "{}")
+    except ValueError:
+        return {}
+
+
+@app.route("/campaign/<int:campaign_id>/scan/step", methods=["POST"])
+def scan_step(campaign_id):
+    """
+    מנה אחת של סריקה, ואז חוזרים.
+
+    זה הלב של הסריקה באפליקציה: כל קריאה עושה כמה עשרות שניות של עבודה,
+    שומרת את מה שנמצא ואת מיקומה, וחוזרת. הדפדפן קורא שוב עד שנגמר. כך
+    הסריקה לא תלויה בבקשת HTTP ארוכה, לא נקטעת בפריסה, ואפשר לעצור
+    ולהמשיך — גם בסביבה שקוטעת כל בקשה אחרי דקות ספורות.
+    """
+    run = store.run_of(campaign_id)
+    if not run or _col(run, "status") != "running":
+        return jsonify({"done": True, "status": _col(run, "status") if run else "missing",
+                        "counters": _run_counters(run) if run else {}})
+
+    storage = Storage(leads_db_path(_col(run, "source") or "agent"),
+                      campaign=_col(run, "source") or "agent")
+    try:
+        result = pipeline.scan_chunk(
+            config, storage,
+            terms=pipeline.split_query(_col(run, "query")),
+            city=_col(run, "city") or "jerusalem",
+            target_emails=run["target"] or 50,
+            campaign=_col(run, "source") or "agent",
+            min_reviews=run["min_reviews"], min_rating=run["min_rating"],
+            cursor=(run["nb_index"], run["term_index"], run["place_index"]),
+            counters=_run_counters(run) or pipeline.new_counters(),
+            budget_seconds=SCAN_BUDGET_SECONDS)
+    except Exception as exc:  # noqa: BLE001 — מדווחים לדפדפן ולא מפילים
+        logger.exception("מנת סריקה נכשלה")
+        store.save_run(run["id"], (run["nb_index"], run["term_index"],
+                                   run["place_index"]), _run_counters(run),
+                       run["progress"] or 0, "failed", str(exc)[:300])
+        return jsonify({"done": True, "status": "failed", "error": str(exc)[:300],
+                        "counters": _run_counters(run)}), 200
+
+    status = "done" if result["done"] else "running"
+    store.save_run(run["id"], result["cursor"], result["counters"],
+                   result["progress"], status, result["message"])
+    return jsonify({"done": result["done"], "status": status,
+                    "counters": result["counters"],
+                    "progress": 100 if result["done"] else result["progress"],
+                    "message": result["message"]})
+
+
+@app.route("/campaign/<int:campaign_id>/scan/stop", methods=["POST"])
+def scan_stop(campaign_id):
+    run = store.run_of(campaign_id)
+    if run:
+        store.stop_run(run["id"])
+    flash("הסריקה נעצרה. מה שנסרק עד עכשיו נשמר.")
+    return redirect(url_for("campaign_edit", campaign_id=campaign_id))
 
 
 @app.route("/campaign/<int:campaign_id>/upload", methods=["POST"])
