@@ -178,12 +178,25 @@ def _as_int(text) -> int | None:
         return None
 
 
+def campaign_profession(campaign) -> str:
+    """
+    שם התחום של הקמפיין, לשימוש במייל כשלא ידוע התחום של הנמען עצמו.
+
+    חייב להיות המונח שנשלף מהפרומפט ולא הפרומפט הגולמי: אחרת המשפט
+    "חיפשתי ... ונתקלתי בך" מקבל לתוכו את כל מה שמירי כתבה, כולל
+    "תחפש", "שיש להם ביקורות באינטרנט" ושם העיר.
+    """
+    terms = pipeline.parse_prompt(_col(campaign, "search_query"))["terms"]
+    return terms[0] if terms else ""
+
+
 def custom_of(campaign):
     """הנוסח המותאם של הקמפיין, אם נכתב לו כזה."""
     subject = _col(campaign, "subject_tpl")
     body = _col(campaign, "body_tpl")
-    query = _col(campaign, "search_query")
-    return (subject, body, query) if (subject or body) else None
+    if not (subject or body):
+        return None
+    return (subject, body, campaign_profession(campaign))
 
 
 def _col(row, name: str) -> str:
