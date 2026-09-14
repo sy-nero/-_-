@@ -590,11 +590,11 @@ def enrich_missing_emails(cfg: Config, storage: Storage, limit: int = 50) -> dic
     מייל, ולידים בלי אתר נשארים תקועים — כאן מחפשים את אתר המשרד ברשת
     (Custom Search אם מוגדר, אחרת DuckDuckGo) ומחלצים ממנו מייל.
     """
-    from egud_bot.jobscan import _find_company_website
+    from egud_bot.jobscan import _find_company_website, SearchQuotaError
     from data.neighborhoods import city_of
 
     leads = storage.leads_without_email(limit)
-    summary = {"נבדקו": len(leads), "נמצא אתר": 0, "נמצא מייל": 0}
+    summary = {"נבדקו": 0, "נמצא אתר": 0, "נמצא מייל": 0}
     if not leads:
         logger.info("אין לידים ללא מייל להעשרה.")
         return summary
@@ -604,8 +604,19 @@ def enrich_missing_emails(cfg: Config, storage: Storage, limit: int = 50) -> dic
         city = city_of(lead["neighborhood"] or "")
         query = f"{name} {city}".strip()
         logger.info("[%d/%d] מחפש אתר עבור %s", i, len(leads), name)
-        site = _find_company_website(query, cfg.request_delay_seconds,
-                                     cfg.google_search_key, cfg.google_search_cx)
+        try:
+            site = _find_company_website(query, cfg.request_delay_seconds,
+                                         cfg.google_search_key,
+                                         cfg.google_search_cx)
+        except SearchQuotaError as exc:
+            # אין טעם להמשיך: כל הבקשות הבאות ייכשלו באותה סיבה
+            logger.error("מכסת החיפוש היומית של Google נגמרה — עוצרים כאן.")
+            logger.error("  %s", exc)
+            logger.error("  מה שנמצא עד כה נשמר. אפשר להמשיך מחר, או להסיר את "
+                         "GOOGLE_SEARCH_KEY מ-.env כדי לעבור לחיפוש החינמי.")
+            summary["נעצר"] = "מכסת החיפוש נגמרה"
+            break
+        summary["נבדקו"] = i
         if not site:
             continue
         summary["נמצא אתר"] += 1

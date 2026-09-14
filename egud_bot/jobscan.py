@@ -65,18 +65,47 @@ def _first_good_host(urls) -> str | None:
     return None
 
 
+class SearchQuotaError(RuntimeError):
+    """מכסת החיפוש היומית נגמרה. אין טעם להמשיך לנסות."""
+
+
 def _search_google(company: str, key: str, cx: str) -> str | None:
-    """Google Custom Search API — אמין, לא נחסם."""
+    """
+    Google Custom Search API.
+
+    כל שגיאה נרשמת ללוג. הגרסה הקודמת החזירה רשימה ריקה בשקט על כל קוד
+    שאינו 200, ולכן 77 בקשות שנכשלו נראו בדיוק כמו 77 חיפושים שלא מצאו
+    כלום -- בלי שום רמז לסיבה.
+    """
     try:
         r = requests.get(
             "https://www.googleapis.com/customsearch/v1",
             params={"key": key, "cx": cx, "q": f"{company} אתר רשמי", "num": 5},
             timeout=20,
         )
-        items = r.json().get("items", []) if r.status_code == 200 else []
-    except (requests.RequestException, ValueError):
+    except requests.RequestException as exc:
+        logger.warning("חיפוש Google נכשל (רשת): %s", str(exc)[:120])
         return None
-    return _first_good_host(it.get("link", "") for it in items)
+
+    if r.status_code == 200:
+        try:
+            return _first_good_host(it.get("link", "")
+                                    for it in r.json().get("items", []))
+        except ValueError:
+            logger.warning("חיפוש Google החזיר תשובה לא תקינה")
+            return None
+
+    # שגיאה: מוציאים את ההודעה של גוגל, בלי המפתח שנמצא ב-URL
+    try:
+        message = (r.json().get("error", {}).get("message") or "")[:160]
+    except ValueError:
+        message = r.text[:160]
+    if r.status_code in (429, 403) and ("quota" in message.lower()
+                                        or "limit" in message.lower()
+                                        or r.status_code == 429):
+        raise SearchQuotaError(message or "המכסה היומית נגמרה")
+    logger.warning("חיפוש Google נכשל (קוד %s): %s", r.status_code, message)
+    return None
 
 
 def _search_ddg(company: str) -> str | None:
@@ -101,9 +130,16 @@ def _search_ddg(company: str) -> str | None:
 
 def _find_company_website(company: str, delay: float = 1.0,
                           search_key: str = "", search_cx: str = "") -> str | None:
-    """מחפש את אתר החברה — דרך Google Custom Search אם מוגדר, אחרת DuckDuckGo."""
+    """
+    מחפש את אתר החברה — Google Custom Search אם מוגדר, אחרת DuckDuckGo.
+
+    כשחיפוש גוגל נכשל (ולא בגלל מכסה) נופלים ל-DuckDuckGo במקום לוותר:
+    עדיף חיפוש איטי יותר מאשר אפס תוצאות.
+    """
     if search_key and search_cx:
-        return _search_google(company, search_key, search_cx)
+        site = _search_google(company, search_key, search_cx)
+        if site:
+            return site
     return _search_ddg(company)
 
 
