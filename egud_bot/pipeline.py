@@ -656,7 +656,9 @@ def enrich_missing_emails(cfg: Config, storage: Storage, limit: int = 50,
         summary["נמצא אתר"] += 1
         logger.info("  אתר: %s", site)
 
-        email = find_email(site, cfg.request_delay_seconds)
+        # מעבירים את השם הנקי כדי שאתר שאינו שייך לעסק ייפסל
+        email = find_email(site, cfg.request_delay_seconds,
+                           expect_name=_clean_company_name(name))
         if not email:
             # האתר עדיין שווה שמירה: ההרצה הבאה לא תחפש אותו מחדש,
             # ואפשר לפתוח אותו ידנית ולראות אם יש שם מייל
