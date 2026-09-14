@@ -132,7 +132,7 @@ class Storage:
                 for column in ("types", "first_name", "intro_how", "intro_fact",
                                "intro_why", "rec_json", "variant", "replied_at",
                                "reply_note", "track_id", "opened_at", "open_count",
-                           "run_id"):
+                               "run_id", "specialty"):
                     try:
                         conn.execute(
                             f"ALTER TABLE {self.leads} ADD COLUMN {column} TEXT")
@@ -284,6 +284,12 @@ class Storage:
                 """UPDATE {leads} SET email=?, website=COALESCE(NULLIF(?,''), website),
                    status='found' WHERE place_id=?""",
                 (email, website, place_id))
+
+    def update_specialty(self, place_id: str, specialty: str) -> None:
+        """שומר את מה שהעסק כותב על עצמו באתר, לשימוש בנוסח המייל."""
+        with self._conn() as conn:
+            conn.execute("UPDATE {leads} SET specialty=? WHERE place_id=?",
+                         (specialty, place_id))
 
     def update_website(self, place_id: str, website: str) -> None:
         """

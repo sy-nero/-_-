@@ -19,7 +19,7 @@ from egud_bot.filters import (BusinessLead, passes_filters,
                               matches_query, in_requested_city,
                               is_valid_email,
                               is_blocked_email, looks_established)
-from egud_bot.email_finder import find_email
+from egud_bot.email_finder import find_email, find_contact
 from egud_bot import recommendations, tracking
 from egud_bot.storage import Storage
 from egud_bot.mailer import Mailer
@@ -76,6 +76,8 @@ def build_ctx(cfg: Config, campaign: str, lead) -> dict:
         intro_how=_col(lead, "intro_how"),
         intro_fact=_col(lead, "intro_fact"),
         intro_why=_col(lead, "intro_why"),
+        # מה שהעסק כותב על עצמו באתר, לשימוש ב-{{התמחות}} בנוסח
+        specialty=_col(lead, "specialty"),
         rec=_rec(lead),
     )
     if campaign == "agent":
@@ -657,8 +659,12 @@ def enrich_missing_emails(cfg: Config, storage: Storage, limit: int = 50,
         logger.info("  אתר: %s", site)
 
         # מעבירים את השם הנקי כדי שאתר שאינו שייך לעסק ייפסל
-        email = find_email(site, cfg.request_delay_seconds,
-                           expect_name=_clean_company_name(name))
+        contact = find_contact(site, cfg.request_delay_seconds,
+                               expect_name=_clean_company_name(name))
+        email = contact["email"]
+        if contact["specialty"]:
+            storage.update_specialty(lead["place_id"], contact["specialty"])
+            logger.info("  מהאתר: %s", contact["specialty"])
         if not email:
             # האתר עדיין שווה שמירה: ההרצה הבאה לא תחפש אותו מחדש,
             # ואפשר לפתוח אותו ידנית ולראות אם יש שם מייל

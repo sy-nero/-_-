@@ -510,6 +510,7 @@ PLACEHOLDERS = {
     "שולח": "sender_name",
     "אתר": "website",
     "מייל_שולח": "contact_email",
+    "התמחות": "specialty",
 }
 
 _PLACEHOLDER_RE = re.compile(r"\{\{?\s*([^{}]+?)\s*\}?\}")
@@ -517,7 +518,7 @@ _PLACEHOLDER_RE = re.compile(r"\{\{?\s*([^{}]+?)\s*\}?\}")
 
 def custom_values(business_name="", first_name="", field="", neighborhood="",
                   area="", rec=None, sender_name="", contact_email="",
-                  website="", profession_hint="", **_) -> dict:
+                  website="", profession_hint="", specialty="", **_) -> dict:
     """
     הערכים שמוזרקים לנוסח מותאם, מנתוני הליד.
 
@@ -539,7 +540,19 @@ def custom_values(business_name="", first_name="", field="", neighborhood="",
         "sender_name": sender_name,
         "contact_email": contact_email,
         "website": website,
+        # מה שהעסק כותב על עצמו באתר. ריק כשלא נמצא משהו נקי -- ואז
+        # _tidy מוחק את הרווח שנשאר, ולא נשלח משפט קטוע.
+        "specialty": specialty,
     }
+
+
+#: מציינים שעשויים להיות ריקים לנמען מסוים: לא לכל אחד יש אתר עם תיאור,
+#: ולא לכל אחד יש ביקורות. שורה שנשענת על אחד מהם ונשארה בלעדיו נמחקת
+#: כולה -- אחרת הנמען מקבל 'ראיתי באתר שלך: "".'
+OPTIONAL_FIELDS = {"specialty", "review_count", "rating"}
+
+#: תו פנימי שמסמן "כאן היה מציין רשות שלא התמלא". לא מופיע בטקסט אמיתי.
+_DROP_MARK = "\uf8ff"
 
 
 def fill_placeholders(text: str, values: dict) -> str:
@@ -555,7 +568,10 @@ def fill_placeholders(text: str, values: dict) -> str:
         field = PLACEHOLDERS.get(key)
         if field is None:
             return match.group(0)
-        return values.get(field, "")
+        value = values.get(field, "")
+        if not value and field in OPTIONAL_FIELDS:
+            return _DROP_MARK
+        return value
     return _PLACEHOLDER_RE.sub(sub, text or "")
 
 
@@ -563,8 +579,16 @@ def _tidy(text: str) -> str:
     """
     מנקה את הנוסח אחרי הזרקת הערכים: מציין מקום ריק לא ישאיר "היי ,"
     או רווח כפול באמצע משפט.
+
+    שורה שנשענה על מציין רשות שלא התמלא נמחקת כולה, ואיתה פסקה שנשארה
+    ריקה -- כדי שלא יישלח משפט קטוע סביב ערך חסר.
     """
-    text = re.sub(r"[ \t]{2,}", " ", text or "")
+    text = text or ""
+    if _DROP_MARK in text:
+        kept = [ln for ln in text.split("\n") if _DROP_MARK not in ln]
+        text = "\n".join(kept)
+        text = re.sub(r"\n{3,}", "\n\n", text)
+    text = re.sub(r"[ \t]{2,}", " ", text)
     text = re.sub(r"\s+([,.!?])", r"\1", text)
     text = re.sub(r"^([^\S\n]*\S+)[ \t]*,", r"\1,", text, flags=re.M)
     return text.strip()

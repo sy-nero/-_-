@@ -10,6 +10,8 @@ from urllib.parse import urljoin, urlparse, unquote
 import requests
 from bs4 import BeautifulSoup
 
+from egud_bot import siteprofile
+
 logger = logging.getLogger(__name__)
 
 EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
@@ -158,14 +160,24 @@ def _extract_from_html(html: str) -> str | None:
 
 def find_email(website: str, request_delay: float = 1.0,
                expect_name: str = "") -> str | None:
+    """מחזיר כתובת מייל מהאתר, או None. עטיפה דקה מעל find_contact."""
+    return find_contact(website, request_delay, expect_name)["email"]
+
+
+def find_contact(website: str, request_delay: float = 1.0,
+                 expect_name: str = "") -> dict:
     """
-    מחזיר כתובת מייל מהאתר, או None אם לא נמצאה.
+    מה שאפשר ללמוד מהאתר: {"email": ..., "specialty": ...}.
+
+    ההתמחות נקראת מאותו עמוד בית שממילא הורד לצורך המייל, ולכן היא
+    לא עולה בקשה נוספת.
 
     expect_name — שם העסק. אם הוא לא מוזכר בעמוד הבית, האתר נפסל:
     סימן שהחיפוש החזיר אתר של מישהו אחר.
     """
+    found = {"email": None, "specialty": ""}
     if not website:
-        return None
+        return found
 
     parsed = urlparse(website)
     if not parsed.scheme:
@@ -209,10 +221,14 @@ def find_email(website: str, request_delay: float = 1.0,
                                                  expect_name):
                 logger.info("  ✖ %s לא מזכיר את %r — כנראה אתר של מישהו אחר",
                             domain, expect_name)
-                return None
+                return found
+            # ההתמחות נקראת פעם אחת מעמוד הבית, לפני שממשיכים לחפש מייל
+            found["specialty"] = siteprofile.specialty_from_html(
+                home.text, expect_name)
             email = _extract_from_html(home.text)
             if email:
-                return email
+                found["email"] = email
+                return found
             home_links = _contact_links(soup, website)
     except requests.RequestException as exc:
         problems.append(f"/: {type(exc).__name__}")
@@ -226,7 +242,8 @@ def find_email(website: str, request_delay: float = 1.0,
                 reached += 1
                 email = _extract_from_html(resp.text)
                 if email:
-                    return email
+                    found["email"] = email
+                    return found
         except requests.RequestException as exc:
             logger.debug("שגיאה בקריאת %s: %s", url, exc)
 
@@ -245,7 +262,8 @@ def find_email(website: str, request_delay: float = 1.0,
                 reached += 1
                 email = _extract_from_html(resp.text)
                 if email:
-                    return email
+                    found["email"] = email
+                    return found
             elif resp.status_code != 404:      # 404 על עמוד צור-קשר הוא רגיל
                 problems.append(f"{path or '/'}: קוד {resp.status_code}")
         except requests.RequestException as exc:
@@ -256,4 +274,4 @@ def find_email(website: str, request_delay: float = 1.0,
     if not reached:
         logger.warning("לא הצלחנו לקרוא אף עמוד ב-%s (%s)",
                        website, "; ".join(problems[:3]) or "בלי פירוט")
-    return None
+    return found
