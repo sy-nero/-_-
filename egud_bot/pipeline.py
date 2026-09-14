@@ -478,9 +478,16 @@ def scan_by_query(cfg: Config, storage: Storage, query: str,
 
     זו הריצה הרציפה, לשימוש מהטרמינל. באפליקציה משתמשים ב-scan_chunk.
     """
-    terms = split_query(query)
+    # parse_prompt ולא split_query: השדה הוא משפט חופשי, ובלי הפירוק
+    # נשלחים לגוגל גם "תחפש", "תביאי 30" ושם העיר כאילו היו שמות מקצוע.
+    parsed = parse_prompt(query)
+    terms = parsed["terms"]
     if not terms:
         raise ValueError("צריך להזין תחום לחיפוש")
+    if min_reviews is None:
+        min_reviews = parsed["min_reviews"]
+    if min_rating is None:
+        min_rating = parsed["min_rating"]
 
     counters = new_counters()
     cursor = (0, 0, 0)

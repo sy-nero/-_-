@@ -63,6 +63,58 @@ def cmd_scan(args) -> int:
     return 0
 
 
+def cmd_find(args) -> int:
+    """
+    חיפוש לפי משפט חופשי, כמו באפליקציה.
+
+    מקבל את אותו פרומפט בדיוק ("תחפש עורכי דין מסחריים בירושלים עם לפחות
+    3 ביקורות, תביאי 30"), מציג מה הובן ממנו, ומבקש אישור לפני שמתחיל --
+    כי סריקה עולה כסף וזמן, ועדיף לגלות טעות בהבנה לפני ולא אחרי.
+    """
+    errors = config.validate_for_scan()
+    if errors:
+        print("שגיאות קונפיגורציה:\n  - " + "\n  - ".join(errors))
+        return 1
+
+    prompt = " ".join(args.prompt).strip()
+    parsed = pipeline.parse_prompt(prompt)
+    if not parsed["terms"]:
+        print("לא זוהה תחום לחיפוש במשפט. לדוגמה:")
+        print('  python main.py find "עורכי דין מסחריים בירושלים, 30 נמענים"')
+        return 1
+
+    reviews = (parsed["min_reviews"] if parsed["min_reviews"] is not None
+               else config.agent_min_reviews)
+    rating = (parsed["min_rating"] if parsed["min_rating"] is not None
+              else config.agent_min_rating)
+    target = parsed["target"] or 50
+
+    print("\n=== מה שהובן מהמשפט ===")
+    print(f"  תחומים : {' · '.join(parsed['terms'])}")
+    print(f"  עיר    : {parsed['city'] or 'jerusalem'}")
+    print(f"  יעד    : {target} נמענים")
+    print(f"  סף     : לפחות {reviews} ביקורות, דירוג {rating:g} ומעלה")
+
+    if not args.yes:
+        try:
+            if input("\nלהתחיל את החיפוש? [y/n]: ").strip().lower() not in ("y", "yes", "כן"):
+                print("בוטל.")
+                return 0
+        except (EOFError, KeyboardInterrupt):
+            print("\nבוטל.")
+            return 0
+
+    storage = _storage(args)
+    summary = pipeline.scan_by_query(
+        config, storage, prompt, parsed["city"] or "jerusalem", target,
+        _campaign(args), min_reviews=reviews, min_rating=rating)
+    print("\n=== סיכום ===")
+    for key, value in summary.items():
+        print(f"  {key}: {value}")
+    print("\nלשליחה:  python main.py send --campaign " + _campaign(args))
+    return 0
+
+
 def _ask_before_send(lead, subject, text, index, total, rec=None) -> str:
     """מדפיס את המייל המלא בטרמינל ושואל אם לשלוח אותו."""
     print("\n" + "=" * 72)
@@ -486,6 +538,14 @@ def build_parser() -> argparse.ArgumentParser:
                     help="נוסח לוואטסאפ (בלי שורת נושא)")
     pv.add_argument("--html", action="store_true", help="הדפסת ה-HTML של המייל")
     pv.set_defaults(func=cmd_preview)
+
+    fp = _add_campaign(sub.add_parser(
+        "find", help="חיפוש לפי משפט חופשי, כמו באפליקציה"))
+    fp.add_argument("prompt", nargs="+",
+                    help='למשל: "עורכי דין מסחריים בירושלים, 30 נמענים, לפחות 3 ביקורות"')
+    fp.add_argument("--yes", "-y", action="store_true",
+                    help="להתחיל בלי לשאול לאישור")
+    fp.set_defaults(func=cmd_find, campaign="agent")
 
     _add_campaign(sub.add_parser("clean", help="הסרת מה שאינו חנות קמעונאית")).set_defaults(func=cmd_clean)
     _add_campaign(sub.add_parser("stats", help="הצגת סטטיסטיקות")).set_defaults(func=cmd_stats)
