@@ -273,6 +273,37 @@ def cmd_clean(args) -> int:
     return 0
 
 
+def cmd_remove(args) -> int:
+    """מוחק לידים לפי מייל, שם או דומיין של אתר."""
+    storage = _storage(args)
+    needle = args.what.strip().lower()
+    hits = []
+    for row in storage.all_leads():
+        haystack = " ".join(str(row[c] or "").lower()
+                            for c in ("name", "email", "website"))
+        if needle in haystack:
+            hits.append(row)
+
+    if not hits:
+        print(f"לא נמצא ליד שמתאים ל-{args.what!r}.")
+        return 1
+
+    print(f"\nנמצאו {len(hits)} לידים:")
+    for row in hits:
+        print(f"  - {row['name']}")
+        print(f"      מייל: {row['email'] or '(אין)'} | אתר: {row['website'] or '(אין)'}")
+
+    if not args.yes:
+        answer = input(f"\nלמחוק את {len(hits)} הלידים האלה? [y/N] ").strip().lower()
+        if answer not in ("y", "yes", "כן"):
+            print("בוטל. לא נמחק דבר.")
+            return 1
+
+    removed = storage.delete_leads([row["place_id"] for row in hits])
+    print(f"\nנמחקו {removed} לידים.")
+    return 0
+
+
 def cmd_import(args) -> int:
     from egud_bot import jobscan
     storage = _storage(args)
@@ -652,6 +683,14 @@ def build_parser() -> argparse.ArgumentParser:
     fp.set_defaults(func=cmd_find, campaign="agent")
 
     _add_campaign(sub.add_parser("clean", help="הסרת מה שאינו חנות קמעונאית")).set_defaults(func=cmd_clean)
+
+    rm = _add_campaign(sub.add_parser(
+        "remove", help="מחיקת ליד לפי מייל, שם או אתר"))
+    rm.add_argument("what", metavar="מה-למחוק",
+                    help="מייל, שם עסק או דומיין — כל התאמה חלקית")
+    rm.add_argument("-y", "--yes", action="store_true",
+                    help="למחוק בלי לשאול")
+    rm.set_defaults(func=cmd_remove)
     _add_campaign(sub.add_parser("stats", help="הצגת סטטיסטיקות")).set_defaults(func=cmd_stats)
     _add_campaign(sub.add_parser("check", help="בדיקת מה מוגדר ומה חסר להרצה")).set_defaults(func=cmd_check)
     _add_campaign(sub.add_parser("report", help="משפך הקמפיין: נשלח, המשך, תשובות")).set_defaults(func=cmd_report)

@@ -179,12 +179,30 @@ def find_email(website: str, request_delay: float = 1.0,
     home_links = []
     reached = 0            # כמה עמודים הצלחנו באמת לקרוא
     problems = []
+    home = None
     try:
         home = session.get(website, headers=HEADERS, timeout=15,
                            allow_redirects=True)
-        if home.status_code != 200:
+    except requests.RequestException as exc:
+        # חלק מהאתרים מוגשים רק תחת www. כישלון חיבור לדומיין החשוף
+        # אינו בהכרח אתר מת — שווה ניסיון אחד נוסף לפני שמוותרים.
+        if not domain.startswith("www."):
+            retry = website.replace("://" + domain, "://www." + domain, 1)
+            logger.debug("ניסיון חוזר עם www: %s", retry)
+            try:
+                home = session.get(retry, headers=HEADERS, timeout=15,
+                                   allow_redirects=True)
+                website, domain = retry, "www." + domain
+            except requests.RequestException:
+                home = None
+        if home is None:
+            problems.append(f"/: {type(exc).__name__}")
+            logger.debug("שגיאה בקריאת %s: %s", website, exc)
+
+    try:
+        if home is not None and home.status_code != 200:
             problems.append(f"/: קוד {home.status_code}")
-        if home.status_code == 200 and home.text:
+        if home is not None and home.status_code == 200 and home.text:
             reached += 1
             soup = BeautifulSoup(home.text, "html.parser")
             if expect_name and not mentions_name(soup.get_text(" "), domain,
@@ -198,7 +216,7 @@ def find_email(website: str, request_delay: float = 1.0,
             home_links = _contact_links(soup, website)
     except requests.RequestException as exc:
         problems.append(f"/: {type(exc).__name__}")
-        logger.debug("שגיאה בקריאת %s: %s", website, exc)
+        logger.debug("שגיאה בעיבוד %s: %s", website, exc)
 
     for url in home_links:
         try:
