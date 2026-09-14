@@ -430,6 +430,19 @@ PROFESSION_FAMILIES = {
         "types": {"real_estate_agency"},
         "words": ("תיווך", "מתווך", "נדל\"ן", "נדל״ן", "real estate", "realty"),
     },
+    # ליועצים ולמאמנים עסקיים אין סוג מקום בגוגל, ולכן הזיהוי הוא לפי
+    # השם בלבד -- ועם רשימת הרחקה, כי "מאמן" לבדו תופס גם מאמני כושר.
+    "consulting": {
+        "types": set(),
+        "words": ("יועץ", "יועצת", "יועצים", "ייעוץ", "יעוץ", "מאמן עסקי",
+                  "מאמנת עסקית", "אימון עסקי", "ליווי עסקי", "אסטרטגיה עסקית",
+                  "פיננסים", "פיננסי", "משכנתאות", "כלכלי", "כלכלית",
+                  "השקעות", "consult", "coach", "mentor", "advisor",
+                  "business", "finance", "strategist"),
+        "not_words": ("כושר", "פילאטיס", "יוגה", "ספורט", "תזונה", "דיאטה",
+                      "כדורגל", "שחייה", "fitness", "gym", "nutrition",
+                      "personal trainer"),
+    },
 }
 
 
@@ -455,11 +468,14 @@ def matches_query(lead: BusinessLead, family: str) -> bool:
     if not family:
         return True                      # תחום שלא מזוהה: לא מסננים
     spec = PROFESSION_FAMILIES[family]
+    name = _normalized(lead.name)
+    # מילות הרחקה גוברות: "מאמן כושר אישי" אינו מאמן עסקי
+    if any(_normalized(word) in name for word in spec.get("not_words", ())):
+        return False
     types = {(t or "").lower() for t in (lead.types or [])}
     types.add((lead.primary_type or "").lower())
     if types & spec["types"]:
         return True
-    name = _normalized(lead.name)
     return any(_normalized(word) in name for word in spec["words"])
 
 
