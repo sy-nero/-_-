@@ -258,7 +258,8 @@ def split_query(query: str) -> list[str]:
 def _handle_place(cfg: Config, storage: Storage, client, place: dict,
                   nb, counters: dict, reviews_floor: int,
                   rating_floor: float, family: str = "",
-                  run_id: str = "", city: str = "") -> None:
+                  run_id: str = "", city: str = "",
+                  seen: set | None = None) -> None:
     """
     מטפל בעסק אחד מתוצאות החיפוש: סינון, המלצה, מייל ושמירה.
 
@@ -285,8 +286,16 @@ def _handle_place(cfg: Config, storage: Storage, client, place: dict,
     if not passes_filters_agent(lead, reviews_floor, cfg.require_operational,
                                 rating_floor, any_type=True):
         return
+    # אותו עסק נמצא שוב ושוב -- בכל שכונה סמוכה ובכל מונח חיפוש. בלי
+    # הסינון הזה "עברו סינון" ספר כל מציאה מחדש, והציג 614 כשמדובר
+    # בפועל בכמה עשרות עסקים שונים.
+    if seen is not None:
+        if lead.place_id in seen:
+            return
+        seen.add(lead.place_id)
     counters["עברו סינון"] += 1
     if storage.exists(lead.place_id):
+        counters["כבר במאגר"] += 1
         return
     counters["חדשים"] += 1
 
@@ -310,7 +319,8 @@ def _handle_place(cfg: Config, storage: Storage, client, place: dict,
 
 def new_counters() -> dict:
     return {"נסרקו": 0, "רחוקים מדי": 0, "לא מהתחום": 0, "עברו סינון": 0,
-            "חדשים": 0, "עם מייל": 0, "בלי מייל": 0, "עם המלצה": 0}
+            "כבר במאגר": 0, "חדשים": 0, "עם מייל": 0, "בלי מייל": 0,
+            "עם המלצה": 0}
 
 
 # ---------------------------------------------------------------------------
@@ -491,12 +501,13 @@ def scan_by_query(cfg: Config, storage: Storage, query: str,
 
     counters = new_counters()
     cursor = (0, 0, 0)
+    seen: set = set()          # עסקים שכבר נספרו בהרצה הזאת
     while True:
         result = scan_chunk(cfg, storage, terms=terms, city=city,
                             target_emails=target_emails, campaign=campaign,
                             min_reviews=min_reviews, min_rating=min_rating,
                             cursor=cursor, counters=counters,
-                            budget_seconds=None)
+                            budget_seconds=None, seen=seen)
         counters = result["counters"]
         cursor = result["cursor"]
         if result["done"]:
@@ -509,7 +520,7 @@ def scan_chunk(cfg: Config, storage: Storage, *, terms: list[str], city: str,
                min_reviews: int | None, min_rating: float | None,
                cursor: tuple[int, int, int], counters: dict,
                budget_seconds: float | None = 45.0,
-               run_id: str = "") -> dict:
+               run_id: str = "", seen: set | None = None) -> dict:
     """
     מריץ פיסת סריקה בתוך תקציב זמן, וחוזר עם סמן שממנו ממשיכים.
 
@@ -553,7 +564,7 @@ def scan_chunk(cfg: Config, storage: Storage, *, terms: list[str], city: str,
             while place_index < len(places):
                 _handle_place(cfg, storage, client, places[place_index], nb,
                               counters, reviews_floor, rating_floor, family,
-                              run_id, city)
+                              run_id, city, seen)
                 place_index += 1
                 if counters["עם מייל"] >= target_emails:
                     return out(True, "הושג היעד")
