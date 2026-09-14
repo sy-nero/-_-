@@ -164,6 +164,38 @@ def _confirm_batch(leads) -> bool:
     return False
 
 
+def _campaign_nusach(campaign_id):
+    """
+    הנוסח שנכתב לקמפיין בלוח, לשימוש בשליחה מהטרמינל.
+
+    בלי זה שליחה מהטרמינל מתעלמת מהנוסח שמירי כתבה באפליקציה ושולחת את
+    התבנית המובנית -- כלומר מייל אחר לגמרי ממה שהיא ראתה ואישרה.
+    """
+    if not campaign_id:
+        return None
+    from egud_bot.campaigns import CampaignStore
+    from egud_bot import pipeline as _pipeline
+
+    row = CampaignStore().get(int(campaign_id))
+    if not row:
+        print(f"לא נמצא קמפיין מספר {campaign_id} בלוח.")
+        return None
+
+    def col(name):
+        try:
+            return (row[name] or "").strip()
+        except (IndexError, KeyError, TypeError):
+            return ""
+
+    subject, body = col("subject_tpl"), col("body_tpl")
+    if not (subject or body):
+        print(f"לקמפיין {campaign_id} אין נוסח משלו — נשלח הנוסח המובנה.")
+        return None
+    terms = _pipeline.parse_prompt(col("search_query"))["terms"]
+    print(f"נוסח מקמפיין {campaign_id}: {col('title')}")
+    return (subject, body, terms[0] if terms else "")
+
+
 def cmd_send(args) -> int:
     if not args.dry_run:
         errors = config.validate_for_email(_campaign(args))
@@ -174,13 +206,15 @@ def cmd_send(args) -> int:
     confirm = _ask_before_send if getattr(args, "confirm", False) else None
     if confirm and not args.dry_run:
         print("\nכל מייל יוצג כאן לפני השליחה. נשלחים רק המיילים שתאשר.")
+    custom = _campaign_nusach(getattr(args, "from_campaign", None))
     summary = pipeline.send_emails(config, storage, dry_run=args.dry_run,
                                    campaign=_campaign(args),
                                    skip_contacted=getattr(args, "skip_contacted", False),
                                    limit=getattr(args, "limit", None),
                                    confirm=confirm,
                                    confirm_batch=_confirm_batch if confirm else None,
-                                   variant=getattr(args, "variant", "") or "")
+                                   variant=getattr(args, "variant", "") or "",
+                                   custom=custom)
     print("\n=== סיכום שליחה ===")
     for k, v in summary.items():
         print(f"  {k}: {v}")
@@ -495,6 +529,9 @@ def build_parser() -> argparse.ArgumentParser:
         sub.add_parser("scan", help="סריקה + איתור מיילים")))).set_defaults(func=cmd_scan)
 
     sp = _add_campaign(sub.add_parser("send", help="שליחת מיילים"))
+    sp.add_argument("--from-campaign", type=int, default=None, metavar="מספר",
+                    help="להשתמש בנוסח שנכתב לקמפיין הזה בלוח (המספר בכתובת "
+                         "/campaign/<מספר>)")
     sp.add_argument("--dry-run", action="store_true", help="בלי לשלוח בפועל")
     sp.add_argument("--skip-contacted", action="store_true",
                     help="דלג על כל מי שקיבל מייל בקמפיין אחר (לא לשלוח פעמיים לאותו עסק)")

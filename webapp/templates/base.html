@@ -259,7 +259,7 @@
   <div class="brand">לוח הקמפיינים <span>סינרו טק</span></div>
   <nav style="display:flex; gap:18px; margin-inline-start:auto;">
     <a href="{{ url_for('board') }}">כל הקמפיינים</a>
-    <a href="{{ url_for('jobs_page') }}">סריקה</a>
+    {% if full_mode %}<a href="{{ url_for('jobs_page') }}">סריקה</a>{% endif %}
     <a href="{{ url_for('backup_page') }}">גיבוי</a>
     {% if session.get('ok') %}<a href="{{ url_for('logout') }}">יציאה</a>{% endif %}
   </nav>

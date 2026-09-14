@@ -33,7 +33,7 @@
       <i class="reply" style="width:{{ col.reply_pct }}%"></i>
     </div>
     <div class="actions">
-      {% if col.campaign['source_campaign'] %}
+      {% if full_mode and col.campaign['source_campaign'] %}
         <a class="btn small" href="{{ url_for('send_page', campaign_id=col.campaign['id']) }}">
           שליחה</a>
         <span class="muted">{{ col.pending }} ממתינים</span>

@@ -75,6 +75,16 @@ def internal_error(exc):
 PUBLIC_ENDPOINTS = {"pixel", "health", "login", "static"}
 
 
+@app.context_processor
+def _inject_mode():
+    """
+    table = הדפדפן הוא הטבלה בלבד. החיפוש והשליחה רצים מהטרמינל, ולכן
+    הבלוקים שלהם מוסתרים -- הם רק מוסיפים רעש למי שממלאת את הטבלה ביד.
+    המסלולים עצמם נשארים, כדי ש-APP_MODE=full יחזיר הכול בלי שינוי קוד.
+    """
+    return {"full_mode": config.app_mode == "full"}
+
+
 def login_required(view):
     @wraps(view)
     def wrapped(*args, **kwargs):

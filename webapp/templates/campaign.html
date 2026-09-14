@@ -56,6 +56,7 @@
   </div>
 </div>
 
+{% if full_mode %}
 <div class="card" id="what">
   <h2>מה לחפש ומה לשלוח</h2>
   <p class="sub">
@@ -85,6 +86,8 @@
     — שורה ריקה בין פסקאות מפרידה פסקה במייל.
   </p>
 </div>
+
+{% endif %}
 
 <div class="card">
   <h2>פרטי הקמפיין</h2>
@@ -141,6 +144,7 @@
 </div>
 </form>
 
+{% if full_mode %}
 <div class="card" id="scan">
   <h2>מה עושים עכשיו</h2>
   {% if just_saved %}
@@ -251,6 +255,8 @@
       רשימת טלפונים</a>
   </div>
 </div>
+
+{% endif %}
 
 <div class="card tight">
   <form method="post" action="{{ url_for('campaign_delete', campaign_id=campaign['id']) }}"

@@ -67,6 +67,9 @@ class Config:
     tracking_base_url: str = os.getenv("TRACKING_BASE_URL", "")
     # פורט אפליקציית הניהול
     app_port: int = int(os.getenv("APP_PORT", "5001"))
+    # table = הדפדפן הוא הטבלה בלבד, והחיפוש והשליחה רצים מהטרמינל.
+    # full  = גם החיפוש והשליחה מתוך הדפדפן.
+    app_mode: str = os.getenv("APP_MODE", "table").strip().lower()
     # קישור לאתר שמופיע בחתימת המייל
     agent_website: str = os.getenv("AGENT_WEBSITE", "https://tech.sy-nero.com/")
     agent_smtp_user: str = os.getenv("AGENT_SMTP_USER", "")
