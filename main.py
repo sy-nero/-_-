@@ -273,6 +273,42 @@ def cmd_clean(args) -> int:
     return 0
 
 
+def cmd_emails(args) -> int:
+    """מציג את הלידים שיש להם כתובת מייל."""
+    from egud_bot.filters import BusinessLead, family_of_query, matches_query
+
+    storage = _storage(args)
+    rows = [r for r in storage.all_leads(10 ** 6)
+            if (r["email"] or "").strip()]
+
+    if args.field:
+        family = family_of_query(args.field)
+        if family:
+            rows = [r for r in rows
+                    if matches_query(BusinessLead.from_row(r), family)]
+        else:
+            print(f"התחום {args.field!r} אינו מזוהה — מציג את כולם.")
+
+    if args.pending:
+        rows = [r for r in rows if (r["status"] or "") != "emailed"]
+
+    if not rows:
+        print("אין לידים עם כתובת מייל שמתאימים לבקשה.")
+        return 0
+
+    what = "ממתינים לשליחה" if args.pending else "עם מייל"
+    field = f" בתחום {args.field!r}" if args.field else ""
+    print(f"\n{len(rows)} לידים {what}{field}:\n")
+    for i, row in enumerate(rows, 1):
+        sent = " [כבר נשלח]" if (row["status"] or "") == "emailed" else ""
+        print(f"{i:3}. {_cell(row, 'email')}{sent}")
+        print(f"     {_cell(row, 'name')}")
+        if _cell(row, "website"):
+            print(f"     {_cell(row, 'website')}")
+    print()
+    return 0
+
+
 def cmd_remove(args) -> int:
     """מוחק לידים לפי מייל, שם או דומיין של אתר."""
     storage = _storage(args)
@@ -683,6 +719,14 @@ def build_parser() -> argparse.ArgumentParser:
     fp.set_defaults(func=cmd_find, campaign="agent")
 
     _add_campaign(sub.add_parser("clean", help="הסרת מה שאינו חנות קמעונאית")).set_defaults(func=cmd_clean)
+
+    em = _add_campaign(sub.add_parser(
+        "emails", help="הצגת הלידים שיש להם כתובת מייל"))
+    em.add_argument("--field", default="", metavar="תחום",
+                    help='רק בעלי מקצוע מהתחום הזה, למשל "יועצים עסקיים"')
+    em.add_argument("--pending", action="store_true",
+                    help="רק מי שעדיין לא נשלח אליו")
+    em.set_defaults(func=cmd_emails)
 
     rm = _add_campaign(sub.add_parser(
         "remove", help="מחיקת ליד לפי מייל, שם או אתר"))
