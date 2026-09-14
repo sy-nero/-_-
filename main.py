@@ -443,7 +443,8 @@ def cmd_test(args) -> int:
 def cmd_enrich(args) -> int:
     """משלים כתובות מייל ללידים שנסרקו בלי אתר."""
     storage = _storage(args)
-    summary = pipeline.enrich_missing_emails(config, storage, args.limit)
+    summary = pipeline.enrich_missing_emails(config, storage, args.limit,
+                                             field=args.field)
     print("\n=== סיכום העשרה ===")
     for k, v in summary.items():
         print(f"  {k}: {v}")
@@ -659,6 +660,9 @@ def build_parser() -> argparse.ArgumentParser:
         "enrich", help="חיפוש אתר ומייל ללידים שנסרקו בלי כתובת"))
     en.add_argument("--limit", type=int, default=50,
                     help="כמה לידים לנסות בהרצה אחת (ברירת מחדל 50)")
+    en.add_argument("--field", default="", metavar="תחום",
+                    help='להעשיר רק בעלי מקצוע מהתחום הזה, למשל "יועצים '
+                         'עסקיים". המאגר מצטבר ומכיל כמה מקצועות')
     en.set_defaults(func=cmd_enrich)
 
     ts = _add_campaign(sub.add_parser("test", help="שליחת מייל בדיקה אחד לכתובת שלך"))

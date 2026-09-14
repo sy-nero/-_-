@@ -69,6 +69,10 @@ class SearchQuotaError(RuntimeError):
     """מכסת החיפוש היומית נגמרה. אין טעם להמשיך לנסות."""
 
 
+class SearchKeyError(RuntimeError):
+    """מפתח החיפוש אינו תקין. אין טעם להמשיך לנסות איתו."""
+
+
 def _search_google(company: str, key: str, cx: str) -> str | None:
     """
     Google Custom Search API.
@@ -100,10 +104,15 @@ def _search_google(company: str, key: str, cx: str) -> str | None:
         message = (r.json().get("error", {}).get("message") or "")[:160]
     except ValueError:
         message = r.text[:160]
-    if r.status_code in (429, 403) and ("quota" in message.lower()
-                                        or "limit" in message.lower()
+    low = message.lower()
+    if r.status_code in (429, 403) and ("quota" in low or "limit" in low
                                         or r.status_code == 429):
         raise SearchQuotaError(message or "המכסה היומית נגמרה")
+    # מפתח פסול לא יתקן את עצמו בליד הבא. מדווחים פעם אחת ומפסיקים
+    # לנסות, במקום לשרוף בקשה כושלת על כל ליד ברשימה.
+    if r.status_code in (400, 403) and ("api key" in low or "api_key" in low
+                                        or "keyinvalid" in low):
+        raise SearchKeyError(message or "המפתח אינו תקין")
     logger.warning("חיפוש Google נכשל (קוד %s): %s", r.status_code, message)
     return None
 

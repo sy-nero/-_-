@@ -584,20 +584,46 @@ def scan_chunk(cfg: Config, storage: Storage, *, terms: list[str], city: str,
     return out(True, "נסרקו כל השכונות")
 
 
-def enrich_missing_emails(cfg: Config, storage: Storage, limit: int = 50) -> dict:
+def enrich_missing_emails(cfg: Config, storage: Storage, limit: int = 50,
+                          field: str = "") -> dict:
     """
     מנסה להשלים כתובות מייל ללידים שנסרקו בלי אתר. Google Places לא מחזיר
     מייל, ולידים בלי אתר נשארים תקועים — כאן מחפשים את אתר המשרד ברשת
     (Custom Search אם מוגדר, אחרת DuckDuckGo) ומחלצים ממנו מייל.
+
+    field — להעשיר רק בעלי מקצוע מהתחום הזה. המאגר מצטבר ומכיל כמה
+    מקצועות, ואין טעם לבזבז חיפושים על מי שלא נשלח אליו ממילא.
     """
-    from egud_bot.jobscan import _find_company_website, SearchQuotaError
+    from egud_bot.jobscan import (_find_company_website, SearchQuotaError,
+                                  SearchKeyError)
     from data.neighborhoods import city_of
 
-    leads = storage.leads_without_email(limit)
     summary = {"נבדקו": 0, "נמצא אתר": 0, "נמצא מייל": 0}
+    family = family_of_query(field) if field else ""
+    if field and not family:
+        logger.warning("התחום %r אינו מזוהה — לא מסננים לפיו.", field)
+
+    # הסינון לפי תחום נעשה כאן ולא ב-SQL, ולכן מושכים מאגר גדול יותר:
+    # אחרת limit=50 על מאגר מעורב היה מחזיר 50 שורות שרק 5 מהן מהתחום.
+    leads = storage.leads_without_email(limit * 10 if family else limit)
+
+    if family:
+        before = len(leads)
+        leads = [l for l in leads
+                 if matches_query(BusinessLead.from_row(l), family)]
+        skipped = before - len(leads)
+        if skipped:
+            logger.info("דילגתי על %d לידים שאינם מהתחום %r.", skipped, field)
+            summary["לא מהתחום"] = skipped
+        leads = leads[:limit]
+
     if not leads:
         logger.info("אין לידים ללא מייל להעשרה.")
         return summary
+
+    # מפתח פסול מתגלה בליד הראשון. מאפסים אותו כדי שכל השאר ילכו ישר
+    # ל-DuckDuckGo, במקום 77 בקשות כושלות עם אותה הודעה בדיוק.
+    search_key = cfg.google_search_key
 
     for i, lead in enumerate(leads, 1):
         name = lead["name"]
@@ -606,8 +632,7 @@ def enrich_missing_emails(cfg: Config, storage: Storage, limit: int = 50) -> dic
         logger.info("[%d/%d] מחפש אתר עבור %s", i, len(leads), name)
         try:
             site = _find_company_website(query, cfg.request_delay_seconds,
-                                         cfg.google_search_key,
-                                         cfg.google_search_cx)
+                                         search_key, cfg.google_search_cx)
         except SearchQuotaError as exc:
             # אין טעם להמשיך: כל הבקשות הבאות ייכשלו באותה סיבה
             logger.error("מכסת החיפוש היומית של Google נגמרה — עוצרים כאן.")
@@ -616,6 +641,14 @@ def enrich_missing_emails(cfg: Config, storage: Storage, limit: int = 50) -> dic
                          "GOOGLE_SEARCH_KEY מ-.env כדי לעבור לחיפוש החינמי.")
             summary["נעצר"] = "מכסת החיפוש נגמרה"
             break
+        except SearchKeyError as exc:
+            logger.warning("מפתח החיפוש של Google אינו תקין: %s", exc)
+            logger.warning("  ממשיכים עם DuckDuckGo. כדי להשתיק את ההודעה, "
+                           "הסירי את GOOGLE_SEARCH_KEY מ-.env או החליפי אותו.")
+            summary["מפתח פסול"] = "עברנו ל-DuckDuckGo"
+            search_key = ""
+            site = _find_company_website(query, cfg.request_delay_seconds,
+                                         "", "")
         summary["נבדקו"] = i
         if not site:
             continue
