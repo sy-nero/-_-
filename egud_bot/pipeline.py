@@ -240,6 +240,22 @@ def _distance_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     return 2 * r * math.asin(math.sqrt(a))
 
 
+#: מילים שפותחות מקצוע. ו' החיבור שלפניהן מפרידה בין שני תחומים
+#: ("יועצים עסקיים ומאמנים עסקיים") ולא בין שתי מילים באותו תחום.
+#: בלי הפיצול כל המשפט נשלח לגוגל כשאילתה אחת, והוא מחפש את כל המילים
+#: יחד -- מה שמחזיר אפס תוצאות בכל שכונה.
+_PROFESSION_LEAD = (
+    "יועץ", "יועצת", "יועצים", "יועצות", "ייעוץ", "יעוץ",
+    "מאמן", "מאמנת", "מאמנים", "מאמנות", "אימון", "ליווי",
+    "עורך", "עורכת", "עורכי", "עורכות", "רואה", "רואי", "רו\"ח",
+    "מתווך", "מתווכת", "מתווכים", "סוכן", "סוכנת", "סוכני",
+    "מנטור", "מנטורית", "מומחה", "מומחית", "מטפל", "מטפלת",
+    "אדריכל", "מהנדס", "מעצב", "צלם", "מורה", "מדריך",
+)
+_CONJ_SPLIT = re.compile(
+    r"\s+ו(?=(?:" + "|".join(re.escape(w) for w in _PROFESSION_LEAD) + r")\b)")
+
+
 def split_query(query: str) -> list[str]:
     """
     מפרק את שדה "תחום לחיפוש" לרשימת מונחי חיפוש.
@@ -252,9 +268,11 @@ def split_query(query: str) -> list[str]:
     """
     terms: list[str] = []
     for part in re.split(r"[,;\n/|]+", query or ""):
-        term = _NOISE_RE.sub("", part.strip().strip(_EDGE)).strip(_EDGE)
-        if len(term) >= 2 and term not in terms:
-            terms.append(term)
+        # "יועצים עסקיים ומאמנים עסקיים" הם שני חיפושים, לא אחד
+        for piece in _CONJ_SPLIT.split(part):
+            term = _NOISE_RE.sub("", piece.strip().strip(_EDGE)).strip(_EDGE)
+            if len(term) >= 2 and term not in terms:
+                terms.append(term)
     return terms
 
 
@@ -563,6 +581,13 @@ def scan_chunk(cfg: Config, storage: Storage, *, terms: list[str], city: str,
                                            cfg.search_radius_meters).values())
             if place_index == 0:          # סופרים פעם אחת, גם אם נחדש כאן
                 counters["נסרקו"] += len(places)
+                # בלי השורה הזאת "נאספו 0" נראה אותו דבר בין "גוגל לא
+                # החזיר כלום" (מונח חיפוש גרוע) לבין "גוגל החזיר והכל
+                # נפסל בסינון" -- שתי בעיות שונות לגמרי.
+                if not places:
+                    logger.info("  גוגל לא החזיר תוצאות למונח הזה כאן")
+                else:
+                    logger.info("  גוגל החזיר %d תוצאות", len(places))
 
             while place_index < len(places):
                 _handle_place(cfg, storage, client, places[place_index], nb,
