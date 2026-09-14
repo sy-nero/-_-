@@ -11,13 +11,45 @@
     python main.py export leads.csv  # ייצוא כל הלידים ל-CSV
     python main.py preview --campaign agent   # תצוגת נוסח המייל
 """
+import os
 import sys
 import csv
 import logging
 import argparse
 import sqlite3
 
-from config import config
+
+def _use_project_venv() -> None:
+    """
+    אם יש .venv בתיקיית הפרויקט ולא רצים בתוכה — מריצים מחדש איתה.
+
+    בלי זה, שכחת "source .venv/bin/activate" נגמרת ב-
+    ModuleNotFoundError: No module named 'dotenv' -- שגיאה שלא מרמזת
+    בכלל על הסיבה האמיתית. עדיף שהכלי פשוט יעבוד.
+    """
+    if os.environ.get("EGUD_VENV_REEXEC"):
+        return                      # כבר ניסינו פעם אחת, לא נכנסים ללולאה
+    root = os.path.dirname(os.path.abspath(__file__))
+    venv_python = os.path.join(root, ".venv", "bin", "python3")
+    if not os.path.exists(venv_python):
+        return
+    if os.path.realpath(sys.executable) == os.path.realpath(venv_python):
+        return                      # כבר רצים בתוך ה-venv
+    os.environ["EGUD_VENV_REEXEC"] = "1"
+    os.execv(venv_python, [venv_python, os.path.abspath(__file__)] + sys.argv[1:])
+
+
+_use_project_venv()
+
+try:
+    from config import config
+except ModuleNotFoundError as exc:   # noqa: F841 — מסבירים במקום להתרסק
+    print(f"חסרה חבילה: {exc.name}\n")
+    print("נראה שהסביבה לא הוכנה. מהתיקייה של הפרויקט:")
+    print("  python3 -m venv .venv")
+    print("  source .venv/bin/activate")
+    print("  pip install -r requirements.txt")
+    sys.exit(1)
 from egud_bot.storage import Storage
 from egud_bot import pipeline
 
