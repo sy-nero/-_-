@@ -509,21 +509,48 @@ def cmd_stats(args) -> int:
 
 
 def cmd_export(args) -> int:
-    db_path = _leads_db(_campaign(args))
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    rows = conn.execute("SELECT * FROM leads ORDER BY found_at").fetchall()
-    conn.close()
+    """
+    ייצוא לידים ל-CSV.
+
+    דרך שכבת האחסון ולא ב-SQL ישיר: כשהנתונים ב-D1 אין קובץ מקומי בכלל,
+    והגרסה הקודמת פתחה קובץ ריק ודיווחה "אין לידים לייצוא".
+    """
+    storage = _storage(args)
+    if getattr(args, "pending", False):
+        rows = storage.leads_to_email(10 ** 6)
+        what = "ממתינים לשליחה"
+    else:
+        rows = storage.all_leads(10 ** 6)
+        what = "לידים"
     if not rows:
-        print("אין לידים לייצוא.")
+        print(f"אין {what} לייצוא.")
         return 0
+
+    # רק העמודות שמעניינות בגיליון, ובסדר קריא
+    columns = ["name", "email", "phone", "neighborhood", "address",
+               "rating", "review_count", "website", "status", "found_at"]
+    titles = ["שם", "מייל", "טלפון", "שכונה", "כתובת", "דירוג",
+              "ביקורות", "אתר", "מצב", "נמצא בתאריך"]
     with open(args.path, "w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(f, fieldnames=rows[0].keys())
-        writer.writeheader()
-        for r in rows:
-            writer.writerow(dict(r))
-    print(f"יוצאו {len(rows)} לידים אל {args.path}")
+        writer = csv.writer(f)
+        writer.writerow(titles)
+        for row in rows:
+            writer.writerow([_cell(row, c) for c in columns])
+    print(f"יוצאו {len(rows)} {what} אל {args.path}")
+    if getattr(args, "show", False):
+        print()
+        for i, row in enumerate(rows, 1):
+            print(f"{i:3}. {_cell(row, 'name')}  <{_cell(row, 'email') or '—'}>"
+                  f"  {_cell(row, 'neighborhood')}")
     return 0
+
+
+def _cell(row, key):
+    try:
+        value = row[key]
+    except (IndexError, KeyError, TypeError):
+        return ""
+    return "" if value is None else value
 
 
 def _add_campaign(sp):
@@ -655,6 +682,10 @@ def build_parser() -> argparse.ArgumentParser:
     ip.set_defaults(func=cmd_import)
 
     ep = _add_campaign(sub.add_parser("export", help="ייצוא לידים ל-CSV"))
+    ep.add_argument("--pending", action="store_true",
+                    help="רק מי שממתין לשליחה (יש לו מייל וטרם נשלח אליו)")
+    ep.add_argument("--show", action="store_true",
+                    help="גם להדפיס את הרשימה בטרמינל")
     ep.add_argument("path", help="נתיב קובץ ה-CSV")
     ep.set_defaults(func=cmd_export)
 
