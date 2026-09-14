@@ -520,17 +520,44 @@ def city_from_address(address: str) -> str:
 
 def in_requested_city(lead: BusinessLead, city_key: str) -> bool:
     """
-    האם הכתובת של הליד באמת בעיר שביקשנו.
+    האם הליד באמת בעיר שביקשנו.
 
-    כתובת שלא זוהתה בה עיר מתקבלת -- עדיף להסתמך על מסנן המרחק מאשר
-    לפסול עסק רק כי הכתובת שלו חלקית.
+    נבדקים גם הכתובת וגם שם העסק: "משרד עורכי דין בתל אביב חסון גל"
+    מצהיר על עצמו בשם, גם כשהכתובת שגוגל החזיר מצביעה על ירושלים. השם
+    קודם -- הוא מה שהנמען יראה, ופנייה שאומרת "באזור ירושלים" למשרד
+    ששמו מכריז על תל אביב היא טעות גלויה.
+
+    כשלא זוהתה עיר בשניהם -- מתקבל, ומסנן המרחק הוא רשת הביטחון.
     """
-    found = city_from_address(lead.address)
+    found = city_from_address(lead.name) or city_from_address(lead.address)
     if not found:
         return True
     if city_key == "all":
         return found != "other"       # כל הערים החרדיות, ולא מעבר להן
     return found == (city_key or "jerusalem")
+
+
+# כתובת מייל תקינה בסיסית, ולא סיומות שהן טעות הקלדה נפוצה
+_EMAIL_RE = re.compile(r"^[^@\s,;]+@[^@\s,;]+\.[a-z]{2,10}$", re.I)
+_BAD_TLDS = ("ill", "cm", "con", "comm", "cim", "coo", "vom", "xom",
+             "gmial", "gmai", "gmal")
+
+
+def is_valid_email(email: str) -> bool:
+    """
+    האם הכתובת נראית תקינה.
+
+    שליחה לכתובת שגויה חוזרת כ-bounce, ושיעור bounce גבוה פוגע במוניטין
+    השולח -- כלומר מייל אחד שגוי מזיק גם לכל השאר. "office@mrlawyr.co.ill"
+    (שתי L) הוא בדיוק המקרה: נראה תקין למראית עין, ואינו קיים.
+    """
+    email = (email or "").strip()
+    if not _EMAIL_RE.match(email):
+        return False
+    domain = email.rsplit("@", 1)[-1].lower()
+    if domain.rsplit(".", 1)[-1] in _BAD_TLDS:
+        return False
+    return not any(part in _BAD_TLDS for part in domain.split("."))
 
 
 def passes_filters_agent(

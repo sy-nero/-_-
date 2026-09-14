@@ -17,6 +17,7 @@ from egud_bot.filters import (BusinessLead, passes_filters,
                               passes_filters_service, passes_filters_grant,
                               passes_filters_agent, family_of_query,
                               matches_query, in_requested_city,
+                              is_valid_email,
                               is_blocked_email, looks_established)
 from egud_bot.email_finder import find_email
 from egud_bot import recommendations, tracking
@@ -623,7 +624,8 @@ def enrich_missing_emails(cfg: Config, storage: Storage, limit: int = 50) -> dic
 def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
                 campaign: str = "funding", skip_contacted: bool = False,
                 limit: int | None = None, confirm=None, confirm_batch=None,
-                variant: str = "", only=None, custom=None) -> dict:
+                variant: str = "", only=None, custom=None,
+                field: str = "", city: str = "") -> dict:
     """
     שולח מייל ללידים חדשים שיש להם כתובת מייל (עד המכסה בהרצה).
     skip_contacted=True מדלג על כל מי שקיבל מייל באיזשהו קמפיין אחר
@@ -650,6 +652,32 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
     # חסימת רשתות גדולות / ארגונים / דומיינים טכניים (הגנה גם אם נכנסו ל-DB בעבר)
     blocked = [l for l in all_candidates if is_blocked_email(l["email"])]
     remaining = [l for l in all_candidates if not is_blocked_email(l["email"])]
+
+    # כתובת שגויה חוזרת כ-bounce, ושיעור bounce גבוה פוגע במוניטין השולח --
+    # כלומר כתובת אחת שגויה מזיקה גם לכל השאר
+    invalid = [l for l in remaining if not is_valid_email(l["email"])]
+    remaining = [l for l in remaining if is_valid_email(l["email"])]
+
+    # field: לשלוח רק לבעלי מקצוע מהתחום הזה. המאגר מצטבר ומכיל כמה
+    # מקצועות, ונוסח שנכתב ליועצים עסקיים לא מתאים לעורכי דין.
+    off_field = []
+    if field:
+        family = family_of_query(field)
+        if family:
+            off_field = [l for l in remaining
+                         if not matches_query(BusinessLead.from_row(l), family)]
+            remaining = [l for l in remaining
+                         if matches_query(BusinessLead.from_row(l), family)]
+        else:
+            logger.warning("התחום %r אינו מזוהה — לא מסננים לפיו.", field)
+
+    # city: לפסול מי שהשם או הכתובת מצהירים על עיר אחרת
+    off_city = []
+    if city:
+        off_city = [l for l in remaining
+                    if not in_requested_city(BusinessLead.from_row(l), city)]
+        remaining = [l for l in remaining
+                     if in_requested_city(BusinessLead.from_row(l), city)]
     # קמפיין מענק: לדלג על עסקים זעירים (gmail ובלי בע"מ) — רק חברות מבוססות
     small = []
     if campaign == "grant":
@@ -666,6 +694,13 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
     summary = {"candidates": len(leads), "sent": 0, "failed": 0,
                "skipped_already_sent": len(skipped),
                "skipped_blocked": len(blocked)}
+    for label, group in (("דולגו: כתובת לא תקינה", invalid),
+                         ("דולגו: לא מהתחום", off_field),
+                         ("דולגו: עיר אחרת", off_city)):
+        if group:
+            summary[label] = len(group)
+            for lead in group[:5]:
+                logger.info("  %s — %s <%s>", label, lead["name"], lead["email"])
     if small:
         summary["skipped_small"] = len(small)
         logger.info("דילוג על %d עסקים זעירים (מענק: רק חברות מבוססות).", len(small))

@@ -246,7 +246,9 @@ def cmd_send(args) -> int:
                                    confirm=confirm,
                                    confirm_batch=_confirm_batch if confirm else None,
                                    variant=getattr(args, "variant", "") or "",
-                                   custom=custom)
+                                   custom=custom,
+                                   field=getattr(args, "field", "") or "",
+                                   city=getattr(args, "city", "") or "")
     print("\n=== סיכום שליחה ===")
     for k, v in summary.items():
         print(f"  {k}: {v}")
@@ -588,6 +590,11 @@ def build_parser() -> argparse.ArgumentParser:
         sub.add_parser("scan", help="סריקה + איתור מיילים")))).set_defaults(func=cmd_scan)
 
     sp = _add_campaign(sub.add_parser("send", help="שליחת מיילים"))
+    sp.add_argument("--field", default="", metavar="תחום",
+                    help='לשלוח רק לבעלי מקצוע מהתחום הזה, למשל "עורכי דין". '
+                         "המאגר מצטבר ומכיל כמה מקצועות")
+    sp.add_argument("--city", default="", metavar="עיר",
+                    help="לשלוח רק למי שבעיר הזאת (jerusalem, bnei-brak...)")
     sp.add_argument("--from-campaign", type=int, default=None, metavar="מספר",
                     help="להשתמש בנוסח שנכתב לקמפיין הזה בלוח (המספר בכתובת "
                          "/campaign/<מספר>)")
