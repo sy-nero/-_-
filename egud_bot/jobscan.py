@@ -65,6 +65,85 @@ def _first_good_host(urls) -> str | None:
     return None
 
 
+# מילות שירות: הליבה היא שם עצם שמסמן מקצוע ("יועץ", "ייעוץ"), והמילוי
+# הוא תארים שנלווים אליו ("עסקי", "פיננסי"). ההפרדה חשובה — "המרכז
+# לתודעה פיננסית" הוא שם עסק לגיטימי, ואילו "ייעוץ פיננסי" הוא תיאור.
+_SERVICE_CORE = {
+    "ייעוץ", "יעוץ", "יועץ", "יועצת", "ייעוצי", "מאמן", "מאמנת", "אימון",
+    "ליווי", "תכנון", "הכוונה", "הדרכה", "consulting", "coaching",
+    "consultant", "advisor",
+}
+_SERVICE_FILLER = {
+    "עסקי", "עסקית", "עסקים", "פיננסי", "פיננסית", "פנסיוני", "פנסיונית",
+    "כלכלי", "כלכלית", "אישי", "אישית", "מנטלי", "ומנטלי", "מס", "משכנתאות",
+    "השקעות", "ומימון", "מימון", "סיכונים", "ניהול", "business", "financial",
+    "ו", "של", "ל", "-",
+}
+_SPLIT_RE = re.compile(r"\s*[,|;]\s*|\s+[-–—]\s+")
+
+
+def _clean_company_name(name: str) -> str:
+    """
+    מנקה שם עסק מ-Google Places לכדי משהו שאפשר לחפש.
+
+    כרטיסי Google Maps עמוסים במילות מפתח, ולא בשם:
+      "ייעוץ פנסיוני, ייעוץ פיננסי, ייעוץ עסקי - המרכז לתודעה פיננסית - מזל צובאלי"
+    חיפוש של המחרוזת הזאת כמו שהיא לא מחזיר כלום בשום מנוע. לוקחים את
+    החלק הראשון שאינו תיאור שירות, וחותכים אותו לפני מילת השירות הראשונה.
+    """
+    raw = (name or "").strip().strip(".")
+    if not raw:
+        return ""
+
+    segments = [seg.strip(" .־-") for seg in _SPLIT_RE.split(raw)]
+    segments = [seg for seg in segments if seg]
+
+    def words_of(seg):
+        return [w for w in re.split(r"\s+", seg) if w]
+
+    def norm(word):
+        """ו' החיבור מסתירה מילה מהאוצר: "ומשכנתאות" היא "משכנתאות"."""
+        w = word.strip("־-").lower()
+        if len(w) > 3 and w.startswith("ו"):
+            w = w[1:]
+        return w
+
+    def is_service(word):
+        w = norm(word)
+        return w in _SERVICE_CORE or w in _SERVICE_FILLER
+
+    def is_description(seg):
+        ws = [norm(w) for w in words_of(seg)]
+        ws = [w for w in ws if w]
+        return bool(ws) and all(w in _SERVICE_CORE or w in _SERVICE_FILLER
+                                for w in ws)
+
+    chosen = next((seg for seg in segments if not is_description(seg)),
+                  segments[0] if segments else raw)
+
+    # להוריד תיאור שפותח את השם: "יועץ עסקי דוד כהן" -> "דוד כהן"
+    ws = words_of(chosen)
+    lead_cut = 0
+    while lead_cut < len(ws) and is_service(ws[lead_cut]):
+        lead_cut += 1
+    tail = ws[lead_cut:]
+    # לא למחוק שם שכולו תיאור, ולא להשאיר שריד חסר משמעות
+    if lead_cut and (len(tail) >= 2 or (len(tail) == 1 and len(tail[0]) >= 4)):
+        chosen = " ".join(tail)
+
+    # לחתוך לפני מילת השירות הראשונה: "דוד סלאנים יעוץ משכנתאות" -> "דוד סלאנים"
+    ws = words_of(chosen)
+    for i, w in enumerate(ws):
+        if norm(w) in _SERVICE_CORE:
+            head = ws[:i]
+            # לא לחתוך עד כדי שריד חסר משמעות: "Betty Coach Therapy" -> "Betty"
+            if len(head) >= 2 or (len(head) == 1 and len(head[0]) >= 6):
+                chosen = " ".join(head)
+            break
+
+    return chosen.strip() or raw
+
+
 class SearchQuotaError(RuntimeError):
     """מכסת החיפוש היומית נגמרה. אין טעם להמשיך לנסות."""
 
@@ -118,23 +197,50 @@ def _search_google(company: str, key: str, cx: str) -> str | None:
 
 
 def _search_ddg(company: str) -> str | None:
-    """DuckDuckGo (חינמי, אך נחסם אחרי מספר חיפושים) — גיבוי בלבד."""
+    """
+    DuckDuckGo (חינמי, אך נחסם אחרי מספר חיפושים) — גיבוי.
+
+    כמו ב-_search_google, כל מסלול כישלון מדווח. בלי זה "נחסמנו",
+    "המבנה של הדף השתנה" ו"באמת אין אתק" נראים אותו דבר בדיוק: None.
+    """
     time.sleep(4.0)
+    query = f"{company} אתר רשמי"
+    logger.debug("DuckDuckGo: %s", query)
     try:
         r = requests.get("https://html.duckduckgo.com/html/",
-                         params={"q": f"{company} אתר רשמי"}, headers=_UA, timeout=20)
-    except requests.RequestException:
+                         params={"q": query}, headers=_UA, timeout=20)
+    except requests.RequestException as exc:
+        logger.warning("חיפוש DuckDuckGo נכשל (רשת): %s", str(exc)[:120])
         return None
     if r.status_code != 200:
+        logger.warning("חיפוש DuckDuckGo נכשל (קוד %s) — ייתכן שנחסמנו "
+                       "בגלל קצב החיפושים.", r.status_code)
         return None
+
     soup = BeautifulSoup(r.text, "html.parser")
+    # DuckDuckGo שינה לא פעם את מבנה הדף. הסלקטור הישן נשאר ראשון,
+    # ואם הוא לא תופס כלום לוקחים כל קישור תוצאה לפי הפרמטר uddg.
+    anchors = soup.select("a.result__a") or soup.select("a[href*='uddg=']")
     urls = []
-    for a in soup.select("a.result__a"):
+    for a in anchors:
         href = a.get("href") or ""
         if "uddg=" in href:
             href = unquote(parse_qs(urlparse(href).query).get("uddg", [""])[0])
         urls.append(href)
-    return _first_good_host(urls)
+
+    if not urls:
+        blocked = ("anomaly" in r.text.lower() or "unusual traffic" in r.text.lower()
+                   or "captcha" in r.text.lower())
+        logger.warning("DuckDuckGo החזיר דף בלי תוצאות (%s).",
+                       "נראה שנחסמנו" if blocked else "אולי המבנה השתנה")
+        return None
+
+    site = _first_good_host(urls)
+    if not site:
+        logger.debug("  כל %d התוצאות נפסלו (רשתות חברתיות/אינדקסים).", len(urls))
+    else:
+        logger.debug("  נמצא: %s", site)
+    return site
 
 
 def _find_company_website(company: str, delay: float = 1.0,

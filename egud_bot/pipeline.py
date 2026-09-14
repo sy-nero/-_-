@@ -594,8 +594,8 @@ def enrich_missing_emails(cfg: Config, storage: Storage, limit: int = 50,
     field — להעשיר רק בעלי מקצוע מהתחום הזה. המאגר מצטבר ומכיל כמה
     מקצועות, ואין טעם לבזבז חיפושים על מי שלא נשלח אליו ממילא.
     """
-    from egud_bot.jobscan import (_find_company_website, SearchQuotaError,
-                                  SearchKeyError)
+    from egud_bot.jobscan import (_find_company_website, _clean_company_name,
+                                  SearchQuotaError, SearchKeyError)
     from data.neighborhoods import city_of
 
     summary = {"נבדקו": 0, "נמצא אתר": 0, "נמצא מייל": 0}
@@ -628,8 +628,9 @@ def enrich_missing_emails(cfg: Config, storage: Storage, limit: int = 50,
     for i, lead in enumerate(leads, 1):
         name = lead["name"]
         city = city_of(lead["neighborhood"] or "")
-        query = f"{name} {city}".strip()
-        logger.info("[%d/%d] מחפש אתר עבור %s", i, len(leads), name)
+        # השם ב-Google Places עמוס מילות מפתח ולא ניתן לחיפוש כמו שהוא
+        query = f"{_clean_company_name(name)} {city}".strip()
+        logger.info("[%d/%d] %s → מחפש %r", i, len(leads), name, query)
         try:
             site = _find_company_website(query, cfg.request_delay_seconds,
                                          search_key, cfg.google_search_cx)
