@@ -285,6 +285,18 @@ class Storage:
                    status='found' WHERE place_id=?""",
                 (email, website, place_id))
 
+    def update_website(self, place_id: str, website: str) -> None:
+        """
+        שומר אתר שנמצא, בלי לגעת בסטטוס.
+
+        בלי זה אתר שנמצא אך לא הניב מייל נזרק, וההרצה הבאה מחפשת אותו
+        שוב מאפס. הסטטוס נשאר no_email כי עדיין אין למי לשלוח.
+        """
+        with self._conn() as conn:
+            conn.execute(
+                "UPDATE {leads} SET website=? WHERE place_id=?",
+                (website, place_id))
+
     def set_variant(self, place_id: str, variant: str) -> None:
         """רושם איזה נוסח נשלח לליד — הבסיס להשוואה בין הקבוצות."""
         with self._conn() as conn:

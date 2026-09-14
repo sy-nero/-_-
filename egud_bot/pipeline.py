@@ -654,9 +654,19 @@ def enrich_missing_emails(cfg: Config, storage: Storage, limit: int = 50,
         if not site:
             continue
         summary["נמצא אתר"] += 1
+        logger.info("  אתר: %s", site)
 
         email = find_email(site, cfg.request_delay_seconds)
-        if not email or is_blocked_email(email):
+        if not email:
+            # האתר עדיין שווה שמירה: ההרצה הבאה לא תחפש אותו מחדש,
+            # ואפשר לפתוח אותו ידנית ולראות אם יש שם מייל
+            storage.update_website(lead["place_id"], site)
+            summary["אתר בלי מייל"] = summary.get("אתר בלי מייל", 0) + 1
+            logger.info("  ✖ לא נמצא מייל באתר")
+            continue
+        if is_blocked_email(email):
+            storage.update_website(lead["place_id"], site)
+            logger.info("  ✖ המייל שנמצא חסום: %s", email)
             continue
         summary["נמצא מייל"] += 1
         storage.update_contact(lead["place_id"], email, site)

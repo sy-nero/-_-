@@ -76,6 +76,10 @@ def find_email(website: str, request_delay: float = 1.0) -> str | None:
 
     session = requests.Session()
     checked = set()
+    # סופרים מה קרה, כדי שאפשר יהיה להבחין בין "אין מייל באתר" לבין
+    # "לא הצלחנו בכלל להיכנס לאתר" — שני מצבים שנראים אחרת לגמרי
+    reached = 0
+    problems = []
     for path in CONTACT_PATHS:
         url = urljoin(website, path) if path else website
         if url in checked:
@@ -84,10 +88,18 @@ def find_email(website: str, request_delay: float = 1.0) -> str | None:
         try:
             resp = session.get(url, headers=HEADERS, timeout=15, allow_redirects=True)
             if resp.status_code == 200 and resp.text:
+                reached += 1
                 email = _extract_from_html(resp.text)
                 if email:
                     return email
+            elif resp.status_code != 404:      # 404 על עמוד צור-קשר הוא רגיל
+                problems.append(f"{path or '/'}: קוד {resp.status_code}")
         except requests.RequestException as exc:
+            problems.append(f"{path or '/'}: {type(exc).__name__}")
             logger.debug("שגיאה בקריאת %s: %s", url, exc)
         # נבדוק רק את עמוד הבית + עמוד צור-קשר אחד אמיתי כדי לחסוך בקשות
+
+    if not reached:
+        logger.warning("לא הצלחנו לקרוא אף עמוד ב-%s (%s)",
+                       website, "; ".join(problems[:3]) or "בלי פירוט")
     return None

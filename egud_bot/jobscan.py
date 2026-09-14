@@ -46,11 +46,19 @@ def _extract_company(card_text: str) -> str | None:
         return None
     return comp
 
-# דומיינים של רשתות חברתיות/דרושים שאינם "אתר החברה"
+# דומיינים שאינם "אתר החברה": רשתות חברתיות, לוחות דרושים, ובעיקר
+# אינדקסים עסקיים ישראליים. בלי האחרונים כל חיפוש "מצליח" — הוא מחזיר
+# את כרטיס העסק באינדקס במקום את האתר, ושם ממילא אין מייל.
 _SKIP_DOMAINS = (
     "facebook.", "instagram.", "linkedin.", "youtube.", "drushim.",
     "alljobs.", "jobmaster.", "indeed.", "glassdoor.", "google.",
     "wikipedia.", "gov.il", "twitter.", "tiktok.", "waze.",
+    # אינדקסים ומדריכים עסקיים
+    "b144.", "d.co.il", "dapey", "zap.co.il", "easy.co.il", "144.",
+    "yad2.", "bizmaknet", "nadlan", "xnet.", "mapa.co.il", "bezeq",
+    "rest.co.il", "kolzchut", "bhol.", "ynet.", "walla.", "mako.",
+    "themarker.", "globes.", "calcalist.", "pinterest.", "yelp.",
+    "tripadvisor.", "whatsapp.", "t.me", "telegram.",
 )
 
 _UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) "
