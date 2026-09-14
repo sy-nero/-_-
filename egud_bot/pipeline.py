@@ -276,6 +276,42 @@ def split_query(query: str) -> list[str]:
     return terms
 
 
+def search_text_for(term: str, city: str) -> str:
+    """
+    מונח החיפוש שנשלח בפועל לגוגל, עם שם העיר בתוכו.
+
+    ב-Text Search הישן location ו-radius הם הטיה בלבד ולא מסננת: חיפוש
+    שאין לו התאמה מקומית מוחזר מכל הארץ. כך קרה שסריקה החזירה 600
+    תוצאות ו-590 מהן נפסלו כרחוקות מדי -- בזבוז של 30 קריאות API.
+    שם העיר בתוך הטקסט מצמצם את התוצאות במקור.
+    """
+    names = PROMPT_CITIES.get(city or "jerusalem")
+    if not names or city == "all":
+        return term
+    city_name = names[0]
+    if _normalize_he(city_name) in _normalize_he(term):
+        return term                      # העיר כבר שם, לא נכפיל
+    return f"{term} {city_name}"
+
+
+def _normalize_he(text: str) -> str:
+    return (text or "").replace("-", " ").replace('"', "").strip().lower()
+
+
+#: כמה דוגמאות של "רחוק מדי" להדפיס לפני שמפסיקים להציף את הלוג
+_FAR_EXAMPLES = 5
+
+
+def _log_far(counters: dict, name: str, address: str, km: float = 0.0) -> None:
+    if counters["רחוקים מדי"] > _FAR_EXAMPLES:
+        return
+    where = (address or "").strip() or "בלי כתובת"
+    distance = f" ({km:.0f} ק\"מ)" if km else ""
+    logger.info("    רחוק מדי: %s — %s%s", (name or "?")[:40], where[:60], distance)
+    if counters["רחוקים מדי"] == _FAR_EXAMPLES:
+        logger.info("    (לא מציג עוד דוגמאות של רחוקים מדי)")
+
+
 def _handle_place(cfg: Config, storage: Storage, client, place: dict,
                   nb, counters: dict, reviews_floor: int,
                   rating_floor: float, family: str = "",
@@ -292,13 +328,18 @@ def _handle_place(cfg: Config, storage: Storage, client, place: dict,
         return
     # חיפוש הטקסט מחזיר גם עסקים בעיר אחרת לגמרי. הכתובת היא הבדיקה
     # המדויקת (שם העיר כתוב בה), והמרחק הוא רשת ביטחון לכתובת חלקית.
+    # "רחוקים מדי: 590" בלי דוגמאות לא מסביר כלום. חמש הראשונות נרשמות
+    # ללוג, ומהן רואים מיד אם החיפוש נשלח לעיר הלא נכונה.
     if not in_requested_city(lead, city):
         counters["רחוקים מדי"] += 1
+        _log_far(counters, lead.name, lead.address)
         return
-    if lead.lat and lead.lng and _distance_km(
-            nb.lat, nb.lng, lead.lat, lead.lng) > MAX_DISTANCE_KM:
-        counters["רחוקים מדי"] += 1
-        return
+    if lead.lat and lead.lng:
+        km = _distance_km(nb.lat, nb.lng, lead.lat, lead.lng)
+        if km > MAX_DISTANCE_KM:
+            counters["רחוקים מדי"] += 1
+            _log_far(counters, lead.name, lead.address, km)
+            return
     # חיפוש הטקסט מחזיר "מה שמזכיר" ולא "מה שביקשת" -- כאן נפסל מי שאינו
     # מהתחום, כדי שלא נכתוב למשרד תיווך "ראיתי את ההמלצות עליך כעורך דין"
     if not matches_query(lead, family):
@@ -577,7 +618,8 @@ def scan_chunk(cfg: Config, storage: Storage, *, terms: list[str], city: str,
             term = terms[term_index]
             logger.info("מחפש \"%s\" ב%s (נאספו %d/%d)", term, nb.name,
                         counters["עם מייל"], target_emails)
-            places = list(client.scan_text(term, nb.lat, nb.lng,
+            query = search_text_for(term, city)
+            places = list(client.scan_text(query, nb.lat, nb.lng,
                                            cfg.search_radius_meters).values())
             if place_index == 0:          # סופרים פעם אחת, גם אם נחדש כאן
                 counters["נסרקו"] += len(places)
