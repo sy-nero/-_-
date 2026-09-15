@@ -13,7 +13,7 @@ from data.neighborhoods import HAREDI_NEIGHBORHOODS, Neighborhood, neighborhoods
 from egud_bot.places import (make_client, SERVICE_BUSINESS_TYPES_QUERY,
                              GRANT_BUSINESS_TYPES_QUERY,
                              AGENT_BUSINESS_TYPES_QUERY)
-from egud_bot.filters import (BusinessLead, passes_filters,
+from egud_bot.filters import (BusinessLead, passes_filters, city_from_address,
                               passes_filters_service, passes_filters_grant,
                               passes_filters_agent, family_of_query,
                               matches_query, in_requested_city,
@@ -298,41 +298,47 @@ def _normalize_he(text: str) -> str:
     return (text or "").replace("-", " ").replace('"', "").strip().lower()
 
 
-#: כמה דוגמאות של פסילה להדפיס לפני שמפסיקים להציף את הלוג
-_FAR_EXAMPLES = 5
-_OFF_FIELD_EXAMPLES = 12
+#: כמה דוגמאות לשמור מכל סוג פסילה. מוצגות בסוף הריצה ולא בתחילתה --
+#: בריצה של חצי שעה שורות שנדפסות בהתחלה גוללות ואיש לא רואה אותן.
+MAX_SAMPLES = 15
 
 
-def _log_off_field(counters: dict, name: str) -> None:
-    """
-    דוגמאות למי שנפסל כ"לא מהתחום".
+def new_samples() -> dict:
+    return {"רחוקים מדי": [], "לא מהתחום": []}
 
-    "לא מהתחום: 928" יכול להיות שני דברים הפוכים: גוגל החזיר זבל
-    (ואז הסינון עובד), או שהסינון מחמיר מדי ופוסל יועצים אמיתיים.
-    בלי לראות שמות אי אפשר לדעת מי משניהם.
-    """
-    if counters["לא מהתחום"] > _OFF_FIELD_EXAMPLES:
+
+def _note(samples, kind: str, text: str) -> None:
+    """שומר דוגמה, בלי כפילויות: אותו עסק חוזר בכל שכונה שנסרקת."""
+    if samples is None or not text:
         return
-    logger.info("    לא מהתחום: %s", (name or "?")[:60])
-    if counters["לא מהתחום"] == _OFF_FIELD_EXAMPLES:
-        logger.info("    (לא מציג עוד דוגמאות של לא מהתחום)")
+    bucket = samples.setdefault(kind, [])
+    text = text.strip()[:70]
+    if len(bucket) < MAX_SAMPLES and text not in bucket:
+        bucket.append(text)
 
 
-def _log_far(counters: dict, name: str, address: str, km: float = 0.0) -> None:
-    if counters["רחוקים מדי"] > _FAR_EXAMPLES:
+def log_samples(samples: dict, counters: dict) -> None:
+    """מציג דוגמאות למי שנפסל — כדי שמספר כמו 913 יהיה ניתן לבדיקה."""
+    if not samples:
         return
-    where = (address or "").strip() or "בלי כתובת"
-    distance = f" ({km:.0f} ק\"מ)" if km else ""
-    logger.info("    רחוק מדי: %s — %s%s", (name or "?")[:40], where[:60], distance)
-    if counters["רחוקים מדי"] == _FAR_EXAMPLES:
-        logger.info("    (לא מציג עוד דוגמאות של רחוקים מדי)")
+    for kind, examples in samples.items():
+        total = counters.get(kind, 0)
+        if not examples:
+            continue
+        logger.info("")
+        logger.info("דוגמאות מתוך %d שנפסלו כ\"%s\":", total, kind)
+        for text in examples:
+            logger.info("  · %s", text)
+        if total > len(examples):
+            logger.info("  (ועוד %d)", total - len(examples))
 
 
 def _handle_place(cfg: Config, storage: Storage, client, place: dict,
                   nb, counters: dict, reviews_floor: int,
                   rating_floor: float, family: str = "",
                   run_id: str = "", city: str = "",
-                  seen: set | None = None) -> None:
+                  seen: set | None = None,
+                  samples: dict | None = None) -> None:
     """
     מטפל בעסק אחד מתוצאות החיפוש: סינון, המלצה, מייל ושמירה.
 
@@ -344,23 +350,26 @@ def _handle_place(cfg: Config, storage: Storage, client, place: dict,
         return
     # חיפוש הטקסט מחזיר גם עסקים בעיר אחרת לגמרי. הכתובת היא הבדיקה
     # המדויקת (שם העיר כתוב בה), והמרחק הוא רשת ביטחון לכתובת חלקית.
-    # "רחוקים מדי: 590" בלי דוגמאות לא מסביר כלום. חמש הראשונות נרשמות
-    # ללוג, ומהן רואים מיד אם החיפוש נשלח לעיר הלא נכונה.
+    # הכתובת היא הבדיקה המדויקת -- שם העיר כתוב בה.
     if not in_requested_city(lead, city):
         counters["רחוקים מדי"] += 1
-        _log_far(counters, lead.name, lead.address)
+        _note(samples, "רחוקים מדי", f"{lead.name} — {lead.address}")
         return
-    if lead.lat and lead.lng:
+    # המרחק הוא רשת ביטחון לכתובת שלא זוהתה ממנה עיר, ולא בדיקה נוספת
+    # מעליה: עסק שכתובתו אומרת "ירושלים" נמצא בירושלים גם אם הוא 14 ק"מ
+    # ממרכז השכונה שממנה חיפשנו. קודם זה פסל עסקים אמיתיים בעיר הנכונה.
+    if not city_from_address(lead.address) and lead.lat and lead.lng:
         km = _distance_km(nb.lat, nb.lng, lead.lat, lead.lng)
         if km > MAX_DISTANCE_KM:
             counters["רחוקים מדי"] += 1
-            _log_far(counters, lead.name, lead.address, km)
+            _note(samples, "רחוקים מדי",
+                  f"{lead.name} — {lead.address or 'בלי כתובת'} ({km:.0f} ק\"מ)")
             return
     # חיפוש הטקסט מחזיר "מה שמזכיר" ולא "מה שביקשת" -- כאן נפסל מי שאינו
     # מהתחום, כדי שלא נכתוב למשרד תיווך "ראיתי את ההמלצות עליך כעורך דין"
     if not matches_query(lead, family):
         counters["לא מהתחום"] += 1
-        _log_off_field(counters, lead.name)
+        _note(samples, "לא מהתחום", lead.name)
         return
     if not passes_filters_agent(lead, reviews_floor, cfg.require_operational,
                                 rating_floor, any_type=True):
@@ -581,15 +590,17 @@ def scan_by_query(cfg: Config, storage: Storage, query: str,
     counters = new_counters()
     cursor = (0, 0, 0)
     seen: set = set()          # עסקים שכבר נספרו בהרצה הזאת
+    samples = new_samples()    # דוגמאות לפסילות, להצגה בסוף
     while True:
         result = scan_chunk(cfg, storage, terms=terms, city=city,
                             target_emails=target_emails, campaign=campaign,
                             min_reviews=min_reviews, min_rating=min_rating,
                             cursor=cursor, counters=counters,
-                            budget_seconds=None, seen=seen)
+                            budget_seconds=None, seen=seen, samples=samples)
         counters = result["counters"]
         cursor = result["cursor"]
         if result["done"]:
+            log_samples(samples, counters)
             logger.info("סיכום: %s", counters)
             return counters
 
@@ -599,7 +610,8 @@ def scan_chunk(cfg: Config, storage: Storage, *, terms: list[str], city: str,
                min_reviews: int | None, min_rating: float | None,
                cursor: tuple[int, int, int], counters: dict,
                budget_seconds: float | None = 45.0,
-               run_id: str = "", seen: set | None = None) -> dict:
+               run_id: str = "", seen: set | None = None,
+               samples: dict | None = None) -> dict:
     """
     מריץ פיסת סריקה בתוך תקציב זמן, וחוזר עם סמן שממנו ממשיכים.
 
@@ -651,7 +663,7 @@ def scan_chunk(cfg: Config, storage: Storage, *, terms: list[str], city: str,
             while place_index < len(places):
                 _handle_place(cfg, storage, client, places[place_index], nb,
                               counters, reviews_floor, rating_floor, family,
-                              run_id, city, seen)
+                              run_id, city, seen, samples)
                 place_index += 1
                 if counters["עם מייל"] >= target_emails:
                     return out(True, "הושג היעד")
