@@ -438,16 +438,23 @@ PROFESSION_FAMILIES = {
     # "מאמן עסקי") ולא מילה בודדת, ורשימת הרחקה פיננסית.
     "business_consulting": {
         "types": set(),
-        "words": ("יועץ עסקי", "יועצת עסקית", "יועצים עסקיים",
-                  "יועצות עסקיות", "ייעוץ עסקי", "יעוץ עסקי", "ייעוץ עסקים",
-                  "מאמן עסקי", "מאמנת עסקית", "מאמנים עסקיים", "אימון עסקי",
-                  "ליווי עסקי", "ליווי עסקים", "אסטרטגיה עסקית",
-                  "יועץ ארגוני", "יועצת ארגונית", "ייעוץ ארגוני",
-                  "פיתוח עסקי", "מנהלי עסקים", "מאמן מנהלים",
-                  "business consultant", "business consulting",
-                  "business coach", "business coaching", "business mentor",
-                  "business advisor", "executive coach", "growth strategist",
-                  "management consult"),
+        # דרישת צירוף צמוד ("ייעוץ עסקי") פסלה שמות לגיטימיים רבים:
+        # "ייעוץ וליווי לעסקים", "מאמנת עסקים", "ייעוץ אסטרטגי לארגונים".
+        # לכן הכלל הוא זוג: מילה שמסמנת ייעוץ, ולצדה מילה שמסמנת עסק --
+        # בכל מקום בשם ולא בהכרח צמודות. זה מה שמפריד יועץ עסקי מיועץ
+        # משכנתאות, שאצלו המילה השנייה פשוט לא מופיעה.
+        "pairs": [
+            (("יועץ", "יועצת", "יועצים", "יועצות", "ייעוץ", "יעוץ",
+              "מאמן", "מאמנת", "מאמנים", "מאמנות", "אימון", "ליווי",
+              "מנטור", "מנטורית", "הכשרת", "הנחיית",
+              "consult", "coach", "mentor", "advisor", "strateg"),
+             ("עסקי", "עסקית", "עסקיים", "עסקיות", "עסקים", "לעסק",
+              "ארגוני", "ארגונית", "ארגונים", "ניהולי", "ניהולית",
+              "מנהלים", "יזמים", "יזמות", "סטארטאפ",
+              "business", "corporate", "executive", "startup")),
+        ],
+        "words": ("אסטרטגיה עסקית", "פיתוח עסקי", "צמיחה עסקית",
+                  "מנהלי עסקים", "growth strategist", "management consult"),
         "not_words": ("משכנתא", "משכנתאות", "פנסיוני", "פנסיונית", "פנסיה",
                       "ביטוח", "יועץ מס", "ייעוץ מס", "מס הכנסה", "השקעות",
                       "כלכלת המשפחה", "שיקום כלכלי", "סידור חובות",
@@ -477,6 +484,24 @@ def _normalized(text: str) -> str:
     return (text or "").replace("״", '"').replace("׳", "'").lower()
 
 
+def _spec_matches_text(text: str, spec: dict) -> bool:
+    """
+    האם הטקסט מתאים למשפחה — לפי מילה בודדת או לפי זוג מילים.
+
+    משותף לזיהוי המשפחה מתוך מה שחיפשנו ולבדיקת ליד בודד, כדי ששניהם
+    יסכימו. כשהם לא הסכימו, family_of_query החזיר ריק, matches_query
+    ראה "אין משפחה" והחזיר True לכל דבר -- כלומר הסינון נכבה לגמרי
+    בלי שום הודעה.
+    """
+    if any(_normalized(word) in text for word in spec["words"]):
+        return True
+    for group_a, group_b in spec.get("pairs", ()):
+        if (any(_normalized(w) in text for w in group_a)
+                and any(_normalized(w) in text for w in group_b)):
+            return True
+    return False
+
+
 def family_of_query(query: str) -> str:
     """
     לאיזו משפחת מקצוע שייך מה שחיפשנו. ריק = תחום שאין לו סוג מקום בגוגל
@@ -485,7 +510,7 @@ def family_of_query(query: str) -> str:
     """
     text = _normalized(query)
     for name, family in PROFESSION_FAMILIES.items():
-        if any(_normalized(word) in text for word in family["words"]):
+        if _spec_matches_text(text, family):
             return name
     return ""
 
@@ -503,7 +528,7 @@ def matches_query(lead: BusinessLead, family: str) -> bool:
     types.add((lead.primary_type or "").lower())
     if types & spec["types"]:
         return True
-    return any(_normalized(word) in name for word in spec["words"])
+    return _spec_matches_text(name, spec)
 
 
 # ---------------------------------------------------------------------------

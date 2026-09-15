@@ -298,8 +298,24 @@ def _normalize_he(text: str) -> str:
     return (text or "").replace("-", " ").replace('"', "").strip().lower()
 
 
-#: כמה דוגמאות של "רחוק מדי" להדפיס לפני שמפסיקים להציף את הלוג
+#: כמה דוגמאות של פסילה להדפיס לפני שמפסיקים להציף את הלוג
 _FAR_EXAMPLES = 5
+_OFF_FIELD_EXAMPLES = 12
+
+
+def _log_off_field(counters: dict, name: str) -> None:
+    """
+    דוגמאות למי שנפסל כ"לא מהתחום".
+
+    "לא מהתחום: 928" יכול להיות שני דברים הפוכים: גוגל החזיר זבל
+    (ואז הסינון עובד), או שהסינון מחמיר מדי ופוסל יועצים אמיתיים.
+    בלי לראות שמות אי אפשר לדעת מי משניהם.
+    """
+    if counters["לא מהתחום"] > _OFF_FIELD_EXAMPLES:
+        return
+    logger.info("    לא מהתחום: %s", (name or "?")[:60])
+    if counters["לא מהתחום"] == _OFF_FIELD_EXAMPLES:
+        logger.info("    (לא מציג עוד דוגמאות של לא מהתחום)")
 
 
 def _log_far(counters: dict, name: str, address: str, km: float = 0.0) -> None:
@@ -344,6 +360,7 @@ def _handle_place(cfg: Config, storage: Storage, client, place: dict,
     # מהתחום, כדי שלא נכתוב למשרד תיווך "ראיתי את ההמלצות עליך כעורך דין"
     if not matches_query(lead, family):
         counters["לא מהתחום"] += 1
+        _log_off_field(counters, lead.name)
         return
     if not passes_filters_agent(lead, reviews_floor, cfg.require_operational,
                                 rating_floor, any_type=True):
