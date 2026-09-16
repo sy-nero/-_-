@@ -136,6 +136,17 @@ def cmd_find(args) -> int:
             print("\nבוטל.")
             return 0
 
+    # רישום החיפוש בלוח: בלי זה עמודת הקמפיין נשארת ריקה, כי כל מה
+    # שהוגדר נאמר בטרמינל ומעולם לא הגיע אליה
+    if args.to_campaign:
+        from egud_bot.campaigns import CampaignStore
+        board = CampaignStore()
+        if board.get(int(args.to_campaign)):
+            board.update(int(args.to_campaign), search_query=prompt)
+            print(f"החיפוש נרשם בקמפיין {args.to_campaign} בלוח.")
+        else:
+            print(f"לא נמצא קמפיין {args.to_campaign} בלוח — ממשיכים בלי לרשום.")
+
     storage = _storage(args)
     samples = pipeline.new_samples()
     summary = pipeline.scan_by_query(
@@ -153,7 +164,10 @@ def cmd_find(args) -> int:
         print(f"\n  דוגמאות מתוך {summary.get(kind, 0)} שנפסלו כ\"{kind}\":")
         for text in examples:
             print(f"    · {text}")
-    print("\nלשליחה:  python main.py send --campaign " + _campaign(args))
+    send_hint = "python main.py send --campaign " + _campaign(args)
+    if args.to_campaign:
+        send_hint += f" --from-campaign {args.to_campaign}"
+    print("\nלשליחה:  " + send_hint)
     return 0
 
 
@@ -765,6 +779,9 @@ def build_parser() -> argparse.ArgumentParser:
                     help='למשל: "עורכי דין מסחריים בירושלים, 30 נמענים, לפחות 3 ביקורות"')
     fp.add_argument("--yes", "-y", action="store_true",
                     help="להתחיל בלי לשאול לאישור")
+    fp.add_argument("--to-campaign", default="", metavar="מספר",
+                    help="לרשום את החיפוש בקמפיין הזה בלוח, כדי שעמודת "
+                         "הקמפיין תתמלא לבד (המספר בכתובת /campaign/<מספר>)")
     fp.set_defaults(func=cmd_find, campaign="agent")
 
     _add_campaign(sub.add_parser("clean", help="הסרת מה שאינו חנות קמעונאית")).set_defaults(func=cmd_clean)
