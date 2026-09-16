@@ -33,10 +33,29 @@ def _clean(text: str) -> str:
     return text
 
 
+#: מספר טלפון, פקס או ת"ד -- נחלצו מהעמוד ונראים כמו תיאור אם לא בודקים
+_DIGITS = re.compile(r"[\d\-()+.\s]{7,}")
+_WORD = re.compile(r"[A-Za-z\u0590-\u05FF]{2,}")
+MIN_WORDS = 4
+
+
 def _is_fluff(text: str) -> bool:
+    """
+    האם הטקסט אינו תיאור עיסוק אמיתי.
+
+    בבדיקה מול אתרים אמיתיים נחלץ "052-713-1429" כתיאור, והמייל היה
+    יוצא עם 'ראיתי באתר שלך: "052-713-1429"'. לכן נפסלים גם מחרוזות
+    שרובן ספרות וגם קטעים קצרים מכדי להיות משפט.
+    """
     low = text.lower()
-    return (len(text) < 12
-            or any(f in low for f in _FLUFF))
+    if len(text) < 12 or any(f in low for f in _FLUFF):
+        return True
+    words = _WORD.findall(text)
+    if len(words) < MIN_WORDS:
+        return True
+    # רובו ספרות וסימנים: טלפון, פקס, כתובת
+    digits = sum(1 for c in text if c.isdigit())
+    return digits > len(text) / 3 or bool(_DIGITS.fullmatch(text))
 
 
 def _trim(text: str, business_name: str = "") -> str:
@@ -86,19 +105,21 @@ def specialty_from_html(html: str, business_name: str = "") -> str:
 
     candidates = []
 
-    # 1) משפט מפורש על ההתמחות, בגוף העמוד
+    # 1) התיאור הרשמי שהעסק כתב לעצמו. זה הטקסט הכי מכוון לתאר את
+    # העסק, ולכן הוא ראשון -- קטע מגוף העמוד עלול להיות שבר משפט
+    # שיווקי שנתלש מהקשרו.
+    for attrs in ({"name": "description"}, {"property": "og:description"}):
+        tag = soup.find("meta", attrs=attrs)
+        if tag and tag.get("content"):
+            candidates.append(tag["content"])
+
+    # 2) משפט מפורש על ההתמחות, בגוף העמוד
     body_text = _clean(soup.get_text(" "))
     for lead_in in _LEAD_INS:
         idx = body_text.find(lead_in)
         if idx != -1:
             candidates.append(body_text[idx:idx + MAX_CHARS * 2])
             break
-
-    # 2) התיאור הרשמי שהעסק כתב לעצמו
-    for attrs in ({"name": "description"}, {"property": "og:description"}):
-        tag = soup.find("meta", attrs=attrs)
-        if tag and tag.get("content"):
-            candidates.append(tag["content"])
 
     # 3) הכותרת הראשית בעמוד, ואז כותרת הדף
     h1 = soup.find("h1")

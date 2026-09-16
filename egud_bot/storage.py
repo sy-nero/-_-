@@ -285,6 +285,16 @@ class Storage:
                    status='found' WHERE place_id=?""",
                 (email, website, place_id))
 
+    def leads_needing_profile(self, limit: int) -> list[sqlite3.Row]:
+        """לידים שיש להם אתר אך טרם נקרא ממנו תיאור העיסוק."""
+        with self._conn() as conn:
+            return conn.execute(
+                """SELECT * FROM {leads}
+                   WHERE website IS NOT NULL AND website != ''
+                     AND (specialty IS NULL OR specialty = '')
+                   ORDER BY review_count DESC LIMIT ?""",
+                (limit,)).fetchall()
+
     def update_specialty(self, place_id: str, specialty: str) -> None:
         """שומר את מה שהעסק כותב על עצמו באתר, לשימוש בנוסח המייל."""
         with self._conn() as conn:

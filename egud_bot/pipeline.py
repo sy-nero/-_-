@@ -685,6 +685,60 @@ def scan_chunk(cfg: Config, storage: Storage, *, terms: list[str], city: str,
     return out(True, "נסרקו כל השכונות")
 
 
+def read_site_profiles(cfg: Config, storage: Storage, limit: int = 50,
+                       field: str = "") -> dict:
+    """
+    קורא מאתרי הלידים את תיאור העיסוק, לשימוש ב-{{התמחות}} בנוסח.
+
+    נפרד מ-enrich_missing_emails, שמטפל רק במי שאין לו מייל: ליד שכבר
+    יש לו כתובת לא עובר שם, ולכן נשאר בלי תיאור גם כשיש לו אתר מלא.
+    """
+    import requests
+    from bs4 import BeautifulSoup
+    from egud_bot import siteprofile
+    from egud_bot.jobscan import _clean_company_name
+    from egud_bot.email_finder import HEADERS
+
+    summary = {"נבדקו": 0, "נמצא תיאור": 0}
+    family = family_of_query(field) if field else ""
+    if field and not family:
+        logger.warning("התחום %r אינו מזוהה — לא מסננים לפיו.", field)
+
+    leads = storage.leads_needing_profile(limit * 10 if family else limit)
+    if family:
+        leads = [l for l in leads
+                 if matches_query(BusinessLead.from_row(l), family)][:limit]
+    if not leads:
+        logger.info("אין לידים עם אתר שחסר להם תיאור.")
+        return summary
+
+    for i, lead in enumerate(leads, 1):
+        name, site = lead["name"], lead["website"]
+        logger.info("[%d/%d] קורא את %s", i, len(leads), site)
+        summary["נבדקו"] = i
+        try:
+            resp = requests.get(site, headers=HEADERS, timeout=15,
+                                allow_redirects=True)
+        except requests.RequestException as exc:
+            logger.warning("  לא הצלחנו לקרוא: %s", type(exc).__name__)
+            continue
+        if resp.status_code != 200 or not resp.text:
+            logger.warning("  לא הצלחנו לקרוא (קוד %s)", resp.status_code)
+            continue
+        text = siteprofile.specialty_from_html(resp.text,
+                                               _clean_company_name(name))
+        if not text:
+            logger.info("  לא נמצא תיאור נקי")
+            continue
+        summary["נמצא תיאור"] += 1
+        storage.update_specialty(lead["place_id"], text)
+        logger.info("  ✔ %s", text)
+        time.sleep(cfg.request_delay_seconds)
+
+    logger.info("סיכום קריאת אתרים: %s", summary)
+    return summary
+
+
 def enrich_missing_emails(cfg: Config, storage: Storage, limit: int = 50,
                           field: str = "") -> dict:
     """

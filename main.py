@@ -283,6 +283,18 @@ def cmd_clean(args) -> int:
     return 0
 
 
+def cmd_profile(args) -> int:
+    """קורא מאתרי הלידים את תיאור העיסוק, ל-{{התמחות}} בנוסח."""
+    storage = _storage(args)
+    summary = pipeline.read_site_profiles(config, storage, args.limit,
+                                          field=args.field)
+    print("\n=== סיכום קריאת אתרים ===")
+    for k, v in summary.items():
+        print(f"  {k}: {v}")
+    print("\nהתיאור ייכנס לנוסח בכל מקום שכתוב בו {{התמחות}}.")
+    return 0
+
+
 def cmd_emails(args) -> int:
     """מציג את הלידים שיש להם כתובת מייל."""
     from egud_bot.filters import BusinessLead, family_of_query, matches_query
@@ -729,6 +741,14 @@ def build_parser() -> argparse.ArgumentParser:
     fp.set_defaults(func=cmd_find, campaign="agent")
 
     _add_campaign(sub.add_parser("clean", help="הסרת מה שאינו חנות קמעונאית")).set_defaults(func=cmd_clean)
+
+    pr = _add_campaign(sub.add_parser(
+        "profile", help="קריאת תיאור העיסוק מאתרי הלידים, ל-{{התמחות}}"))
+    pr.add_argument("--limit", type=int, default=50,
+                    help="כמה לידים לקרוא בהרצה אחת (ברירת מחדל 50)")
+    pr.add_argument("--field", default="", metavar="תחום",
+                    help='רק בעלי מקצוע מהתחום הזה')
+    pr.set_defaults(func=cmd_profile)
 
     em = _add_campaign(sub.add_parser(
         "emails", help="הצגת הלידים שיש להם כתובת מייל"))
