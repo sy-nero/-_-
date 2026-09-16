@@ -132,7 +132,7 @@ class Storage:
                 for column in ("types", "first_name", "intro_how", "intro_fact",
                                "intro_why", "rec_json", "variant", "replied_at",
                                "reply_note", "track_id", "opened_at", "open_count",
-                               "run_id", "specialty"):
+                               "run_id", "specialty", "campaign_id"):
                     try:
                         conn.execute(
                             f"ALTER TABLE {self.leads} ADD COLUMN {column} TEXT")
@@ -193,8 +193,16 @@ class Storage:
                 ),
             )
 
-    def mark_emailed(self, place_id: str, success: bool, error: str = "") -> None:
+    def mark_emailed(self, place_id: str, success: bool, error: str = "",
+                     campaign_id: str = "") -> None:
+        """
+        רושם שנשלח (או נכשל), ומאיזה קמפיין בלוח.
+
+        בלי campaign_id אי אפשר לדעת איזה קמפיין שלח למי: כל הקמפיינים
+        חולקים מאגר לידים אחד, ולכן כולם הציגו את אותו מספר פניות.
+        """
         status = "emailed" if success else "failed"
+        cid = str(campaign_id or "")
         with self._conn() as conn:
             # מסמנים את כל הלידים עם אותה כתובת מייל, כדי לא לשלוח פעמיים לאותו אדם
             row = conn.execute(
@@ -203,15 +211,17 @@ class Storage:
             email = row["email"] if row else None
             if email:
                 conn.execute(
-                    """UPDATE {leads} SET status=?, error=?, emailed_at=?
+                    """UPDATE {leads} SET status=?, error=?, emailed_at=?,
+                       campaign_id=COALESCE(NULLIF(?,''), campaign_id)
                        WHERE lower(email)=lower(?)""",
-                    (status, error, _now(), email),
+                    (status, error, _now(), cid, email),
                 )
             else:
                 conn.execute(
-                    """UPDATE {leads} SET status=?, error=?, emailed_at=?
+                    """UPDATE {leads} SET status=?, error=?, emailed_at=?,
+                       campaign_id=COALESCE(NULLIF(?,''), campaign_id)
                        WHERE place_id=?""",
-                    (status, error, _now(), place_id),
+                    (status, error, _now(), cid, place_id),
                 )
 
     def leads_to_email(self, limit: int, run_id: str = "") -> list[sqlite3.Row]:
@@ -346,7 +356,32 @@ class Storage:
                 (_now(), track_id))
             return first
 
-    def variant_metrics(self, variant: str = "") -> dict:
+    def has_attributed_sends(self, campaign_id: str) -> bool:
+        """האם נרשמו שליחות על שם הקמפיין הזה."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM {leads} WHERE campaign_id = ? LIMIT 1",
+                (str(campaign_id),)).fetchone()
+            return row is not None
+
+    def attribute_sends(self, campaign_id: str, emails: list) -> int:
+        """
+        משייך שליחות קיימות לקמפיין בלוח.
+
+        לשליחות שנעשו לפני שהשיוך נרשם אין קמפיין, ולכן הן מוצגות אצל
+        כל מי שחולק את אותו מאגר. כאן אפשר לתקן אותן בדיעבד.
+        """
+        done = 0
+        with self._conn() as conn:
+            for email in emails:
+                cur = conn.execute(
+                    """UPDATE {leads} SET campaign_id=?
+                       WHERE lower(email)=lower(?) AND status='emailed'""",
+                    (str(campaign_id), (email or "").strip()))
+                done += cur.rowcount or 0
+        return done
+
+    def variant_metrics(self, variant: str = "", campaign_id: str = "") -> dict:
         """
         נשלחו / נפתחו / השיבו — לנוסח מסוים או לקמפיין כולו.
 
@@ -357,7 +392,11 @@ class Storage:
         """
         where = "status = 'emailed'"
         params: tuple = ()
-        if variant:
+        if campaign_id and self.has_attributed_sends(campaign_id):
+            # שליחות שנרשם עליהן הקמפיין: זו המדידה המדויקת
+            where += " AND campaign_id = ?"
+            params = (str(campaign_id),)
+        elif variant:
             where += " AND variant = ?"
             params = (variant,)
         with self._conn() as conn:

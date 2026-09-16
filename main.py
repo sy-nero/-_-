@@ -258,7 +258,11 @@ def cmd_send(args) -> int:
                                    variant=getattr(args, "variant", "") or "",
                                    custom=custom,
                                    field=getattr(args, "field", "") or "",
-                                   city=getattr(args, "city", "") or "")
+                                   city=getattr(args, "city", "") or "",
+                                   # --from-campaign קובע גם את הנוסח וגם
+                                   # לאיזה קמפיין בלוח השליחה נזקפת
+                                   campaign_id=str(
+                                       getattr(args, "from_campaign", "") or ""))
     print("\n=== סיכום שליחה ===")
     for k, v in summary.items():
         print(f"  {k}: {v}")
@@ -280,6 +284,29 @@ def cmd_clean(args) -> int:
         print(f"  - {name}")
     if not removed:
         print("  (אין מה להסיר, הרשימה נקייה)")
+    return 0
+
+
+def cmd_attribute(args) -> int:
+    """משייך שליחות שכבר נעשו לקמפיין בלוח."""
+    storage = _storage(args)
+    rows = [r for r in storage.all_leads()
+            if (r["status"] or "") == "emailed" and (r["email"] or "").strip()]
+    if args.since:
+        rows = [r for r in rows if (r["emailed_at"] or "") >= args.since]
+    if not rows:
+        print("לא נמצאו שליחות לשיוך.")
+        return 1
+
+    print(f"\n{len(rows)} שליחות ישויכו לקמפיין {args.to}:")
+    for row in rows:
+        print(f"  • {row['email']}  ({row['name'][:40]})")
+    if not args.yes:
+        if input("\nלשייך? [y/N] ").strip().lower() not in ("y", "yes", "כן"):
+            print("בוטל.")
+            return 1
+    done = storage.attribute_sends(args.to, [r["email"] for r in rows])
+    print(f"\nשויכו {done} שליחות לקמפיין {args.to}.")
     return 0
 
 
@@ -741,6 +768,15 @@ def build_parser() -> argparse.ArgumentParser:
     fp.set_defaults(func=cmd_find, campaign="agent")
 
     _add_campaign(sub.add_parser("clean", help="הסרת מה שאינו חנות קמעונאית")).set_defaults(func=cmd_clean)
+
+    at = _add_campaign(sub.add_parser(
+        "attribute", help="שיוך שליחות קודמות לקמפיין בלוח"))
+    at.add_argument("--to", required=True, metavar="מספר",
+                    help="מספר הקמפיין בלוח (מהכתובת /campaign/<מספר>)")
+    at.add_argument("--since", default="", metavar="תאריך",
+                    help="רק שליחות מתאריך זה ואילך (2026-09-16)")
+    at.add_argument("-y", "--yes", action="store_true", help="בלי לשאול")
+    at.set_defaults(func=cmd_attribute)
 
     pr = _add_campaign(sub.add_parser(
         "profile", help="קריאת תיאור העיסוק מאתרי הלידים, ל-{{התמחות}}"))

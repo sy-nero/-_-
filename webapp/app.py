@@ -172,7 +172,8 @@ def auto_metrics(campaign) -> dict:
     if not st:
         return empty
     try:
-        return st.variant_metrics(campaign["variant"] or "")
+        return st.variant_metrics(campaign["variant"] or "",
+                                  campaign_id=str(campaign["id"]))
     except Exception:  # noqa: BLE001 — DB ישן בלי עמודות המעקב
         return empty
 
@@ -448,7 +449,7 @@ def send_now(campaign_id):
     summary = pipeline.send_emails(
         config, st, campaign=campaign["source_campaign"],
         limit=len(chosen), variant=campaign["variant"] or "", only=chosen,
-        custom=custom_of(campaign))
+        custom=custom_of(campaign), campaign_id=str(campaign_id))
     flash(f"נשלחו {summary.get('sent', 0)} מיילים")
     return redirect(url_for("send_page", campaign_id=campaign_id))
 

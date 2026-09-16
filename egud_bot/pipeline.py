@@ -841,7 +841,7 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
                 campaign: str = "funding", skip_contacted: bool = False,
                 limit: int | None = None, confirm=None, confirm_batch=None,
                 variant: str = "", only=None, custom=None,
-                field: str = "", city: str = "") -> dict:
+                field: str = "", city: str = "", campaign_id: str = "") -> dict:
     """
     שולח מייל ללידים חדשים שיש להם כתובת מייל (עד המכסה בהרצה).
     skip_contacted=True מדלג על כל מי שקיבל מייל באיזשהו קמפיין אחר
@@ -990,14 +990,16 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
                 mailer.send(lead["email"], subject, html, text)
                 if track_id:
                     storage.set_track_id(lead["place_id"], track_id)
-                storage.mark_emailed(lead["place_id"], success=True)
+                storage.mark_emailed(lead["place_id"], success=True,
+                                     campaign_id=campaign_id)
                 if variant:
                     storage.set_variant(lead["place_id"], variant)
                 storage.record_sent(lead["email"])   # יומן קבוע נגד שליחה כפולה
                 summary["sent"] += 1
             except Exception as exc:  # noqa: BLE001
                 logger.warning("שליחה אל %s נכשלה: %s", lead["email"], exc)
-                storage.mark_emailed(lead["place_id"], success=False, error=str(exc))
+                storage.mark_emailed(lead["place_id"], success=False,
+                                     error=str(exc), campaign_id=campaign_id)
                 summary["failed"] += 1
             time.sleep(cfg.request_delay_seconds)
 
