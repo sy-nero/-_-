@@ -347,9 +347,19 @@ class Storage:
             return first
 
     def variant_metrics(self, variant: str = "") -> dict:
-        """נשלחו / נפתחו / השיבו — לנוסח מסוים או לקמפיין כולו."""
-        where = "variant = ?" if variant else "variant IS NOT NULL AND variant != ''"
-        params = (variant,) if variant else ()
+        """
+        נשלחו / נפתחו / השיבו — לנוסח מסוים או לקמפיין כולו.
+
+        "נשלחו" נמדד לפי מי שבאמת קיבל מייל (status='emailed'), ולא לפי
+        שיוך לנוסח. קודם התנאי היה "יש variant", ולכן שליחה מהטרמינל בלי
+        --variant לא נספרה כלל: חמישה מיילים שנשלחו הוצגו בלוח כאחד.
+        שיוך לנוסח גם אינו אומר שנשלח — הוא נרשם לפני השליחה.
+        """
+        where = "status = 'emailed'"
+        params: tuple = ()
+        if variant:
+            where += " AND variant = ?"
+            params = (variant,)
         with self._conn() as conn:
             row = conn.execute(
                 f"""SELECT COUNT(DISTINCT lower(email)) AS sent,
