@@ -562,7 +562,8 @@ def scan_by_query(cfg: Config, storage: Storage, query: str,
                   city: str = "jerusalem", target_emails: int = 50,
                   campaign: str = "agent",
                   min_reviews: int | None = None,
-                  min_rating: float | None = None) -> dict:
+                  min_rating: float | None = None,
+                  samples: dict | None = None) -> dict:
     """
     סורק לפי תחום שהוזן כטקסט חופשי ("יועצים עסקיים", "מאמן עסקי").
 
@@ -590,7 +591,9 @@ def scan_by_query(cfg: Config, storage: Storage, query: str,
     counters = new_counters()
     cursor = (0, 0, 0)
     seen: set = set()          # עסקים שכבר נספרו בהרצה הזאת
-    samples = new_samples()    # דוגמאות לפסילות, להצגה בסוף
+    # דוגמאות לפסילות. המתקשר יכול לספק מילון משלו כדי להציג אותן
+    # בתוך הסיכום שהוא מדפיס, ולא רק בלוג שגולל
+    samples = new_samples() if samples is None else samples
     while True:
         result = scan_chunk(cfg, storage, terms=terms, city=city,
                             target_emails=target_emails, campaign=campaign,

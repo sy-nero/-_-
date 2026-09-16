@@ -137,12 +137,22 @@ def cmd_find(args) -> int:
             return 0
 
     storage = _storage(args)
+    samples = pipeline.new_samples()
     summary = pipeline.scan_by_query(
         config, storage, prompt, parsed["city"] or "jerusalem", target,
-        _campaign(args), min_reviews=reviews, min_rating=rating)
+        _campaign(args), min_reviews=reviews, min_rating=rating,
+        samples=samples)
     print("\n=== סיכום ===")
     for key, value in summary.items():
         print(f"  {key}: {value}")
+    # הדוגמאות בתוך הסיכום ולא רק בלוג: בריצה של חצי שעה הלוג גולל,
+    # והסיכום הוא מה שנשאר על המסך ומה שמעתיקים
+    for kind, examples in samples.items():
+        if not examples:
+            continue
+        print(f"\n  דוגמאות מתוך {summary.get(kind, 0)} שנפסלו כ\"{kind}\":")
+        for text in examples:
+            print(f"    · {text}")
     print("\nלשליחה:  python main.py send --campaign " + _campaign(args))
     return 0
 
