@@ -301,6 +301,89 @@ def cmd_clean(args) -> int:
     return 0
 
 
+def cmd_add(args) -> int:
+    """
+    מוסיף לידים שאותרו ידנית, ומנסה למצוא להם מייל מהאתר.
+
+    Google Places מכיר רק עסקים עם כרטיס וכתובת פיזית, ויועצים רבים
+    פשוט אינם שם. כאן נכנס מה שנמצא בחיפוש ידני.
+    """
+    import csv as _csv
+    from egud_bot.filters import BusinessLead
+    from egud_bot.email_finder import find_contact
+    from egud_bot.jobscan import _clean_company_name
+
+    rows = []
+    if args.file:
+        with open(args.file, encoding="utf-8-sig", newline="") as f:
+            for row in _csv.DictReader(f):
+                if (row.get("name") or "").strip():
+                    rows.append(row)
+    for text in args.lead or []:
+        parts = [p.strip() for p in text.split("|")]
+        rows.append({"name": parts[0],
+                     "website": parts[1] if len(parts) > 1 else "",
+                     "phone": parts[2] if len(parts) > 2 else ""})
+    if not rows:
+        print("לא ניתן מה להוסיף. השתמש ב---file או ב---lead.")
+        return 1
+
+    storage = _storage(args)
+    added = updated = found_email = 0
+    for row in rows:
+        name = (row.get("name") or "").strip()
+        site = (row.get("website") or "").strip()
+        phone = (row.get("phone") or "").strip()
+
+        existing = storage.find_by_name_or_site(name, site)
+        if existing:
+            # לא יוצרים כפילות: משלימים אתר או טלפון אם חסרים
+            if site and not (existing["website"] or "").strip():
+                storage.update_website(existing["place_id"], site)
+                print(f"  ↻ {name} — כבר במאגר, הושלם האתר")
+                updated += 1
+            else:
+                print(f"  = {name} — כבר במאגר, אין מה להוסיף")
+            continue
+
+        lead = BusinessLead(
+            place_id=f"manual:{abs(hash(name + site)) % (10 ** 12)}",
+            name=name, address=args.city, phone=phone, website=site,
+            rating=_float_or(row.get("rating")), lat=0.0, lng=0.0,
+            review_count=int(row.get("reviews") or 0),
+            neighborhood="", primary_type="", business_status="OPERATIONAL")
+
+        email = (row.get("email") or "").strip() or None
+        if not email and site:
+            print(f"  מחפש מייל ב-{site}")
+            try:
+                email = find_contact(site, config.request_delay_seconds,
+                                     expect_name=_clean_company_name(name))["email"]
+            except Exception as exc:  # noqa: BLE001 — אחד שנכשל לא עוצר את השאר
+                logging.getLogger(__name__).warning("  כשל: %s", exc)
+                email = None
+
+        storage.add_manual(lead, email)
+        added += 1
+        if email:
+            found_email += 1
+            print(f"  ✔ {name} → {email}")
+        else:
+            print(f"  + {name} — נוסף בלי מייל")
+
+    print(f"\n=== סיכום ===\n  נוספו: {added}\n  עודכנו: {updated}"
+          f"\n  נמצא מייל: {found_email}")
+    print("\nלידים שהוזנו ידנית פטורים מסינון התחום בשליחה.")
+    return 0
+
+
+def _float_or(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def cmd_lookup(args) -> int:
     """בודק מול המאגר מי כבר קיבל מייל, לפי שם, מייל או דומיין."""
     storage = _storage(args)
@@ -814,6 +897,16 @@ def build_parser() -> argparse.ArgumentParser:
     fp.set_defaults(func=cmd_find, campaign="agent")
 
     _add_campaign(sub.add_parser("clean", help="הסרת מה שאינו חנות קמעונאית")).set_defaults(func=cmd_clean)
+
+    ad = _add_campaign(sub.add_parser(
+        "add", help="הוספת לידים שאותרו ידנית (עם חיפוש מייל מהאתר)"))
+    ad.add_argument("--file", default="", metavar="קובץ",
+                    help="CSV עם העמודות name,website,phone,rating,reviews,email")
+    ad.add_argument("--lead", action="append", metavar="שם|אתר|טלפון",
+                    help="ליד בודד בשורה אחת. אפשר לחזור על הדגל")
+    ad.add_argument("--city", default="ירושלים", metavar="עיר",
+                    help="העיר שתירשם ככתובת (ברירת מחדל ירושלים)")
+    ad.set_defaults(func=cmd_add)
 
     lk = _add_campaign(sub.add_parser(
         "lookup", help="בדיקה אם כבר נשלח למישהו, לפי שם/מייל/דומיין"))

@@ -880,10 +880,15 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
     if field:
         family = family_of_query(field)
         if family:
-            off_field = [l for l in remaining
-                         if not matches_query(BusinessLead.from_row(l), family)]
-            remaining = [l for l in remaining
-                         if matches_query(BusinessLead.from_row(l), family)]
+            # ליד שהוזן ידנית פטור: הסינון שופט לפי שם העסק, ושמות
+            # רבים של יועצים אמיתיים אינם מכריזים על התחום. מי שהוזן
+            # ביד כבר עבר שיקול דעת, ודילוג שקט עליו הוא בדיוק התקלה
+            # שהוא נועד לעקוף.
+            def _keep(row):
+                return (_col(row, "source") == "manual"
+                        or matches_query(BusinessLead.from_row(row), family))
+            off_field = [l for l in remaining if not _keep(l)]
+            remaining = [l for l in remaining if _keep(l)]
         else:
             logger.warning("התחום %r אינו מזוהה — לא מסננים לפיו.", field)
 

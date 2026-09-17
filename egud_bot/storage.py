@@ -132,7 +132,7 @@ class Storage:
                 for column in ("types", "first_name", "intro_how", "intro_fact",
                                "intro_why", "rec_json", "variant", "replied_at",
                                "reply_note", "track_id", "opened_at", "open_count",
-                               "run_id", "specialty", "campaign_id"):
+                               "run_id", "specialty", "campaign_id", "source"):
                     try:
                         conn.execute(
                             f"ALTER TABLE {self.leads} ADD COLUMN {column} TEXT")
@@ -294,6 +294,50 @@ class Storage:
                 """UPDATE {leads} SET email=?, website=COALESCE(NULLIF(?,''), website),
                    status='found' WHERE place_id=?""",
                 (email, website, place_id))
+
+    def add_manual(self, lead: BusinessLead, email: str | None = None) -> None:
+        """
+        מוסיף ליד שהוזן ידנית, ומסמן אותו כ-manual.
+
+        הסימון חשוב: סינון התחום שופט לפי שם העסק, ושמות כמו "הורן
+        יועצים" או "מט"י ירושלים" אינם אומרים "ייעוץ עסקי" -- הם היו
+        נדלגים בשקט בשליחה. ליד שהוזן ידנית כבר עבר שיקול דעת אנושי,
+        ולכן הוא פטור מהסינון הזה.
+        """
+        self.upsert_lead(lead, email, "found" if email else "no_email")
+        with self._conn() as conn:
+            conn.execute("UPDATE {leads} SET source='manual' WHERE place_id=?",
+                         (lead.place_id,))
+
+    def find_by_name_or_site(self, name: str = "", website: str = ""):
+        """
+        ליד קיים עם אותו שם או אותו דומיין — כדי לא ליצור כפילות.
+
+        השוואת שם מדויקת לא מספיקה: אותו אדם מופיע בגוגל כ"מרים רוטנמר,
+        ייעוץ עסקי פיננסי ומימון" וברשימה ידנית כ"מרים רוטנמר - ייעוץ
+        עסקי ומימון". לכן משווים גם את השם אחרי הסרת מילות המקצוע,
+        שמשאירה בשני המקרים "מרים רוטנמר".
+        """
+        from egud_bot.jobscan import _clean_company_name
+
+        name = (name or "").strip().lower()
+        core = _clean_company_name(name).strip().lower()
+        host = (website or "").strip().lower()
+        for seg in ("https://", "http://", "www."):
+            host = host.replace(seg, "")
+        host = host.strip("/").split("/")[0]
+
+        for row in self.all_leads():
+            other = (row["name"] or "").strip().lower()
+            if name and name == other:
+                return row
+            if core and len(core) >= 6:
+                other_core = _clean_company_name(other).strip().lower()
+                if core == other_core:
+                    return row
+            if host and host in (row["website"] or "").lower():
+                return row
+        return None
 
     def leads_needing_profile(self, limit: int) -> list[sqlite3.Row]:
         """לידים שיש להם אתר אך טרם נקרא ממנו תיאור העיסוק."""
