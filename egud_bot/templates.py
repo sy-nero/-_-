@@ -239,9 +239,21 @@ PERSON_TITLES = ('רו"ח', "רו״ח", 'עו"ד', "עו״ד", "יועץ מס", 
                  "נוטריון", "ועורך דין", "ורואה חשבון", "ומגשר", "מגשר",
                  "מגשרת", "סוכנת ביטוח", "יועץ פנסיוני", "מתווך", "מתווכת")
 
-# סימנים לכך שהשם הוא של משרד/חברה ולא של אדם
-FIRM_MARKERS = ("משרד", "ושות", 'בע"מ', "בע״מ", "בעמ", "חברת", "קבוצת",
-                "&", "Ltd", "LTD", "Inc")
+# סימנים לכך שהשם הוא של משרד/חברה ולא של אדם.
+# "הורן יועצים" ו"זיקית לעסקים" עברו כשמות אנשים והמייל נפתח ב"היי הורן"
+# וב"היי זיקית" -- זיקית היא שם החברה, לא שם של אף אחד.
+FIRM_MARKERS = ("משרד", 'בע"מ', "בע״מ", "בעמ", "חברת", "קבוצת",
+                "יועצים", "יועצות", "ייעוץ", "יעוץ", "לעסקים", "עסקים",
+                "ניהול", "פתרונות", "קבוצה", "סוכנות", "מרכז",
+                "&", "Ltd", "LTD", "Inc", "Co")
+
+#: סיומת של שותפות. "אורי דהן ושות'" הוא משרד, אבל הפנייה לאורי בשמו
+#: הפרטי היא הנורמה העסקית -- לכן מסירים את הסיומת ולא פוסלים בגללה.
+_PARTNERSHIP_SUFFIX = ("ושות'", "ושות׳", "ושות", "ושותפיו", "ושותפים")
+
+#: מפרידים שאחריהם מתחיל תיאור העסק ולא המשך השם. הקו המפריד דורש רווח
+#: אחריו, כדי ששם עם מקף ("ברק דרור-כהן") לא ייחתך באמצע.
+_NAME_SPLIT = re.compile(r"\s*[|(\[]|\s*[-–—]\s+|\s+[-–—]\s*|,")
 
 _HEB_WORD_RE = re.compile(r"[\u0590-\u05EA'\u05F3\u05F4-]{2,}")
 
@@ -252,13 +264,22 @@ def person_first_name(name: str) -> str:
     בכל מקרה אחר מחזיר מחרוזת ריקה — עדיף "שלום," בלי שם מאשר לפנות בשם שגוי.
     """
     n = (name or "").strip()
+    # רק החלק שלפני המפריד הראשון: "עודד מנס - Be9 ניהול ואימון" -> "עודד מנס"
+    n = _NAME_SPLIT.split(n, 1)[0].strip()
     # מסירים תיאורים חוזרים: "יועץ עסקי" ואחריו "רו״ח" וכדומה
     for _ in range(3):
         for title in sorted(PERSON_TITLES, key=len, reverse=True):
-            if n.startswith(title):
-                n = n[len(title):].strip(" -–,")
+            # גבול מילה חובה: בלעדיו "מר" חותך את "מרים רוטנמר" ל"ים"
+            rest = n[len(title):]
+            if n.startswith(title) and (not rest or rest[0] in " -–,"):
+                n = rest.strip(" -–,")
                 break
         else:
+            break
+    # "אורי דהן ושות'" -> "אורי דהן"
+    for suffix in _PARTNERSHIP_SUFFIX:
+        if n.endswith(suffix):
+            n = n[:-len(suffix)].strip(" -–,")
             break
     if not n or any(m in n for m in FIRM_MARKERS):
         return ""
@@ -397,14 +418,15 @@ def _agent_signature(sender_name, contact_email, website=""):
 
 
 def _agent_opening(sender_name, sender_title, first_name, intro_how,
-                   rec, field, neighborhood, area):
+                   rec, field, neighborhood, area, profession_hint=""):
     """
     פתיחת המייל — זהה בשני הנוסחים: היכרות, איך הגעתי אליו, ומה ראיתי.
     ההבדל בין הנוסחים מתחיל רק אחרי הפתיחה הזאת.
     """
     # התחום של הנמען עצמו. בלי התאמה מדויקת משתמשים בשם התחום כפי שהוא,
     # ורק אם אין כלום נופלים לניסוח כללי — לעולם לא לכתוב תחום שגוי.
-    profession = AGENT_PROFESSIONS.get(field) or field or "בעל מקצוע"
+    profession = (AGENT_PROFESSIONS.get(field) or field
+                  or profession_hint or "בעל מקצוע")
     area = area or city_of(neighborhood)
     where = f" באזור {area}" if area else ""
     found = intro_how.strip() or f"חיפשתי {profession}{where} ונתקלתי בך"
@@ -442,12 +464,14 @@ def _agent_html(lines, sign):
 def _agent(business_name="", sender_name="מירי לודמיר",
            sender_title="מנהלת סינרו טק", company="סינרו טק",
            contact_email="", website="", first_name="", intro_how="",
-           rec=None, field="", neighborhood="", area="", **_):
+           rec=None, field="", neighborhood="", area="",
+           profession_hint="", **_):
     first_name = (first_name or person_first_name(business_name)).strip()
     subject = (f"{first_name}, רציתי לכתוב לך אישית" if first_name
                else "רציתי לכתוב לך אישית")
     lines = _agent_opening(sender_name, sender_title, first_name, intro_how,
-                           rec, field, neighborhood, area) + [
+                           rec, field, neighborhood, area,
+                           profession_hint) + [
         "רציתי לדבר איתך על שיתוף פעולה שאנחנו מציעים לבעלי מקצוע בתחום שלך.",
         "אם זה מעניין, תשיבו לי כאן ואשלח את כל הפרטים.",
     ]
@@ -466,13 +490,14 @@ AGENT_COMMISSION = "10%"
 def _agent_offer(business_name="", sender_name="מירי לודמיר",
                  sender_title="מנהלת סינרו טק", contact_email="", website="",
                  first_name="", intro_how="", rec=None, field="",
-                 neighborhood="", area="", **_):
+                 neighborhood="", area="", profession_hint="", **_):
     """נוסח ב': אותה פתיחה בדיוק כמו נוסח א', וממשיך ישר לתנאי ההצעה."""
     first_name = (first_name or person_first_name(business_name)).strip()
     subject = (f"{first_name}, הצעה לשיתוף פעולה" if first_name
                else "הצעה לשיתוף פעולה")
     lines = _agent_opening(sender_name, sender_title, first_name, intro_how,
-                           rec, field, neighborhood, area) + [
+                           rec, field, neighborhood, area,
+                           profession_hint) + [
         f"רציתי להציע לך שיתוף פעולה: תקבל מערכת CRM מתקדמת לניהול לקוחות "
         f"ולידים - {AGENT_CRM_MONTHS_FREE} חודשים במתנה.",
         f"בנוסף, על כל רכישה של מי שהפניתם תקבלו עמלה בשווי {AGENT_COMMISSION}.",

@@ -59,8 +59,26 @@ def _render(template_campaign: str, ctx: dict, custom=None):
     return templates.render(template_campaign, **ctx)
 
 
-def build_ctx(cfg: Config, campaign: str, lead) -> dict:
-    """מרכיב את משתני התבנית מליד (שורת DB או מילון) לפי הקמפיין."""
+def _area_of(lead) -> str:
+    """שם העיר בעברית, לשורת "חיפשתי ... באזור X"."""
+    from data.neighborhoods import city_of
+    nb = _col(lead, "neighborhood")
+    if nb and city_of(nb):
+        return city_of(nb)
+    key = city_from_address(_col(lead, "address"))
+    names = PROMPT_CITIES.get(key) if key else None
+    return names[0] if names else ""
+
+
+def build_ctx(cfg: Config, campaign: str, lead, field_hint: str = "") -> dict:
+    """
+    מרכיב את משתני התבנית מליד (שורת DB או מילון) לפי הקמפיין.
+
+    field_hint — התחום שביקשו בשליחה ("יועצים עסקיים"). התחום של הנמען
+    נלקח מסוג העסק שגוגל החזיר, ולליד שהוזן ידנית אין סוג כזה: בלי
+    ההשלמה הזאת המייל נפתח ב"חיפשתי בעל מקצוע ונתקלתי בך" במקום לנקוב
+    בתחום שלו.
+    """
     from_email, from_name, _, _ = cfg.sender_for(campaign)
     ctx = dict(
         business_name=_col(lead, "name"),
@@ -71,7 +89,9 @@ def build_ctx(cfg: Config, campaign: str, lead) -> dict:
         course_url=cfg.course_url,
         place_id=_col(lead, "place_id"),
         field=templates.field_noun(_col(lead, "primary_type")),
+        profession_hint=field_hint,
         neighborhood=_col(lead, "neighborhood"),
+        area=_area_of(lead),
         first_name=_col(lead, "first_name"),
         intro_how=_col(lead, "intro_how"),
         intro_fact=_col(lead, "intro_fact"),
@@ -949,7 +969,7 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
     if confirm and not dry_run:
         approved = []
         for index, lead in enumerate(leads, 1):
-            ctx = build_ctx(cfg, campaign, lead)
+            ctx = build_ctx(cfg, campaign, lead, field_hint=field)
             subject, _html, text = _render(template_campaign, ctx, custom)
             answer = confirm(lead, subject, text, index, len(leads), ctx.get("rec"))
             if answer == "quit":
@@ -995,7 +1015,8 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
     ) as mailer:
         for lead in leads:
             subject, html, text = _render(
-                template_campaign, build_ctx(cfg, campaign, lead), custom)
+                template_campaign,
+                build_ctx(cfg, campaign, lead, field_hint=field), custom)
             # פיקסל מעקב פתיחות (רק אם הוגדרה כתובת ציבורית)
             track_id = ""
             if cfg.tracking_base_url:
