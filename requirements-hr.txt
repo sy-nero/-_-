@@ -1,0 +1,4 @@
+# תלות כבדה (מאות מגה-בייט) שנחוצה רק לקמפיין מ״א (hr) — סריקת אתרי דרושים.
+# להתקנה רק אם מריצים scan --campaign hr:
+#   pip install -r requirements-hr.txt
+playwright>=1.40.0

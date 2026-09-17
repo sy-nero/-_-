@@ -137,6 +137,26 @@ CITIES["all"] = ALL_HAREDI_NEIGHBORHOODS
 HAREDI_NEIGHBORHOODS: list[Neighborhood] = JERUSALEM_NEIGHBORHOODS
 
 
+# שם העיר בעברית לכל מפתח עיר — לשימוש בנוסח המייל ("באזור ירושלים")
+CITY_LABELS = {
+    "jerusalem": "ירושלים", "bnei-brak": "בני ברק", "beitar": "ביתר עילית",
+    "modiin-illit": "מודיעין עילית", "elad": "אלעד",
+    "beit-shemesh": "בית שמש", "ashdod": "אשדוד",
+}
+
+# שכונה -> שם העיר בעברית, כדי שהמייל יגיד את האזור הנכון לכל ליד
+_NEIGHBORHOOD_CITY = {
+    nb.name: CITY_LABELS[key]
+    for key, nbs in CITIES.items() if key in CITY_LABELS
+    for nb in nbs
+}
+
+
+def city_of(neighborhood: str) -> str:
+    """שם העיר בעברית לפי שם השכונה (ריק אם לא ידוע)."""
+    return _NEIGHBORHOOD_CITY.get((neighborhood or "").strip(), "")
+
+
 def neighborhoods_for(city: str) -> list[Neighborhood]:
     """מחזיר את רשימת השכונות לעיר (ברירת מחדל: ירושלים)."""
     return CITIES.get((city or "jerusalem").lower(), JERUSALEM_NEIGHBORHOODS)

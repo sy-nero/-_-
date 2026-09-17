@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}כניסה{% endblock %}
+{% block body %}
+<div style="max-width:380px; margin:8vh auto 0;">
+  <div class="card">
+    <h2>כניסה ללוח הקמפיינים</h2>
+    <p class="sub">האזור הזה מכיל לידים ושולח מיילים, ולכן הוא מוגן בסיסמה.</p>
+    {% if error %}<div class="warn" style="margin-bottom:16px;">{{ error }}</div>{% endif %}
+    <form method="post">
+      <label class="field"><span>סיסמה</span>
+        <input type="password" name="password" autofocus required
+               style="width:100%; padding:9px 11px; border:1px solid var(--line-strong);
+                      border-radius:8px; font-family:inherit; font-size:14px;"></label>
+      <div style="margin-top:16px;"><button type="submit">כניסה</button></div>
+    </form>
+  </div>
+</div>
+{% endblock %}

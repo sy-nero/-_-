@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}נמענים — {{ campaign['title'] }}{% endblock %}
+{% block body %}
+
+<p><a href="{{ url_for('campaign_edit', campaign_id=campaign['id']) }}#scan">
+  &#8592; חזרה לקמפיין</a></p>
+
+<div class="card">
+  <h2>מי נמצא במאגר</h2>
+  <p class="sub">
+    "ממתינים לשליחה" קטן מ"עם כתובת מייל" כי יורדים ממנו מי שכבר נשלח אליו,
+    מי ששויך כבר לנוסח א' או ב', וכתובות מייל כפולות (שני עסקים עם אותו מייל
+    נספרים כאחד). לחצי על מצב כדי לראות מי זה בדיוק.
+  </p>
+  <div class="pool">
+    {% for key, info in counts.items() %}
+    <a href="{{ url_for('recipients_page', campaign_id=campaign['id'], state=key) }}"
+       class="poolcard {{ 'on' if key == state }}">
+      <b>{{ info.count }}</b><span>{{ info.label }}</span></a>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <h2>{{ states[state][0] }} <span class="muted">({{ leads|length }} מוצגים)</span></h2>
+  {% if not leads %}
+  <p class="sub">אין כאן אף אחד.</p>
+  {% else %}
+  <div class="sheetwrap">
+  <table class="sheet">
+    <thead><tr>
+      <th>שם</th><th>מייל</th><th>טלפון</th><th>שכונה</th>
+      <th>ביקורות</th><th>דירוג</th>
+      {% if state == 'emailed' %}<th>נשלח ב</th>{% endif %}
+      {% if state == 'failed' %}<th>השגיאה</th>{% endif %}
+      {% if state == 'assigned' %}<th>נוסח</th>{% endif %}
+    </tr></thead>
+    <tbody>
+    {% for lead in leads %}
+    <tr>
+      <td>{{ lead['name'] }}</td>
+      <td style="unicode-bidi:plaintext;">{{ lead['email'] or '—' }}</td>
+      <td style="unicode-bidi:plaintext;">{{ lead['phone'] or '—' }}</td>
+      <td>{{ lead['neighborhood'] or '—' }}</td>
+      <td style="text-align:center;">{{ lead['review_count'] }}</td>
+      <td style="text-align:center;">{{ lead['rating'] or '—' }}</td>
+      {% if state == 'emailed' %}<td>{{ (lead['emailed_at'] or '')[:16] }}</td>{% endif %}
+      {% if state == 'failed' %}<td class="muted">{{ lead['error'] or '—' }}</td>{% endif %}
+      {% if state == 'assigned' %}<td style="text-align:center;">{{ lead['variant'] }}</td>{% endif %}
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
