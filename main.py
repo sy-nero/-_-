@@ -301,6 +301,35 @@ def cmd_clean(args) -> int:
     return 0
 
 
+def cmd_lookup(args) -> int:
+    """בודק מול המאגר מי כבר קיבל מייל, לפי שם, מייל או דומיין."""
+    storage = _storage(args)
+    rows = storage.all_leads()
+
+    for needle in args.what:
+        needle = needle.strip().lower()
+        hits = [r for r in rows
+                if needle in " ".join(str(r[c] or "").lower()
+                                      for c in ("name", "email", "website"))]
+        print(f"\n{needle!r}:")
+        if not hits:
+            print("   ✖ אינו במאגר כלל")
+            continue
+        for row in hits:
+            if (row["status"] or "") == "emailed":
+                when = (row["emailed_at"] or "")[:10]
+                mark = f"✔ נשלח{' ב-' + when if when else ''}"
+            elif (row["email"] or "").strip():
+                mark = "◻ יש מייל, טרם נשלח"
+            else:
+                mark = "◻ במאגר בלי מייל"
+            print(f"   {mark}  —  {row['name'][:50]}")
+            if (row["email"] or "").strip():
+                print(f"       {row['email']}")
+    print()
+    return 0
+
+
 def cmd_attribute(args) -> int:
     """משייך שליחות שכבר נעשו לקמפיין בלוח."""
     storage = _storage(args)
@@ -785,6 +814,12 @@ def build_parser() -> argparse.ArgumentParser:
     fp.set_defaults(func=cmd_find, campaign="agent")
 
     _add_campaign(sub.add_parser("clean", help="הסרת מה שאינו חנות קמעונאית")).set_defaults(func=cmd_clean)
+
+    lk = _add_campaign(sub.add_parser(
+        "lookup", help="בדיקה אם כבר נשלח למישהו, לפי שם/מייל/דומיין"))
+    lk.add_argument("what", nargs="+", metavar="מה-לבדוק",
+                    help="שם, כתובת מייל או דומיין. אפשר כמה בבת אחת")
+    lk.set_defaults(func=cmd_lookup)
 
     at = _add_campaign(sub.add_parser(
         "attribute", help="שיוך שליחות קודמות לקמפיין בלוח"))
