@@ -686,7 +686,8 @@ def cmd_enrich(args) -> int:
     """משלים כתובות מייל ללידים שנסרקו בלי אתר."""
     storage = _storage(args)
     summary = pipeline.enrich_missing_emails(config, storage, args.limit,
-                                             field=args.field)
+                                             field=args.field,
+                                             campaign=_campaign(args))
     print("\n=== סיכום העשרה ===")
     for k, v in summary.items():
         print(f"  {k}: {v}")

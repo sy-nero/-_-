@@ -171,13 +171,20 @@ def looks_established(name: str, email: str) -> bool:
     return any(m in (name or "") for m in LTD_MARKERS)
 
 
-def is_blocked_email(email: str) -> bool:
-    """כתובת של רשת גדולה, ארגון, או דומיין טכני — לא לשלוח אליה."""
+def is_blocked_email(email: str, allow_org: bool = False) -> bool:
+    """
+    כתובת של רשת גדולה, ארגון, או דומיין טכני — לא לשלוח אליה.
+
+    allow_org — לקבל גם דומייני .org/.org.il. הפסילה שלהם נכתבה לקמפיין
+    החנויות, שם .org.il מסמן עמותה ולא בית עסק. בגיוס בעלי מקצוע זה
+    דומיין לגיטימי לגמרי: משרדי ייעוץ ותיקים יושבים עליו, והם נפסלו
+    בשקט -- shaya.org.il ו-shahar.org.il בכללם.
+    """
     e = (email or "").strip().lower()
     if not e or "@" not in e:
         return True
     domain = e.rsplit("@", 1)[1]
-    if is_org_email(e):
+    if is_org_email(e) and not allow_org:
         return True
     if any(domain == d or domain.endswith("." + d) for d in BLOCKED_EMAIL_DOMAINS):
         return True

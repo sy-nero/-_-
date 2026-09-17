@@ -184,7 +184,8 @@ def scan_retail(
                     logger.info("  ★ נמצאה המלצה (%s) על %s", rec.source, lead.name)
 
             email = find_email(lead.website, cfg.request_delay_seconds) if lead.website else None
-            if email and is_blocked_email(email):  # רשת גדולה / ארגון / דומיין טכני
+            # רשת גדולה / ארגון / דומיין טכני. בקמפיין הסוכנים .org.il מותר
+            if email and is_blocked_email(email, allow_org=(campaign == "agent")):
                 email = None
             # קמפיין מענק: רק חברות מבוססות (לא עסק זעיר עם gmail ובלי בע"מ)
             if email and campaign == "grant" and not looks_established(lead.name, email):
@@ -394,7 +395,8 @@ def _handle_place(cfg: Config, storage: Storage, client, place: dict,
         counters["עם המלצה"] += 1
 
     email = find_email(lead.website, cfg.request_delay_seconds) if lead.website else None
-    if email and is_blocked_email(email):
+    # allow_org: המסלול הזה משרת את קמפיין הסוכנים, ושם .org.il לגיטימי
+    if email and is_blocked_email(email, allow_org=True):
         email = None
     if email:
         counters["עם מייל"] += 1
@@ -740,7 +742,7 @@ def read_site_profiles(cfg: Config, storage: Storage, limit: int = 50,
 
 
 def enrich_missing_emails(cfg: Config, storage: Storage, limit: int = 50,
-                          field: str = "") -> dict:
+                          field: str = "", campaign: str = "agent") -> dict:
     """
     מנסה להשלים כתובות מייל ללידים שנסרקו בלי אתר. Google Places לא מחזיר
     מייל, ולידים בלי אתר נשארים תקועים — כאן מחפשים את אתר המשרד ברשת
@@ -754,6 +756,8 @@ def enrich_missing_emails(cfg: Config, storage: Storage, limit: int = 50,
     from data.neighborhoods import city_of
 
     summary = {"נבדקו": 0, "נמצא אתר": 0, "נמצא מייל": 0}
+    # בגיוס בעלי מקצוע דומיין .org.il הוא לגיטימי, ובקמפיין החנויות לא
+    allow_org = campaign == "agent"
     family = family_of_query(field) if field else ""
     if field and not family:
         logger.warning("התחום %r אינו מזוהה — לא מסננים לפיו.", field)
@@ -825,7 +829,7 @@ def enrich_missing_emails(cfg: Config, storage: Storage, limit: int = 50,
             summary["אתר בלי מייל"] = summary.get("אתר בלי מייל", 0) + 1
             logger.info("  ✖ לא נמצא מייל באתר")
             continue
-        if is_blocked_email(email):
+        if is_blocked_email(email, allow_org=allow_org):
             storage.update_website(lead["place_id"], site)
             logger.info("  ✖ המייל שנמצא חסום: %s", email)
             continue
@@ -866,8 +870,14 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
         sent_before = sent_before | storage.contacted_any_campaign()
     all_candidates = storage.leads_to_email(10 ** 9)
     # חסימת רשתות גדולות / ארגונים / דומיינים טכניים (הגנה גם אם נכנסו ל-DB בעבר)
-    blocked = [l for l in all_candidates if is_blocked_email(l["email"])]
-    remaining = [l for l in all_candidates if not is_blocked_email(l["email"])]
+    # בקמפיין גיוס בעלי מקצוע דומיין .org.il הוא לגיטימי, ובמאגר הידני
+    # ממילא כבר נעשה שיקול דעת אנושי על כל ליד
+    def _blocked(row):
+        allow_org = (campaign == "agent") or _col(row, "source") == "manual"
+        return is_blocked_email(row["email"], allow_org=allow_org)
+
+    blocked = [l for l in all_candidates if _blocked(l)]
+    remaining = [l for l in all_candidates if not _blocked(l)]
 
     # כתובת שגויה חוזרת כ-bounce, ושיעור bounce גבוה פוגע במוניטין השולח --
     # כלומר כתובת אחת שגויה מזיקה גם לכל השאר
