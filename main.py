@@ -666,12 +666,13 @@ def cmd_test(args) -> int:
     print(f"  אל:              {args.to}")
     print(f"  שדה השולח (From): {from_name} <{from_email}>")
     print(f"  מתחבר כ:          {smtp_user}")
-    print(f"  שרת:              {config.smtp_host}:{config.smtp_port}\n")
+    smtp_host, smtp_port, smtp_use_ssl = config.smtp_server_for(campaign)
+    print(f"  שרת:              {smtp_host}:{smtp_port}\n")
     try:
-        with Mailer(host=config.smtp_host, port=config.smtp_port, user=smtp_user,
+        with Mailer(host=smtp_host, port=smtp_port, user=smtp_user,
                     password=smtp_password, from_email=from_email,
                     from_name=from_name, reply_to=from_email,
-                    use_ssl=config.smtp_use_ssl, logo_path="") as mailer:
+                    use_ssl=smtp_use_ssl, logo_path="") as mailer:
             mailer.send(args.to, subject, html, text)
     except Exception as exc:  # noqa: BLE001
         print(f"השליחה נכשלה: {exc}")

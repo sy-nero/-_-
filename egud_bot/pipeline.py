@@ -1002,15 +1002,16 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
 
     # שולח לפי קמפיין (grant נשלח מהמייל האישי של מירי; אחרים מכתובת האיגוד)
     from_email, from_name, smtp_user, smtp_password = cfg.sender_for(campaign)
+    smtp_host, smtp_port, smtp_use_ssl = cfg.smtp_server_for(campaign)
     with Mailer(
-        host=cfg.smtp_host,
-        port=cfg.smtp_port,
+        host=smtp_host,
+        port=smtp_port,
         user=smtp_user,
         password=smtp_password,
         from_email=from_email,
         from_name=from_name,         # שם השולח האישי, כדי שייראה כמו מייל מאדם
         reply_to=from_email,         # תשובות חוזרות לשולח עצמו
-        use_ssl=cfg.smtp_use_ssl,
+        use_ssl=smtp_use_ssl,
         logo_path="",                # מייל אישי, ללא לוגו
     ) as mailer:
         for lead in leads:

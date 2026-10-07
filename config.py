@@ -14,6 +14,11 @@ def _bool(value: str, default: bool = False) -> bool:
     return value.strip().lower() in ("1", "true", "yes", "y", "on", "כן")
 
 
+#: הקמפיינים שיוצאים אישית בשם מירי מסינרו (ולא מכתובת האיגוד):
+#: גיוס סוכנים, ומבצע ה-CRM של סינרו.
+SYNERO_CAMPAIGNS = {"agent", "crm"}
+
+
 @dataclass
 class Config:
     # Google Places
@@ -60,6 +65,11 @@ class Config:
     agent_from_email: str = os.getenv("AGENT_FROM_EMAIL", "cto@sy-nero.com")
     agent_from_name: str = os.getenv("AGENT_FROM_NAME", "מירי לודמיר")
     agent_sender_title: str = os.getenv("AGENT_SENDER_TITLE", "מנהלת סינרו טק")
+    # שרת ה-SMTP של תיבת סינרו. היא ב-Gmail, ולכן ברירת המחדל היא Gmail
+    # ולא השרת הכללי (של האיגוד) -- אחרת ההתחברות נכשלת בלי הסבר ברור.
+    agent_smtp_host: str = os.getenv("AGENT_SMTP_HOST", "smtp.gmail.com")
+    agent_smtp_port: int = int(os.getenv("AGENT_SMTP_PORT", "587"))
+    agent_smtp_use_ssl: bool = _bool(os.getenv("AGENT_SMTP_USE_SSL"), False)
     agent_company: str = os.getenv("AGENT_COMPANY", "סינרו טק")
     agent_sender_phone: str = os.getenv("AGENT_SENDER_PHONE", "")
     # כתובת ציבורית של אפליקציית הניהול — הבסיס לפיקסל מעקב הפתיחות.
@@ -109,11 +119,18 @@ class Config:
     def sender_for(self, campaign: str) -> tuple[str, str, str, str]:
         """מחזיר (from_email, from_name, smtp_user, smtp_password) לפי הקמפיין.
         agent נשלח בשם מירי מסינרו; שאר הקמפיינים (כולל grant) מכתובת האיגוד."""
-        if campaign == "agent" and self.agent_from_email:
+        if campaign in SYNERO_CAMPAIGNS and self.agent_from_email:
             return (self.agent_from_email, self.agent_from_name,
                     self.agent_smtp_user or self.smtp_user,
                     self.agent_smtp_password or self.smtp_password)
         return (self.from_email, self.sender_name, self.smtp_user, self.smtp_password)
+
+    def smtp_server_for(self, campaign: str) -> tuple[str, int, bool]:
+        """(host, port, use_ssl) של השולח של הקמפיין -- תיבת סינרו יושבת
+        ב-Gmail, תיבת האיגוד בשרת שלו, ואי אפשר לשלוח מאחת דרך השני."""
+        if campaign in SYNERO_CAMPAIGNS and self.agent_from_email:
+            return (self.agent_smtp_host, self.agent_smtp_port, self.agent_smtp_use_ssl)
+        return (self.smtp_host, self.smtp_port, self.smtp_use_ssl)
 
     def validate_for_scan(self) -> list[str]:
         """מחזיר רשימת שגיאות קונפיגורציה עבור סריקה."""
@@ -125,8 +142,9 @@ class Config:
     def validate_for_email(self, campaign: str = "funding") -> list[str]:
         """מחזיר רשימת שגיאות קונפיגורציה עבור שליחת מייל (לפי שולח הקמפיין)."""
         from_email, _, smtp_user, smtp_password = self.sender_for(campaign)
+        host, _, _ = self.smtp_server_for(campaign)
         errors = []
-        if not self.smtp_host:
+        if not host:
             errors.append("חסר ערך SMTP: smtp_host")
         if not smtp_user:
             errors.append("חסר ערך SMTP: smtp_user (GRANT_/AGENT_SMTP_USER בקמפיינים ייעודיים)")
