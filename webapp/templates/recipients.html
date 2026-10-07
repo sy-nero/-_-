@@ -31,7 +31,7 @@
     <thead><tr>
       <th>שם</th><th>מייל</th><th>טלפון</th><th>שכונה</th>
       <th>ביקורות</th><th>דירוג</th>
-      {% if state == 'emailed' %}<th>נשלח ב</th>{% endif %}
+      {% if state == 'emailed' %}<th>נשלח ב</th><th>נפתח</th><th>פתיחות</th>{% endif %}
       {% if state == 'failed' %}<th>השגיאה</th>{% endif %}
       {% if state == 'assigned' %}<th>נוסח</th>{% endif %}
     </tr></thead>
@@ -44,7 +44,17 @@
       <td>{{ lead['neighborhood'] or '—' }}</td>
       <td style="text-align:center;">{{ lead['review_count'] }}</td>
       <td style="text-align:center;">{{ lead['rating'] or '—' }}</td>
-      {% if state == 'emailed' %}<td>{{ (lead['emailed_at'] or '')[:16] }}</td>{% endif %}
+      {% if state == 'emailed' %}
+        <td>{{ (lead['emailed_at'] or '')[:16] }}</td>
+        {% if lead['opened_at'] %}
+        <td style="color:#15803d;font-weight:600;">{{ lead['opened_at'][:16] }}</td>
+        <td style="text-align:center;">{{ lead['open_count'] or 1 }}</td>
+        {% elif lead['track_id'] %}
+        <td class="muted">עדיין לא</td><td style="text-align:center;" class="muted">0</td>
+        {% else %}
+        <td class="muted">בלי מעקב</td><td class="muted"></td>
+        {% endif %}
+      {% endif %}
       {% if state == 'failed' %}<td class="muted">{{ lead['error'] or '—' }}</td>{% endif %}
       {% if state == 'assigned' %}<td style="text-align:center;">{{ lead['variant'] }}</td>{% endif %}
     </tr>
