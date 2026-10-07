@@ -27,6 +27,11 @@ read_env() {
 DB_ID="$(read_env D1_DATABASE_ID)"
 [ -n "$DB_ID" ] || die "אין D1_DATABASE_ID בקובץ .env. בלעדיו ה-Worker לא יידע לאיזה מסד לכתוב."
 
+# למשתמש עם כמה חשבונות Cloudflare, wrangler פורס לחשבון שהדפדפן בחר ולא
+# לזה שבו המסד. מזהה החשבון מה-.env קובע, כדי שהפריסה תמצא את ה-D1.
+ACCOUNT_ID="$(read_env D1_ACCOUNT_ID)"
+[ -n "$ACCOUNT_ID" ] && export CLOUDFLARE_ACCOUNT_ID="$ACCOUNT_ID"
+
 # בדיקת שפיות: מזהה מסד הוא UUID עם מקפים. מזהה חשבון הוא 32 תווים בלי
 # מקפים -- וההחלפה ביניהם היא טעות שכבר עלתה לנו שעות.
 case "$DB_ID" in
