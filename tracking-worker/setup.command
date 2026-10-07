@@ -40,12 +40,28 @@ command -v node >/dev/null 2>&1 || die "אין Node.js במחשב.
 
 # wrangler העדכני דורש Node 22. על גרסה ישנה הוא לפעמים "כמעט עובד"
 # ונופל באמצע בצורה לא ברורה, ולכן עוצרים כאן עם הסבר.
-NODE_MAJOR="$(node -v | sed 's/^v//; s/\..*//')"
-if [ "${NODE_MAJOR:-0}" -lt 22 ]; then
-  die "יש לך Node $(node -v), ו-wrangler דורש 22 ומעלה.
-   להוריד LTS מ-https://nodejs.org, להתקין, לסגור את הטרמינל,
-   לפתוח חדש, ולהריץ את הקובץ הזה שוב."
+#
+# הטרמינל שנפתח בלחיצה כפולה לא תמיד רואה את ה-Node שהותקן עכשיו (nvm או
+# Homebrew ישן קודמים לו ב-PATH), ולכן מחפשים Node 22+ בכל המקומות המוכרים
+# ולא מסתמכים רק על מה ש-PATH מגיש.
+node_major() { "$1" -v 2>/dev/null | sed 's/^v//; s/\..*//'; }
+BEST=""
+for cand in "$(command -v node 2>/dev/null)" \
+            /usr/local/bin/node /opt/homebrew/bin/node \
+            /usr/local/opt/node@22/bin/node /opt/homebrew/opt/node@22/bin/node \
+            "$HOME"/.nvm/versions/node/v2[2-9]*/bin/node \
+            "$HOME"/.nvm/versions/node/v[3-9]*/bin/node; do
+  [ -n "$cand" ] && [ -x "$cand" ] || continue
+  major="$(node_major "$cand")"
+  if [ "${major:-0}" -ge 22 ]; then BEST="$cand"; break; fi
+done
+if [ -z "$BEST" ]; then
+  die "לא נמצא Node 22 ומעלה במחשב (נמצא: $(node -v 2>/dev/null || echo 'אין')).
+   להוריד LTS מ-https://nodejs.org (הכפתור הירוק), לפתוח את קובץ ה-pkg שירד,
+   ללחוץ 'המשך' עד הסוף, לסגור את הטרמינל לגמרי (Cmd+Q) ולהריץ את הקובץ הזה שוב."
 fi
+export PATH="$(dirname "$BEST"):$PATH"
+say "משתמש ב-Node $(node -v) ($BEST)"
 
 say "מכניס את מזהה המסד ל-wrangler.toml…"
 TMP="$(mktemp)"
