@@ -54,8 +54,11 @@ def _render(template_campaign: str, ctx: dict, custom=None):
     """
     if custom and (custom[0] or custom[1]):
         hint = custom[2] if len(custom) > 2 else ""
-        return templates.render_custom(custom[0], custom[1],
-                                       profession_hint=hint, **ctx)
+        # build_ctx כבר שם profession_hint בהקשר; להעביר אותו פעמיים מפיל
+        # את עמוד השליחה (TypeError). התחום של הליד גובר, הקמפיין משלים.
+        merged = dict(ctx)
+        merged["profession_hint"] = merged.get("profession_hint") or hint
+        return templates.render_custom(custom[0], custom[1], **merged)
     return templates.render(template_campaign, **ctx)
 
 
