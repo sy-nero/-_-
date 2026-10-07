@@ -68,7 +68,15 @@ TMP="$(mktemp)"
 sed "s|^database_id = .*|database_id = \"$DB_ID\"|" wrangler.toml > "$TMP" && mv "$TMP" wrangler.toml
 
 say ""
-say "מפרס את ה-Worker. אם זו הפעם הראשונה — ייפתח דפדפן להתחברות ל-Cloudflare."
+# ההתחברות חייבת לרוץ לפני הפריסה ובלי צינור (tee): כשהפלט עובר דרך
+# צינור wrangler מחליט שאין מי שילחץ בדפדפן ומסרב להתחבר.
+if ! npx --yes wrangler@latest whoami 2>/dev/null | grep -q "logged in"; then
+  say "מתחבר ל-Cloudflare. ייפתח דפדפן — לאשר (Allow) ולחזור לכאן."
+  say ""
+  npx --yes wrangler@latest login || die "ההתחברות ל-Cloudflare לא הצליחה."
+fi
+
+say "מפרס את ה-Worker…"
 say ""
 npx --yes wrangler@latest deploy 2>&1 | tee /tmp/wrangler-deploy.log
 grep -q "Uploaded\|Deployed\|workers.dev" /tmp/wrangler-deploy.log || die "הפריסה נכשלה. הפלט למעלה."
