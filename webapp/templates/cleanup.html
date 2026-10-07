@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}ניקוי המאגר — {{ campaign['title'] }}{% endblock %}
+{% block body %}
+
+<p><a href="{{ url_for('campaign_edit', campaign_id=campaign['id']) }}#scan">
+  &#8592; חזרה לקמפיין</a></p>
+
+<div class="card">
+  <h2>לידים שאינם מהתחום של הקמפיין</h2>
+  <p class="sub">
+    מאגר הלידים <b>מצטבר</b>: כל סריקה מוסיפה אליו, ושום דבר לא יורד ממנו לבד.
+    לכן יש בו גם תוצאות מסריקות ישנות, מלפני שהוספנו את סינון ההתאמה.
+    כאן {{ total }} לידים בסך הכול, ומתוכם <b>{{ stray|length }}</b> לא נראים
+    מהתחום שהקמפיין מחפש.
+  </p>
+
+  {% if not stray %}
+  <p class="ok">המאגר נקי — כל הלידים מתאימים לתחום.</p>
+  {% else %}
+  <form method="post">
+    <div class="warn">
+      המחיקה היא סופית. מי שתסמני <b>"להשאיר"</b> יישאר במאגר; כל השאר יימחקו.
+    </div>
+    <div class="sheetwrap">
+    <table class="sheet">
+      <thead><tr>
+        <th style="width:80px;">להשאיר</th>
+        <th>שם</th><th>סוג בגוגל</th><th>מייל</th><th>שכונה</th><th>מצב</th>
+      </tr></thead>
+      <tbody>
+      {% for lead in stray %}
+      <tr>
+        <td style="text-align:center;">
+          <input type="checkbox" name="keep" value="{{ lead['place_id'] }}"></td>
+        <td>{{ lead['name'] }}</td>
+        <td class="muted" style="unicode-bidi:plaintext;">{{ lead['primary_type'] or '—' }}</td>
+        <td style="unicode-bidi:plaintext;">{{ lead['email'] or '—' }}</td>
+        <td>{{ lead['neighborhood'] or '—' }}</td>
+        <td class="muted">{{ lead['status'] }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <div class="actionbar">
+      <button type="submit" class="danger"
+              onclick="return confirm('למחוק את מי שלא סומן להשארה? אי אפשר לבטל.');">
+        מחיקת מי שלא סומן</button>
+      <span class="muted">מי שכבר נשלח אליו מייל יימחק גם הוא — הרישום שנשלח נשמר בנפרד.</span>
+    </div>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}
