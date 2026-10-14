@@ -172,7 +172,7 @@ def leads_store(source_campaign: str):
 
 def auto_metrics(campaign) -> dict:
     """נשלחו / נפתחו / השיבו — נמדדים מ-DB הלידים, לא מוזנים ביד."""
-    empty = {"sent": 0, "opened": 0, "replied": 0}
+    empty = {"sent": 0, "opened": 0, "replied": 0, "bounced": 0}
     st = leads_store(campaign["source_campaign"])
     if not st:
         return empty
@@ -324,6 +324,8 @@ def campaign_view(campaign) -> dict:
             "derived": derived_fields(campaign),
             "open_rate": f"{open_pct}%" if metrics["sent"] else "—",
             "reply_rate": f"{reply_pct}%" if metrics["sent"] else "—",
+            "bounce_rate": (f"{metrics.get('bounced', 0) * 100 // metrics['sent']}%"
+                            if metrics["sent"] else "—"),
             "open_pct": open_pct, "reply_pct": reply_pct, "pending": pending}
 
 
@@ -525,18 +527,22 @@ def _check_campaigns(campaigns) -> list[str]:
     for key, box in by_box.items():
         emails = [l["email"] for _, sent in box["items"] for l in sent]
         try:
-            found = replies.find_replies(box["sender"], emails)
+            result = replies.find_replies(box["sender"], emails)
         except Exception as exc:  # noqa: BLE001
             lines.append(f"לא הצלחתי להיכנס לתיבה {key}: {exc}")
             continue
+        found, bounces = result["replies"], result["bounces"]
         new = 0
         for st, sent in box["items"]:
             for lead in sent:
-                hit = found.get((lead["email"] or "").lower())
+                addr = (lead["email"] or "").lower()
+                hit = found.get(addr)
                 if hit and not lead["replied_at"]:
                     st.mark_replied(lead["email"], f"ענה: {hit[1]}"[:200])
                     new += 1
-        lines.append(f"{key}: {len(found)} ענו, {new} חדשים סומנו")
+                if addr in bounces:
+                    st.mark_bounced(lead["email"], f"המייל חזר: {bounces[addr]}"[:200])
+        lines.append(f"{key}: {len(found)} ענו ({new} חדשים), {len(bounces)} מיילים חזרו")
     return lines or ["אין עדיין קמפיינים שנשלחו מהם מיילים"]
 
 

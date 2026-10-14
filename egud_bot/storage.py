@@ -132,7 +132,8 @@ class Storage:
                 for column in ("types", "first_name", "intro_how", "intro_fact",
                                "intro_why", "rec_json", "variant", "replied_at",
                                "reply_note", "track_id", "opened_at", "open_count",
-                               "run_id", "specialty", "campaign_id", "source"):
+                               "run_id", "specialty", "campaign_id", "source",
+                               "bounced_at"):
                     try:
                         conn.execute(
                             f"ALTER TABLE {self.leads} ADD COLUMN {column} TEXT")
@@ -449,10 +450,18 @@ class Storage:
                        COUNT(DISTINCT CASE WHEN opened_at IS NOT NULL AND opened_at != ''
                              THEN lower(email) END) AS opened,
                        COUNT(DISTINCT CASE WHEN replied_at IS NOT NULL AND replied_at != ''
-                             THEN lower(email) END) AS replied
+                             THEN lower(email) END) AS replied,
+                       COUNT(DISTINCT CASE WHEN bounced_at IS NOT NULL AND bounced_at != ''
+                             THEN lower(email) END) AS bounced
                     FROM {self.leads} WHERE {where}""", params).fetchone()
+            # מיילים שהשרת סירב לשלוח בכלל (status='failed') גם הם "לא טובים"
+            fwhere = where.replace("status = 'emailed'", "status = 'failed'")
+            failed = conn.execute(
+                f"SELECT COUNT(DISTINCT lower(email)) FROM {self.leads} WHERE {fwhere}",
+                params).fetchone()[0]
             return {"sent": row["sent"], "opened": row["opened"],
-                    "replied": row["replied"]}
+                    "replied": row["replied"],
+                    "bounced": (row["bounced"] or 0) + (failed or 0)}
 
     def lead_by_email(self, email: str):
         with self._conn() as conn:
@@ -555,6 +564,18 @@ class Storage:
                    ORDER BY CASE WHEN email IS NULL OR email = '' THEN 0 ELSE 1 END,
                             review_count DESC
                    LIMIT ?""", (limit,)).fetchall()
+
+    def mark_bounced(self, email: str, reason: str = "") -> int:
+        """
+        המייל נשלח אבל חזר (כתובת לא קיימת, תיבה מלאה וכו'). נשאר "נשלח"
+        כדי שלא יישלח שוב, ונספר בנפרד כ"חזרו".
+        """
+        with self._conn() as conn:
+            cur = conn.execute(
+                """UPDATE {leads} SET bounced_at=?, error=?
+                   WHERE lower(email)=lower(?) AND (bounced_at IS NULL OR bounced_at='')""",
+                (_now(), reason, (email or "").strip()))
+            return cur.rowcount
 
     def mark_replied(self, email: str, note: str = "") -> int:
         """רושם שהסוכן השיב (וטלפון/הערה אם יש). מחזיר כמה שורות עודכנו."""

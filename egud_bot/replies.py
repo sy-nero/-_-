@@ -35,43 +35,70 @@ def _text(value) -> str:
 
 def find_replies(sender: dict, recipients, since_days: int = 60) -> dict:
     """
-    מחזיר {כתובת נמען: (תאריך, נושא)} לכל נמען שכתב לתיבה של השולח.
+    מחזיר {"replies": {נמען: (תאריך, נושא)}, "bounces": {נמען: סיבה}}.
+
+    תשובה = מייל שהגיע מכתובת של נמען. החזרה = הודעת מערכת (mailer-daemon)
+    על נמען שהמייל אליו לא נמסר. Gmail שם את הכתובת בכותרת
+    X-Failed-Recipients; אם היא חסרה, מחפשים את הכתובת בתחילת גוף ההודעה.
     sender: from_email / smtp_user / smtp_password / smtp_host.
     """
     wanted = {(r or "").strip().lower() for r in recipients if r}
     wanted = {w for w in wanted if w and not w.startswith(_SYSTEM)}
+    out = {"replies": {}, "bounces": {}}
     if not wanted:
-        return {}
+        return out
     since = (datetime.now(timezone.utc) - timedelta(days=since_days)).strftime("%d-%b-%Y")
-    found = {}
     conn = imaplib.IMAP4_SSL(imap_host_for(sender.get("smtp_host")), 993)
     try:
         conn.login(sender.get("smtp_user") or sender["from_email"], sender["smtp_password"])
         conn.select("INBOX", readonly=True)
         status, data = conn.search(None, "SINCE", since)
         ids = (data[0] or b"").split() if status == "OK" else []
+        system_ids = []
         for start in range(0, len(ids), 200):
             chunk = b",".join(ids[start:start + 200])
-            status, rows = conn.fetch(chunk, "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])")
+            status, rows = conn.fetch(
+                chunk, "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE X-FAILED-RECIPIENTS)])")
             if status != "OK":
                 continue
             for row in rows:
                 if not isinstance(row, tuple):
                     continue
                 msg = email.message_from_bytes(row[1])
-                for _, addr in getaddresses([msg.get("From", "")]):
-                    addr = addr.strip().lower()
+                senders = [a.strip().lower() for _, a in getaddresses([msg.get("From", "")])]
+                if any(a.startswith(_SYSTEM) for a in senders):
+                    failed = [a.strip().lower() for _, a in
+                              getaddresses([msg.get("X-Failed-Recipients", "")])]
+                    hits = [a for a in failed if a in wanted]
+                    if hits:
+                        for a in hits:
+                            out["bounces"][a] = _text(msg.get("Subject", "")) or "המייל חזר"
+                    else:
+                        msg_id = row[0].split()[0]
+                        system_ids.append(msg_id)
+                    continue
+                for addr in senders:
                     if addr in wanted:
                         try:
                             when = parsedate_to_datetime(msg.get("Date")).isoformat()
                         except Exception:  # noqa: BLE001
                             when = ""
-                        prev = found.get(addr)
+                        prev = out["replies"].get(addr)
                         if not prev or when > prev[0]:
-                            found[addr] = (when, _text(msg.get("Subject", "")))
+                            out["replies"][addr] = (when, _text(msg.get("Subject", "")))
+        # הודעות מערכת בלי כותרת: מחפשים את הכתובת בתחילת הגוף
+        for msg_id in system_ids:
+            status, rows = conn.fetch(msg_id, "(BODY.PEEK[TEXT]<0.6000>)")
+            if status != "OK":
+                continue
+            body = b"".join(r[1] for r in rows if isinstance(r, tuple)).decode(
+                "utf-8", "replace").lower()
+            for addr in wanted:
+                if addr in body:
+                    out["bounces"].setdefault(addr, "המייל חזר")
     finally:
         try:
             conn.logout()
         except Exception:  # noqa: BLE001
             pass
-    return found
+    return out

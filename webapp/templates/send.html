@@ -129,7 +129,8 @@
       <td class="remail">{{ lead['email'] }}</td>
       <td class="num">{% if lead['opened_at'] %}<span class="ok">✓</span>
         {% else %}<span class="dash">—</span>{% endif %}</td>
-      <td>{% if lead['reply_note'] %}{{ lead['reply_note'] }}
+      <td>{% if lead['bounced_at'] %}<span style="color:#b42318;font-weight:600;">המייל חזר</span>
+        {% elif lead['reply_note'] %}{{ lead['reply_note'] }}
         {% elif lead['replied_at'] %}<span class="ok">✓</span>
         {% else %}<span class="dash">—</span>{% endif %}</td>
       <td>

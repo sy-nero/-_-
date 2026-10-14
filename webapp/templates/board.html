@@ -31,6 +31,7 @@
       <div class="kpi"><b>{{ col.metrics.sent }}</b><span>נשלחו</span></div>
       <div class="kpi"><b>{{ col.metrics.opened }}</b><span>נפתחו {{ col.open_rate }}</span></div>
       <div class="kpi"><b>{{ col.metrics.replied }}</b><span>השיבו {{ col.reply_rate }}</span></div>
+      <div class="kpi"><b>{{ col.metrics.bounced or 0 }}</b><span>חזרו {{ col.bounce_rate }}</span></div>
     </div>
     <div class="bar">
       <i class="open" style="width:{{ col.open_pct }}%"></i>
