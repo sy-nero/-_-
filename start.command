@@ -15,12 +15,17 @@ if [ ! -f .env ]; then
   read -r -p "Enter לסגירה" _; exit 1
 fi
 
-if [ ! -d .venv ]; then
+# הסביבה יושבת מחוץ לתיקיית הפרויקט בכוונה: התיקייה ב-Documents מסונכרנת
+# ל-iCloud, ו-iCloud מרוקן קבצים ("Optimize Storage") ומשכפל תיקיות
+# ("certifi 2"). שני אלה שברו את הסביבה. בבית המשתמש אין סנכרון.
+VENV="$HOME/.egud-bot-venv"
+if [ ! -x "$VENV/bin/python3" ]; then
   echo "מכין סביבה בפעם הראשונה, זה לוקח דקה…"
-  python3 -m venv .venv || { echo "❌ אין python3 במחשב"; read -r _; exit 1; }
+  rm -rf "$VENV"
+  python3 -m venv "$VENV" || { echo "❌ אין python3 במחשב"; read -r _; exit 1; }
 fi
 
-source .venv/bin/activate
+source "$VENV/bin/activate"
 pip install --quiet --upgrade pip
 pip install --quiet -r requirements.txt || {
   echo "❌ ההתקנה נכשלה"; read -r -p "Enter לסגירה" _; exit 1; }
