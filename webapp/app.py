@@ -366,10 +366,18 @@ def campaign_edit(campaign_id):
                      search_query=(request.form.get("search_query") or "").strip(),
                      subject_tpl=(request.form.get("subject_tpl") or "").strip(),
                      body_tpl=(request.form.get("body_tpl") or "").strip())
+        # שורה נמדדת שנשלחה עם המספר שהמערכת עצמה הציגה לא נשמרת כערך ידני.
+        # אחרת כל לחיצה על "שמירה" מקפיאה את המספר של אותו רגע, והפתיחות
+        # והתשובות שמגיעות אחר כך לא נכנסות יותר לטבלה.
+        measured = auto_metrics(campaign)
         for field in ALL_FIELDS:
+            value = request.form.get(f"value::{field}", "")
+            key = AUTO_TO_METRIC.get(field)
+            if key and value.strip() == str(measured.get(key, "")):
+                value = ""
             store.set_field(
                 campaign_id, field,
-                value=request.form.get(f"value::{field}", ""),
+                value=value,
                 note=request.form.get(f"note::{field}", ""),
                 improve=request.form.get(f"improve::{field}", ""))
         flash("נשמר")
