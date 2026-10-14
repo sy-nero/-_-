@@ -26,6 +26,12 @@
         שליחה לנמענים</a>
       <div class="muted" style="text-align:center; margin-top:6px;">
         {{ pending }} ממתינים</div>
+      {% if metrics.sent %}
+      <form method="post" action="{{ url_for('check_replies', campaign_id=campaign['id']) }}"
+            style="margin-top:8px; text-align:center;">
+        <button type="submit" class="ghost small">בדיקת תשובות בתיבה</button>
+      </form>
+      {% endif %}
     </div>
     {% endif %}
   </div>

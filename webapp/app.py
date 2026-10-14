@@ -520,7 +520,9 @@ def check_replies(campaign_id):
             new += 1
     flash(f"נבדקה התיבה {sender.get('from_email')}: {len(found)} נמענים ענו, "
           f"{new} חדשים סומנו.")
-    return redirect(url_for("send_page", campaign_id=campaign_id))
+    # חוזרים לעמוד שממנו לחצו (עמוד הקמפיין או עמוד השליחה)
+    back = request.referrer or url_for("send_page", campaign_id=campaign_id)
+    return redirect(back)
 
 
 @app.route("/campaign/<int:campaign_id>/replied", methods=["POST"])
