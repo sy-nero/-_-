@@ -66,7 +66,11 @@ store = _StoreProxy()
 
 @app.errorhandler(500)
 def internal_error(exc):
-    return render_template("dberror.html", error=str(exc)), 500
+    # בלי זה העמוד מציג "500 Internal Server Error" ומאשים את המסד בכל תקלה.
+    # החריגה המקורית היא מה שבאמת צריך לראות כדי לתקן.
+    original = getattr(exc, "original_exception", None) or exc
+    return render_template("dberror.html",
+                           error=f"{type(original).__name__}: {original}"), 500
 
 
 # ---------------------------- הגנה בסיסמה ----------------------------
