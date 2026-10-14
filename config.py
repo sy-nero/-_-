@@ -14,6 +14,15 @@ def _bool(value: str, default: bool = False) -> bool:
     return value.strip().lower() in ("1", "true", "yes", "y", "on", "כן")
 
 
+def _campaign_env(campaign: str) -> dict:
+    """הגדרות שולח של קמפיין מסוים מ-.env: SAYERET_FROM_EMAIL וכו'."""
+    prefix = (campaign or "").upper() + "_"
+    keys = ("FROM_EMAIL", "FROM_NAME", "SMTP_USER", "SMTP_PASSWORD",
+            "SMTP_HOST", "SMTP_PORT", "SMTP_USE_SSL")
+    return {k: os.getenv(prefix + k, "").strip() for k in keys
+            if os.getenv(prefix + k, "").strip()}
+
+
 #: הקמפיינים שיוצאים אישית בשם מירי מסינרו (ולא מכתובת האיגוד):
 #: גיוס סוכנים, ומבצע ה-CRM של סינרו.
 SYNERO_CAMPAIGNS = {"agent", "crm"}
@@ -123,6 +132,13 @@ class Config:
             return (self.agent_from_email, self.agent_from_name,
                     self.agent_smtp_user or self.smtp_user,
                     self.agent_smtp_password or self.smtp_password)
+        own = _campaign_env(campaign)
+        if own.get("FROM_EMAIL"):
+            # קמפיין עם שולח משלו (למשל SAYERET_FROM_EMAIL): מייל אחר מהאיגוד,
+            # בשם אחר, בלי לגעת בשולח של שאר הקמפיינים
+            return (own["FROM_EMAIL"], own.get("FROM_NAME") or self.sender_name,
+                    own.get("SMTP_USER") or own["FROM_EMAIL"],
+                    (own.get("SMTP_PASSWORD") or "").replace(" ", ""))
         return (self.from_email, self.sender_name, self.smtp_user, self.smtp_password)
 
     def smtp_server_for(self, campaign: str) -> tuple[str, int, bool]:
@@ -130,6 +146,12 @@ class Config:
         ב-Gmail, תיבת האיגוד בשרת שלו, ואי אפשר לשלוח מאחת דרך השני."""
         if campaign in SYNERO_CAMPAIGNS and self.agent_from_email:
             return (self.agent_smtp_host, self.agent_smtp_port, self.agent_smtp_use_ssl)
+        own = _campaign_env(campaign)
+        if own.get("FROM_EMAIL"):
+            # תיבות האיגוד ב-Google Workspace, ולכן ברירת המחדל היא Gmail
+            return (own.get("SMTP_HOST") or "smtp.gmail.com",
+                    int(own.get("SMTP_PORT") or 587),
+                    _bool(own.get("SMTP_USE_SSL"), False))
         return (self.smtp_host, self.smtp_port, self.smtp_use_ssl)
 
     def validate_for_scan(self) -> list[str]:

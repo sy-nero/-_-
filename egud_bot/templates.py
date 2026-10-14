@@ -553,7 +553,12 @@ def custom_values(business_name="", first_name="", field="", neighborhood="",
     לאנשי קשר שהועלו מקובץ אין סוג עסק מגוגל ואין שכונה מוכרת, ולכן התחום
     נופל לתחום שהוגדר בקמפיין, והאזור לערך שנרשם בקובץ.
     """
-    first = (first_name or person_first_name(business_name)).strip()
+    # "-" בשם הפרטי = "ידוע שאין שם, לא לנחש". בלי זה שם המשרד ("לוטנר
+    # אדריכלים") הופך לשם פרטי והנמען מקבל "הי לוטנר,".
+    if first_name.strip() == "-":
+        first = ""
+    else:
+        first = (first_name or person_first_name(business_name)).strip()
     rec = rec or {}
     return {
         "first_name": first,
