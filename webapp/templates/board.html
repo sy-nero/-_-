@@ -10,6 +10,10 @@
 {% endif %}
 
 {% if columns %}
+<form method="post" action="{{ url_for('check_all_replies') }}"
+      style="display:flex; justify-content:flex-end; margin:0 0 12px;">
+  <button type="submit">בדיקת תשובות בכל הקמפיינים</button>
+</form>
 <div class="cards">
   {% for col in columns %}
   <div class="ccard">

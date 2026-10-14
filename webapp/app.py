@@ -491,38 +491,73 @@ def send_now(campaign_id):
     return redirect(url_for("send_page", campaign_id=campaign_id))
 
 
+def _campaign_sender(campaign) -> dict:
+    """התיבה שממנה יצא הקמפיין: זו שנבחרה בדפדפן, ואם אין, זו מ-.env."""
+    sender = sender_box.as_smtp(sender_box.SenderStore().get(_col(campaign, "sender_id")))
+    if sender:
+        return sender
+    from_email, _, user, password = config.sender_for(campaign["source_campaign"])
+    host, _, _ = config.smtp_server_for(campaign["source_campaign"])
+    return {"from_email": from_email, "smtp_user": user,
+            "smtp_password": password, "smtp_host": host}
+
+
+def _check_campaigns(campaigns) -> list[str]:
+    """
+    בודק תשובות לכמה קמפיינים. נכנס לכל תיבה פעם אחת בלבד, גם כשכמה
+    קמפיינים יצאו ממנה. מחזיר שורת סיכום לכל תיבה.
+    """
+    from egud_bot import replies
+    by_box = {}
+    for campaign in campaigns:
+        st = leads_store(campaign["source_campaign"]) if campaign["source_campaign"] else None
+        if not st:
+            continue
+        sent = st.sent_leads(campaign["variant"] or "", 2000,
+                             campaign_id=str(campaign["id"]))
+        if not sent:
+            continue
+        sender = _campaign_sender(campaign)
+        key = (sender.get("from_email") or "").lower()
+        box = by_box.setdefault(key, {"sender": sender, "items": []})
+        box["items"].append((st, sent))
+    lines = []
+    for key, box in by_box.items():
+        emails = [l["email"] for _, sent in box["items"] for l in sent]
+        try:
+            found = replies.find_replies(box["sender"], emails)
+        except Exception as exc:  # noqa: BLE001
+            lines.append(f"לא הצלחתי להיכנס לתיבה {key}: {exc}")
+            continue
+        new = 0
+        for st, sent in box["items"]:
+            for lead in sent:
+                hit = found.get((lead["email"] or "").lower())
+                if hit and not lead["replied_at"]:
+                    st.mark_replied(lead["email"], f"ענה: {hit[1]}"[:200])
+                    new += 1
+        lines.append(f"{key}: {len(found)} ענו, {new} חדשים סומנו")
+    return lines or ["אין עדיין קמפיינים שנשלחו מהם מיילים"]
+
+
+@app.route("/check_replies", methods=["POST"])
+def check_all_replies():
+    """כפתור בלוח הראשי: בודק תשובות בכל הקמפיינים בבת אחת."""
+    for line in _check_campaigns(store.all()):
+        flash("בדיקת תשובות: " + line)
+    return redirect(url_for("board"))
+
+
 @app.route("/campaign/<int:campaign_id>/check_replies", methods=["POST"])
 def check_replies(campaign_id):
     """נכנס לתיבה שממנה נשלח הקמפיין ומסמן את מי שענה."""
-    from egud_bot import replies
     campaign = store.get(campaign_id)
-    st = leads_store(campaign["source_campaign"]) if campaign else None
-    if not st:
+    if not campaign:
         return redirect(url_for("board"))
-    sender = sender_box.as_smtp(sender_box.SenderStore().get(_col(campaign, "sender_id")))
-    if not sender:
-        from_email, _, user, password = config.sender_for(campaign["source_campaign"])
-        host, _, _ = config.smtp_server_for(campaign["source_campaign"])
-        sender = {"from_email": from_email, "smtp_user": user,
-                  "smtp_password": password, "smtp_host": host}
-    sent = st.sent_leads(campaign["variant"] or "", 2000, campaign_id=str(campaign_id))
-    try:
-        found = replies.find_replies(sender, [l["email"] for l in sent])
-    except Exception as exc:  # noqa: BLE001
-        flash(f"לא הצלחתי להיכנס לתיבה {sender.get('from_email')}: {exc}. "
-              "צריך שיהיה מופעל בה IMAP (בהגדרות Gmail, העברה ו-POP/IMAP).")
-        return redirect(url_for("send_page", campaign_id=campaign_id))
-    new = 0
-    for lead in sent:
-        hit = found.get((lead["email"] or "").lower())
-        if hit and not lead["replied_at"]:
-            st.mark_replied(lead["email"], f"ענה: {hit[1]}"[:200])
-            new += 1
-    flash(f"נבדקה התיבה {sender.get('from_email')}: {len(found)} נמענים ענו, "
-          f"{new} חדשים סומנו.")
+    for line in _check_campaigns([campaign]):
+        flash("בדיקת תשובות: " + line)
     # חוזרים לעמוד שממנו לחצו (עמוד הקמפיין או עמוד השליחה)
-    back = request.referrer or url_for("send_page", campaign_id=campaign_id)
-    return redirect(back)
+    return redirect(request.referrer or url_for("send_page", campaign_id=campaign_id))
 
 
 @app.route("/campaign/<int:campaign_id>/replied", methods=["POST"])
