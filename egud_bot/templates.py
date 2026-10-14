@@ -627,6 +627,9 @@ def _tidy(text: str) -> str:
     return text.strip()
 
 
+_LINK_RE = re.compile(r"\[([^\]\n]+)\]\((https?://[^)\s]+)\)")
+
+
 def render_custom(subject_tpl: str, body_tpl: str, **ctx):
     """
     מרנדר נוסח שנכתב באפליקציה. מחזיר (subject, html, text) באותו מבנה
@@ -637,10 +640,14 @@ def render_custom(subject_tpl: str, body_tpl: str, **ctx):
     body = _tidy(fill_placeholders(body_tpl, values))
 
     lines = [ln.strip() for ln in body.split("\n\n") if ln.strip()]
-    text = "\n\n".join(lines) + "\n"
+    # [טקסט לחיץ](https://...) -> קישור עם טקסט ב-HTML, "טקסט: כתובת" בטקסט רגיל
+    text = "\n\n".join(_LINK_RE.sub(r"\1:\n\2", ln) for ln in lines) + "\n"
     p = "margin:0 0 14px;"
     html_lines = "\n".join(
-        f'    <p style="{p}">{ln.replace(chr(10), "<br>")}</p>' for ln in lines)
+        f'    <p style="{p}">'
+        + _LINK_RE.sub(r'<a href="\2" style="color:#1a56db;font-weight:bold;">\1</a>',
+                       ln).replace(chr(10), "<br>")
+        + "</p>" for ln in lines)
     html = f"""<!DOCTYPE html>
 <html lang="he" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"></head>
