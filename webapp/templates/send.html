@@ -109,7 +109,14 @@
 </form>
 
 <div class="card">
-  <h2>נשלחו ({{ sent|length }})</h2>
+  <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+    <h2 style="margin:0;">נשלחו ({{ sent|length }})</h2>
+    {% if sent %}
+    <form method="post" action="{{ url_for('check_replies', campaign_id=campaign['id']) }}">
+      <button type="submit" class="ghost small">בדיקת תשובות בתיבה</button>
+    </form>
+    {% endif %}
+  </div>
   {% if not sent %}<p class="muted">עוד לא נשלח דבר בקמפיין הזה.</p>{% else %}
   <div class="scroll">
   <table>

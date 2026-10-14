@@ -460,10 +460,19 @@ class Storage:
                 "SELECT * FROM {leads} WHERE lower(email)=lower(?) LIMIT 1",
                 ((email or "").strip(),)).fetchone()
 
-    def sent_leads(self, variant: str = "", limit: int = 500):
-        """מי כבר קיבל מייל — לתצוגה באפליקציה."""
+    def sent_leads(self, variant: str = "", limit: int = 500, campaign_id: str = ""):
+        """
+        מי כבר קיבל מייל — לתצוגה באפליקציה.
+
+        campaign_id מצמצם לקמפיין אחד בלוח. כמה קמפיינים יכולים לחלוק מאגר
+        לידים אחד, ובלי הצמצום קמפיין חדש מציג כ"נשלחו" את מי שקיבל את
+        הקמפיין הקודם -- כאילו כבר שלחו להם את הגרסה החדשה.
+        """
         where = "status='emailed'"
         params = []
+        if campaign_id:
+            where += " AND campaign_id=?"
+            params.append(str(campaign_id))
         if variant:
             where += " AND variant=?"
             params.append(variant)

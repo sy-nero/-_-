@@ -416,7 +416,7 @@ def send_page(campaign_id):
         flash("לקמפיין הזה אין מאגר לידים מקושר")
         return redirect(url_for("campaign_edit", campaign_id=campaign_id))
 
-    limit = int(request.args.get("limit", 50))
+    limit = int(request.args.get("limit", 500))
     # ברירת המחדל: רק מי שיצא מהסריקה האחרונה של הקמפיין. המאגר מצטבר
     # ותפקידו למנוע שליחה כפולה, אבל אין סיבה להציג כאן את כל מה שנאסף אי פעם.
     run = store.run_of(campaign_id)
@@ -443,7 +443,8 @@ def send_page(campaign_id):
                            scan_only=bool(run_id), has_run=bool(run),
                            pool_total=st.pending_count_for(),
                            sample=previews[0] if previews else None,
-                           sent=st.sent_leads(campaign["variant"] or "", 200),
+                           sent=st.sent_leads(campaign["variant"] or "", 200,
+                                         campaign_id=str(campaign_id)),
                            tracking_on=bool(config.tracking_base_url),
                            senders=boxes.all(), sender_id=_col(campaign, "sender_id"),
                            env_sender=f"{env_name} <{env_from}>" if env_from else "")
@@ -487,6 +488,38 @@ def send_now(campaign_id):
         flash(f"השליחה נכשלה: {exc}")
         return redirect(url_for("send_page", campaign_id=campaign_id))
     flash(f"נשלחו {summary.get('sent', 0)} מיילים")
+    return redirect(url_for("send_page", campaign_id=campaign_id))
+
+
+@app.route("/campaign/<int:campaign_id>/check_replies", methods=["POST"])
+def check_replies(campaign_id):
+    """נכנס לתיבה שממנה נשלח הקמפיין ומסמן את מי שענה."""
+    from egud_bot import replies
+    campaign = store.get(campaign_id)
+    st = leads_store(campaign["source_campaign"]) if campaign else None
+    if not st:
+        return redirect(url_for("board"))
+    sender = sender_box.as_smtp(sender_box.SenderStore().get(_col(campaign, "sender_id")))
+    if not sender:
+        from_email, _, user, password = config.sender_for(campaign["source_campaign"])
+        host, _, _ = config.smtp_server_for(campaign["source_campaign"])
+        sender = {"from_email": from_email, "smtp_user": user,
+                  "smtp_password": password, "smtp_host": host}
+    sent = st.sent_leads(campaign["variant"] or "", 2000, campaign_id=str(campaign_id))
+    try:
+        found = replies.find_replies(sender, [l["email"] for l in sent])
+    except Exception as exc:  # noqa: BLE001
+        flash(f"לא הצלחתי להיכנס לתיבה {sender.get('from_email')}: {exc}. "
+              "צריך שיהיה מופעל בה IMAP (בהגדרות Gmail, העברה ו-POP/IMAP).")
+        return redirect(url_for("send_page", campaign_id=campaign_id))
+    new = 0
+    for lead in sent:
+        hit = found.get((lead["email"] or "").lower())
+        if hit and not lead["replied_at"]:
+            st.mark_replied(lead["email"], f"ענה: {hit[1]}"[:200])
+            new += 1
+    flash(f"נבדקה התיבה {sender.get('from_email')}: {len(found)} נמענים ענו, "
+          f"{new} חדשים סומנו.")
     return redirect(url_for("send_page", campaign_id=campaign_id))
 
 
