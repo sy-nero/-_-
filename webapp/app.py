@@ -357,15 +357,15 @@ def campaign_edit(campaign_id):
         return redirect(url_for("board"))
 
     if request.method == "POST":
-        store.update(campaign_id,
-                     title=(request.form.get("title") or "").strip(),
-                     kind=request.form.get("kind", "email"),
-                     started_on=(request.form.get("started_on") or "").strip(),
-                     source_campaign=(request.form.get("source_campaign") or "").strip(),
-                     variant=(request.form.get("variant") or "").strip(),
-                     search_query=(request.form.get("search_query") or "").strip(),
-                     subject_tpl=(request.form.get("subject_tpl") or "").strip(),
-                     body_tpl=(request.form.get("body_tpl") or "").strip())
+        # רק שדות שבאמת היו בטופס. במצב "טבלה" שדות הנוסח והחיפוש מוסתרים,
+        # ובלי הבדיקה הזאת כל שמירה מחקה את נושא המייל וגוף המייל של הקמפיין.
+        posted = {k: (request.form.get(k) or "").strip()
+                  for k in ("title", "started_on", "source_campaign", "variant",
+                            "search_query", "subject_tpl", "body_tpl")
+                  if k in request.form}
+        if "kind" in request.form:
+            posted["kind"] = request.form.get("kind", "email")
+        store.update(campaign_id, **posted)
         # שורה נמדדת שנשלחה עם המספר שהמערכת עצמה הציגה לא נשמרת כערך ידני.
         # אחרת כל לחיצה על "שמירה" מקפיאה את המספר של אותו רגע, והפתיחות
         # והתשובות שמגיעות אחר כך לא נכנסות יותר לטבלה.
