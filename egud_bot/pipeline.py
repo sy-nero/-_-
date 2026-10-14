@@ -73,7 +73,8 @@ def _area_of(lead) -> str:
     return names[0] if names else ""
 
 
-def build_ctx(cfg: Config, campaign: str, lead, field_hint: str = "") -> dict:
+def build_ctx(cfg: Config, campaign: str, lead, field_hint: str = "",
+              sender: dict | None = None) -> dict:
     """
     מרכיב את משתני התבנית מליד (שורת DB או מילון) לפי הקמפיין.
 
@@ -83,6 +84,9 @@ def build_ctx(cfg: Config, campaign: str, lead, field_hint: str = "") -> dict:
     בתחום שלו.
     """
     from_email, from_name, _, _ = cfg.sender_for(campaign)
+    if sender:
+        # תיבה שנבחרה בדפדפן גוברת על ההגדרה מ-.env
+        from_email, from_name = sender["from_email"], sender["from_name"] or from_name
     ctx = dict(
         business_name=_col(lead, "name"),
         association_name=cfg.association_name,
@@ -868,7 +872,8 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
                 campaign: str = "funding", skip_contacted: bool = False,
                 limit: int | None = None, confirm=None, confirm_batch=None,
                 variant: str = "", only=None, custom=None,
-                field: str = "", city: str = "", campaign_id: str = "") -> dict:
+                field: str = "", city: str = "", campaign_id: str = "",
+                sender: dict | None = None) -> dict:
     """
     שולח מייל ללידים חדשים שיש להם כתובת מייל (עד המכסה בהרצה).
     skip_contacted=True מדלג על כל מי שקיבל מייל באיזשהו קמפיין אחר
@@ -972,7 +977,7 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
     if confirm and not dry_run:
         approved = []
         for index, lead in enumerate(leads, 1):
-            ctx = build_ctx(cfg, campaign, lead, field_hint=field)
+            ctx = build_ctx(cfg, campaign, lead, field_hint=field, sender=sender)
             subject, _html, text = _render(template_campaign, ctx, custom)
             answer = confirm(lead, subject, text, index, len(leads), ctx.get("rec"))
             if answer == "quit":
@@ -1006,6 +1011,12 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
     # שולח לפי קמפיין (grant נשלח מהמייל האישי של מירי; אחרים מכתובת האיגוד)
     from_email, from_name, smtp_user, smtp_password = cfg.sender_for(campaign)
     smtp_host, smtp_port, smtp_use_ssl = cfg.smtp_server_for(campaign)
+    if sender:
+        # תיבה שנבחרה בדפדפן (עמוד "תיבות שליחה")
+        from_email, from_name = sender["from_email"], sender["from_name"] or from_name
+        smtp_user, smtp_password = sender["smtp_user"], sender["smtp_password"]
+        smtp_host, smtp_port = sender["smtp_host"], sender["smtp_port"]
+        smtp_use_ssl = sender["use_ssl"]
     with Mailer(
         host=smtp_host,
         port=smtp_port,
@@ -1020,7 +1031,7 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
         for lead in leads:
             subject, html, text = _render(
                 template_campaign,
-                build_ctx(cfg, campaign, lead, field_hint=field), custom)
+                build_ctx(cfg, campaign, lead, field_hint=field, sender=sender), custom)
             # פיקסל מעקב פתיחות (רק אם הוגדרה כתובת ציבורית)
             track_id = ""
             if cfg.tracking_base_url:

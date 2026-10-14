@@ -84,6 +84,21 @@
   </table>
   </div>
 
+  <div class="actionbar" style="flex-wrap:wrap;">
+    <label style="display:flex; gap:8px; align-items:center;">
+      <b>שליחה מ:</b>
+      <select name="sender_id" style="min-width:260px;">
+        <option value="" {{ 'selected' if not sender_id }}>
+          {{ env_sender or 'ברירת המחדל מ-.env' }} (ברירת מחדל)</option>
+        {% for b in senders %}
+        <option value="{{ b['id'] }}" {{ 'selected' if (b['id']|string) == (sender_id|string) }}>
+          {{ b['label'] or b['from_name'] }} &lt;{{ b['from_email'] }}&gt;
+          {% if not b['smtp_password'] %}(חסרה סיסמה){% endif %}</option>
+        {% endfor %}
+      </select>
+      <a class="muted" href="{{ url_for('senders_page') }}">ניהול תיבות</a>
+    </label>
+  </div>
   <div class="actionbar">
     <button type="submit">שליחה לנמענים שסומנו</button>
     <span id="chosen" class="muted">לא נבחר אף נמען</span>

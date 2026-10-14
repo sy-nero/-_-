@@ -35,6 +35,7 @@ from webapp.jobs import runner  # noqa: E402
 from egud_bot.campaigns import (CampaignStore, TEXT_FIELDS, AUTO_FIELDS,  # noqa: E402
                                 MANUAL_FIELDS, ALL_FIELDS)
 from egud_bot.storage import Storage  # noqa: E402
+from egud_bot import senders as sender_box  # noqa: E402
 
 app = Flask(__name__)
 app.secret_key = config.flask_secret_key
@@ -410,6 +411,9 @@ def send_page(campaign_id):
     all_pool = request.args.get("all") == "1"
     run_id = "" if all_pool or not run else str(run["id"])
     pending = st.leads_to_email(limit, run_id=run_id)
+    boxes = sender_box.SenderStore()
+    chosen = boxes.get(_col(campaign, "sender_id"))
+    sender = sender_box.as_smtp(chosen)
     previews = []
     for lead in pending:
         template_campaign = (f"{campaign['source_campaign']}_offer"
@@ -417,16 +421,20 @@ def send_page(campaign_id):
                              else campaign["source_campaign"])
         subject, _html, text = pipeline._render(
             template_campaign,
-            pipeline.build_ctx(config, campaign["source_campaign"], lead),
+            pipeline.build_ctx(config, campaign["source_campaign"], lead,
+                               sender=sender),
             custom_of(campaign))
         previews.append({"lead": lead, "subject": subject, "text": text})
+    env_from, env_name, _, _ = config.sender_for(campaign["source_campaign"])
 
     return render_template("send.html", campaign=campaign, previews=previews,
                            scan_only=bool(run_id), has_run=bool(run),
                            pool_total=st.pending_count_for(),
                            sample=previews[0] if previews else None,
                            sent=st.sent_leads(campaign["variant"] or "", 200),
-                           tracking_on=bool(config.tracking_base_url))
+                           tracking_on=bool(config.tracking_base_url),
+                           senders=boxes.all(), sender_id=_col(campaign, "sender_id"),
+                           env_sender=f"{env_name} <{env_from}>" if env_from else "")
 
 
 @app.route("/campaign/<int:campaign_id>/send", methods=["POST"])
@@ -441,15 +449,31 @@ def send_now(campaign_id):
         flash("לא נבחר אף נמען")
         return redirect(url_for("send_page", campaign_id=campaign_id))
 
-    errors = config.validate_for_email(campaign["source_campaign"])
-    if errors:
-        flash("חסרות הגדרות שליחה: " + ", ".join(errors))
-        return redirect(url_for("send_page", campaign_id=campaign_id))
+    # מאיזו תיבה לשלוח: נבחרת בעמוד השליחה ונזכרת לקמפיין לפעם הבאה
+    sender_id = (request.form.get("sender_id") or "").strip()
+    store.update(campaign_id, sender_id=sender_id)
+    sender = sender_box.as_smtp(sender_box.SenderStore().get(sender_id))
+    if sender:
+        errors = sender_box.missing(sender)
+        if errors:
+            flash("לתיבה שנבחרה חסר: " + ", ".join(errors)
+                  + ". אפשר להשלים בעמוד תיבות שליחה.")
+            return redirect(url_for("send_page", campaign_id=campaign_id))
+    else:
+        errors = config.validate_for_email(campaign["source_campaign"])
+        if errors:
+            flash("חסרות הגדרות שליחה: " + ", ".join(errors))
+            return redirect(url_for("send_page", campaign_id=campaign_id))
 
-    summary = pipeline.send_emails(
-        config, st, campaign=campaign["source_campaign"],
-        limit=len(chosen), variant=campaign["variant"] or "", only=chosen,
-        custom=custom_of(campaign), campaign_id=str(campaign_id))
+    try:
+        summary = pipeline.send_emails(
+            config, st, campaign=campaign["source_campaign"],
+            limit=len(chosen), variant=campaign["variant"] or "", only=chosen,
+            custom=custom_of(campaign), campaign_id=str(campaign_id),
+            sender=sender)
+    except Exception as exc:  # noqa: BLE001 — סיסמה שגויה וכו' מוצגים, לא 500
+        flash(f"השליחה נכשלה: {exc}")
+        return redirect(url_for("send_page", campaign_id=campaign_id))
     flash(f"נשלחו {summary.get('sent', 0)} מיילים")
     return redirect(url_for("send_page", campaign_id=campaign_id))
 
@@ -764,6 +788,46 @@ def phones_csv(campaign_id):
     data = "\ufeff" + buf.getvalue()      # BOM כדי שאקסל יציג עברית נכון
     return Response(data, mimetype="text/csv", headers={
         "Content-Disposition": f'attachment; filename="phones-{campaign_id}.csv"'})
+
+
+# ---------------------------- תיבות שליחה ----------------------------
+@app.route("/senders", methods=["GET", "POST"])
+def senders_page():
+    boxes = sender_box.SenderStore()
+    if request.method == "POST":
+        if not (request.form.get("from_email") or "").strip():
+            flash("חסרה כתובת מייל")
+            return redirect(url_for("senders_page"))
+        boxes.save(request.form.get("id") or None, **request.form.to_dict())
+        flash("התיבה נשמרה")
+        return redirect(url_for("senders_page"))
+    edit = boxes.get(request.args.get("edit"))
+    return render_template("senders.html", senders=boxes.all(), edit=edit)
+
+
+@app.route("/senders/<int:sender_id>/delete", methods=["POST"])
+def sender_delete(sender_id):
+    sender_box.SenderStore().delete(sender_id)
+    flash("התיבה נמחקה")
+    return redirect(url_for("senders_page"))
+
+
+@app.route("/senders/<int:sender_id>/test", methods=["POST"])
+def sender_test(sender_id):
+    """בודק שאפשר להתחבר לתיבה, בלי לשלוח כלום."""
+    from egud_bot.mailer import Mailer
+    sender = sender_box.as_smtp(sender_box.SenderStore().get(sender_id))
+    if not sender:
+        return redirect(url_for("senders_page"))
+    try:
+        with Mailer(host=sender["smtp_host"], port=sender["smtp_port"],
+                    user=sender["smtp_user"], password=sender["smtp_password"],
+                    from_email=sender["from_email"], use_ssl=sender["use_ssl"]):
+            pass
+        flash(f"החיבור ל-{sender['from_email']} עובד")
+    except Exception as exc:  # noqa: BLE001
+        flash(f"החיבור ל-{sender['from_email']} נכשל: {exc}")
+    return redirect(url_for("senders_page"))
 
 
 # ---------------------------- גיבוי ושחזור ----------------------------
