@@ -16,6 +16,7 @@ import os
 import json
 import sqlite3
 import logging
+import time
 from contextlib import contextmanager
 
 import requests
@@ -25,7 +26,9 @@ logger = logging.getLogger(__name__)
 API_BASE = "https://api.cloudflare.com/client/v4"
 # (חיבור, קריאה). קצר בכוונה: הגדרת D1 שגויה חייבת להיכשל מהר ולא
 # להשאיר בקשת HTTP תלויה עשרות שניות -- אחרת העמוד פשוט לא נטען.
-TIMEOUT = (5, 15)
+TIMEOUT = (10, 20)
+#: ניסיונות חוזרים כשהרשת מגמגמת (חיבור איטי מהבית, Wi-Fi שנרדם)
+RETRIES = 3
 
 
 def d1_configured() -> bool:
@@ -84,11 +87,23 @@ class D1Connection:
     # ---------- ביצוע ----------
     def execute(self, sql: str, params=()) -> D1Cursor:
         payload = {"sql": sql, "params": [_bind(p) for p in (params or [])]}
-        try:
-            resp = self.session.post(self.url, headers=self.headers,
-                                     json=payload, timeout=TIMEOUT)
-        except requests.RequestException as exc:
-            raise sqlite3.OperationalError(f"D1 לא נגיש: {exc}") from exc
+        # בקשה שלא הגיעה לשרת (חיבור שנכשל) בטוח לשלוח שוב. קריאה שנתקעה
+        # באמצע שולחים שוב רק לשאילתת SELECT, כי כתיבה אולי כבר בוצעה.
+        is_read = sql.lstrip()[:6].upper() in ("SELECT", "PRAGMA")
+        for attempt in range(RETRIES):
+            try:
+                resp = self.session.post(self.url, headers=self.headers,
+                                         json=payload, timeout=TIMEOUT)
+                break
+            except (requests.ConnectionError, requests.Timeout) as exc:
+                retry_ok = (is_read or isinstance(exc, requests.ConnectTimeout)
+                            or not isinstance(exc, requests.Timeout))
+                if attempt + 1 < RETRIES and retry_ok:
+                    time.sleep(1 + attempt)
+                    continue
+                raise sqlite3.OperationalError(f"D1 לא נגיש: {exc}") from exc
+            except requests.RequestException as exc:
+                raise sqlite3.OperationalError(f"D1 לא נגיש: {exc}") from exc
 
         try:
             data = resp.json()
