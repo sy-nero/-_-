@@ -868,6 +868,50 @@ def enrich_missing_emails(cfg: Config, storage: Storage, limit: int = 50,
     return summary
 
 
+#: מיילים שיצאו אבל לא נרשמו במסד (D1 לא היה נגיש ברגע הרישום). נשמר
+#: מקומית כדי שהשליחה הבאה לא תשלח להם שוב, ונרשם במסד בהזדמנות הבאה.
+UNRECORDED_PATH = os.path.join(os.getenv("DATA_DIR", "data"), "sent_unrecorded.json")
+
+
+def _load_unrecorded() -> list:
+    try:
+        with open(UNRECORDED_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return []
+
+
+def _save_unrecorded(items: list) -> None:
+    os.makedirs(os.path.dirname(UNRECORDED_PATH) or ".", exist_ok=True)
+    with open(UNRECORDED_PATH, "w", encoding="utf-8") as f:
+        json.dump(items, f, ensure_ascii=False)
+
+
+def _record_success(storage, lead, track_id, campaign_id, variant) -> None:
+    if track_id:
+        storage.set_track_id(lead["place_id"], track_id)
+    storage.mark_emailed(lead["place_id"], success=True, campaign_id=campaign_id)
+    if variant:
+        storage.set_variant(lead["place_id"], variant)
+    storage.record_sent(lead["email"])   # יומן קבוע נגד שליחה כפולה
+
+
+def _flush_unrecorded(storage) -> set:
+    """רושם במסד מה שנשלח ולא נרשם. מחזיר את הכתובות שעדיין לא נרשמו."""
+    left = []
+    for item in _load_unrecorded():
+        if item.get("leads") != storage.leads:
+            left.append(item)
+            continue
+        try:
+            _record_success(storage, item["lead"], item.get("track_id", ""),
+                            item.get("campaign_id", ""), item.get("variant", ""))
+        except Exception:  # noqa: BLE001 — ננסה שוב בפעם הבאה
+            left.append(item)
+    _save_unrecorded(left)
+    return {(i["lead"].get("email") or "").lower() for i in left}
+
+
 def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
                 campaign: str = "funding", skip_contacted: bool = False,
                 limit: int | None = None, confirm=None, confirm_batch=None,
@@ -893,7 +937,8 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
     # נוסח ב' הוא תבנית נפרדת; ברירת המחדל (ובנוסח א') היא תבנית הקמפיין
     template_campaign = f"{campaign}_offer" if variant == "b" else campaign
     # סינון לפי יומן שליחות קבוע: לעולם לא לשלוח שוב למי שכבר קיבל (גם אחרי מחיקת DB)
-    sent_before = storage.already_sent_emails()
+    pending = _flush_unrecorded(storage) if not dry_run else set()
+    sent_before = storage.already_sent_emails() | pending
     if skip_contacted:
         sent_before = sent_before | storage.contacted_any_campaign()
     all_candidates = storage.leads_to_email(10 ** 9)
@@ -1039,19 +1084,29 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
                 html = tracking.add_pixel(html, cfg.tracking_base_url, track_id)
             try:
                 mailer.send(lead["email"], subject, html, text)
-                if track_id:
-                    storage.set_track_id(lead["place_id"], track_id)
-                storage.mark_emailed(lead["place_id"], success=True,
-                                     campaign_id=campaign_id)
-                if variant:
-                    storage.set_variant(lead["place_id"], variant)
-                storage.record_sent(lead["email"])   # יומן קבוע נגד שליחה כפולה
-                summary["sent"] += 1
             except Exception as exc:  # noqa: BLE001
                 logger.warning("שליחה אל %s נכשלה: %s", lead["email"], exc)
                 storage.mark_emailed(lead["place_id"], success=False,
                                      error=str(exc), campaign_id=campaign_id)
                 summary["failed"] += 1
+                time.sleep(cfg.request_delay_seconds)
+                continue
+            summary["sent"] += 1
+            try:
+                _record_success(storage, lead, track_id, campaign_id, variant)
+            except Exception as exc:  # noqa: BLE001
+                # המייל יצא, אבל המסד לא זמין. שומרים מקומית כדי לא לשלוח
+                # לו שוב, ועוצרים: בלי מסד אי אפשר לדעת למי כבר נשלח.
+                items = _load_unrecorded()
+                items.append({"leads": storage.leads, "lead": dict(lead),
+                              "track_id": track_id, "campaign_id": campaign_id,
+                              "variant": variant or ""})
+                _save_unrecorded(items)
+                raise RuntimeError(
+                    f"נשלחו {summary['sent']} מיילים, ואז מסד הנתונים הפסיק לענות "
+                    f"({exc}). השליחה נעצרה כדי לא לשלוח פעמיים. "
+                    "אפשר פשוט לנסות שוב בעוד כמה דקות: מי שכבר קיבל לא יקבל שוב."
+                ) from exc
             time.sleep(cfg.request_delay_seconds)
 
     logger.info("סיכום שליחה: %s", summary)

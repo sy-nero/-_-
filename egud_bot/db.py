@@ -13,6 +13,7 @@ SQL בדיוק, ולכן כל השאילתות בקוד עובדות בשתי ה
 קטנות, ולכן סריקה מול D1 איטית יותר מסריקה מול קובץ מקומי.
 """
 import os
+import re
 import json
 import sqlite3
 import logging
@@ -26,9 +27,9 @@ logger = logging.getLogger(__name__)
 API_BASE = "https://api.cloudflare.com/client/v4"
 # (חיבור, קריאה). קצר בכוונה: הגדרת D1 שגויה חייבת להיכשל מהר ולא
 # להשאיר בקשת HTTP תלויה עשרות שניות -- אחרת העמוד פשוט לא נטען.
-TIMEOUT = (10, 20)
+TIMEOUT = (10, 30)
 #: ניסיונות חוזרים כשהרשת מגמגמת (חיבור איטי מהבית, Wi-Fi שנרדם)
-RETRIES = 3
+RETRIES = 4
 
 
 def d1_configured() -> bool:
@@ -71,6 +72,19 @@ class D1Cursor:
         return iter(self.fetchall())
 
 
+def _idempotent(sql: str) -> bool:
+    head = sql.lstrip()[:7].upper()
+    if head.startswith(("SELECT", "PRAGMA")):
+        return True
+    if re.search(r"(\w+)\s*=\s*\1\s*\+", sql):      # open_count = open_count + 1
+        return False
+    if head.startswith("UPDATE") or head.startswith("DELETE"):
+        return True
+    upper = sql.upper()
+    return head.startswith("INSERT") and ("ON CONFLICT" in upper or "OR IGNORE" in upper
+                                          or "OR REPLACE" in upper)
+
+
 class D1Connection:
     """מדמה את ממשק sqlite3.Connection שהקוד שלנו משתמש בו, מול D1 API."""
 
@@ -87,23 +101,30 @@ class D1Connection:
     # ---------- ביצוע ----------
     def execute(self, sql: str, params=()) -> D1Cursor:
         payload = {"sql": sql, "params": [_bind(p) for p in (params or [])]}
-        # בקשה שלא הגיעה לשרת (חיבור שנכשל) בטוח לשלוח שוב. קריאה שנתקעה
-        # באמצע שולחים שוב רק לשאילתת SELECT, כי כתיבה אולי כבר בוצעה.
-        is_read = sql.lstrip()[:6].upper() in ("SELECT", "PRAGMA")
+        # בקשה שלא הגיעה לשרת (חיבור שנכשל) בטוח לשלוח שוב. בקשה שנתקעה
+        # באמצע שולחים שוב רק כשהרצה כפולה לא משנה דבר: קריאה, או כתיבה
+        # שקובעת ערך (UPDATE ... SET status=?, INSERT ... ON CONFLICT).
+        # INSERT רגיל או ספירה (x = x + 1) עלולים להיכפל, ולכן לא חוזרים עליהם.
+        safe = _idempotent(sql)
         for attempt in range(RETRIES):
+            last = attempt + 1 == RETRIES
             try:
                 resp = self.session.post(self.url, headers=self.headers,
                                          json=payload, timeout=TIMEOUT)
-                break
             except (requests.ConnectionError, requests.Timeout) as exc:
-                retry_ok = (is_read or isinstance(exc, requests.ConnectTimeout)
-                            or not isinstance(exc, requests.Timeout))
-                if attempt + 1 < RETRIES and retry_ok:
-                    time.sleep(1 + attempt)
+                sent = isinstance(exc, requests.ReadTimeout) or "aborted" in str(exc)
+                if not last and (safe or not sent):
+                    time.sleep(2 ** attempt)
                     continue
                 raise sqlite3.OperationalError(f"D1 לא נגיש: {exc}") from exc
             except requests.RequestException as exc:
                 raise sqlite3.OperationalError(f"D1 לא נגיש: {exc}") from exc
+            # 429 = יותר מדי בקשות לחשבון Cloudflare בבת אחת; 5xx = תקלה רגעית.
+            # הבקשה לא בוצעה, ולכן בטוח לנסות שוב אחרי המתנה.
+            if (resp.status_code == 429 or resp.status_code >= 500) and not last:
+                time.sleep(2 ** attempt + (3 if resp.status_code == 429 else 0))
+                continue
+            break
 
         try:
             data = resp.json()
