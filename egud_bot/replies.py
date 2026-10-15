@@ -50,6 +50,27 @@ def _is_auto(msg) -> bool:
     return any(k in subject for k in _AUTO_SUBJECT)
 
 
+def _fetch(conn, ids: list, query: str) -> list:
+    """
+    FETCH שלא נופל בגלל הודעה אחת. Gmail מחזיר לפעמים "System Error" על
+    קבוצת הודעות (הודעה פגומה, עומס רגעי). אז מחלקים לחצאים עד שמגיעים
+    להודעה הבעייתית, ומדלגים רק עליה.
+    """
+    if not ids:
+        return []
+    try:
+        status, rows = conn.fetch(b",".join(ids), query)
+        return rows if status == "OK" else []
+    except imaplib.IMAP4.abort:
+        raise   # החיבור נסגר: אין טעם להמשיך עליו
+    except imaplib.IMAP4.error as exc:
+        if len(ids) == 1:
+            logger.warning("דילוג על הודעה %s: %s", ids[0], exc)
+            return []
+        mid = len(ids) // 2
+        return _fetch(conn, ids[:mid], query) + _fetch(conn, ids[mid:], query)
+
+
 def find_replies(sender: dict, recipients, since_days: int = 60) -> dict:
     """
     מחזיר {"replies": {נמען: (תאריך, נושא)}, "bounces": {נמען: סיבה}}.
@@ -73,11 +94,9 @@ def find_replies(sender: dict, recipients, since_days: int = 60) -> dict:
         ids = (data[0] or b"").split() if status == "OK" else []
         system_ids = []
         for start in range(0, len(ids), 200):
-            chunk = b",".join(ids[start:start + 200])
-            status, rows = conn.fetch(
-                chunk, "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE X-FAILED-RECIPIENTS AUTO-SUBMITTED X-AUTOREPLY X-AUTORESPOND PRECEDENCE)])")
-            if status != "OK":
-                continue
+            rows = _fetch(conn, ids[start:start + 200],
+                          "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE X-FAILED-RECIPIENTS "
+                          "AUTO-SUBMITTED X-AUTOREPLY X-AUTORESPOND PRECEDENCE)])")
             for row in rows:
                 if not isinstance(row, tuple):
                     continue
@@ -107,9 +126,7 @@ def find_replies(sender: dict, recipients, since_days: int = 60) -> dict:
                             out["replies"][addr] = (when, _text(msg.get("Subject", "")))
         # הודעות מערכת בלי כותרת: מחפשים את הכתובת בתחילת הגוף
         for msg_id in system_ids:
-            status, rows = conn.fetch(msg_id, "(BODY.PEEK[TEXT]<0.6000>)")
-            if status != "OK":
-                continue
+            rows = _fetch(conn, [msg_id], "(BODY.PEEK[TEXT]<0.6000>)")
             body = b"".join(r[1] for r in rows if isinstance(r, tuple)).decode(
                 "utf-8", "replace").lower()
             for addr in wanted:
