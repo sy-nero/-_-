@@ -622,12 +622,32 @@ def _tidy(text: str) -> str:
         text = "\n".join(kept)
         text = re.sub(r"\n{3,}", "\n\n", text)
     text = re.sub(r"[ \t]{2,}", " ", text)
-    text = re.sub(r"\s+([,.!?])", r"\1", text)
+    # "!" שפותח תמונה (![](...)) אינו סימן פיסוק ולא נצמד לשורה הקודמת
+    text = re.sub(r"\s+([,.?]|!(?!\[))", r"\1", text)
     text = re.sub(r"^([^\S\n]*\S+)[ \t]*,", r"\1,", text, flags=re.M)
     return text.strip()
 
 
 _LINK_RE = re.compile(r"\[([^\]\n]+)\]\((https?://[^)\s]+)\)")
+
+#: תמונה מתוך assets/campaign_media שמוטמעת במייל: ![](שם_קובץ), ועם קישור
+#: סביבה [![](שם_קובץ)](https://...). קובץ GIF מונפש מתנגן בתוך המייל.
+_IMAGE_RE = re.compile(
+    r"(?:\[)?!\[\]\(([\w.-]+\.(?:gif|png|jpe?g))\)(?:\]\((https?://[^)\s]+)\))?")
+
+
+def _image_html(match) -> str:
+    img = (f'<img src="cid:{match.group(1)}" alt="" width="480" '
+           'style="display:block;width:100%;max-width:480px;height:auto;border:0;'
+           'border-radius:8px;">')
+    if match.group(2):
+        return f'<a href="{match.group(2)}">{img}</a>'
+    return img
+
+
+def _image_text(match) -> str:
+    # בגרסת הטקסט אין תמונה, והקישור שלה מופיע ממילא בהמשך הנוסח
+    return ""
 
 
 def render_custom(subject_tpl: str, body_tpl: str, **ctx):
@@ -641,12 +661,15 @@ def render_custom(subject_tpl: str, body_tpl: str, **ctx):
 
     lines = [ln.strip() for ln in body.split("\n\n") if ln.strip()]
     # [טקסט לחיץ](https://...) -> קישור עם טקסט ב-HTML, "טקסט: כתובת" בטקסט רגיל
-    text = "\n\n".join(_LINK_RE.sub(r"\1:\n\2", ln) for ln in lines) + "\n"
+    def plain(ln):
+        ln = _IMAGE_RE.sub(_image_text, ln)
+        return _LINK_RE.sub(lambda m: m.group(1).rstrip(" >»") + ":\n" + m.group(2), ln)
+    text = "\n\n".join(t for t in map(plain, lines) if t.strip()) + "\n"
     p = "margin:0 0 14px;"
     html_lines = "\n".join(
         f'    <p style="{p}">'
         + _LINK_RE.sub(r'<a href="\2" style="color:#1a56db;font-weight:bold;">\1</a>',
-                       ln).replace(chr(10), "<br>")
+                       _IMAGE_RE.sub(_image_html, ln)).replace(chr(10), "<br>")
         + "</p>" for ln in lines)
     html = f"""<!DOCTYPE html>
 <html lang="he" dir="rtl"><head><meta charset="utf-8">
