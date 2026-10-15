@@ -33,6 +33,23 @@ def _text(value) -> str:
         return value or ""
 
 
+# מענה אוטומטי: לפי הכותרות הסטנדרטיות, ולפי ניסוחים נפוצים בנושא
+_AUTO_SUBJECT = ("automatic reply", "auto reply", "autoreply", "out of office",
+                 "מענה אוטומטי", "תשובה אוטומטית", "תודה שפניתם", "תודה על פנייתך",
+                 "תודה על פנייתכם", "קיבלנו את פנייתך", "מחוץ למשרד")
+
+
+def _is_auto(msg) -> bool:
+    if (msg.get("Auto-Submitted") or "no").strip().lower() not in ("", "no"):
+        return True
+    if msg.get("X-Autoreply") or msg.get("X-Autorespond"):
+        return True
+    if (msg.get("Precedence") or "").strip().lower() in ("auto_reply", "bulk", "junk"):
+        return True
+    subject = _text(msg.get("Subject", "")).lower()
+    return any(k in subject for k in _AUTO_SUBJECT)
+
+
 def find_replies(sender: dict, recipients, since_days: int = 60) -> dict:
     """
     מחזיר {"replies": {נמען: (תאריך, נושא)}, "bounces": {נמען: סיבה}}.
@@ -58,7 +75,7 @@ def find_replies(sender: dict, recipients, since_days: int = 60) -> dict:
         for start in range(0, len(ids), 200):
             chunk = b",".join(ids[start:start + 200])
             status, rows = conn.fetch(
-                chunk, "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE X-FAILED-RECIPIENTS)])")
+                chunk, "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE X-FAILED-RECIPIENTS AUTO-SUBMITTED X-AUTOREPLY X-AUTORESPOND PRECEDENCE)])")
             if status != "OK":
                 continue
             for row in rows:
@@ -77,10 +94,12 @@ def find_replies(sender: dict, recipients, since_days: int = 60) -> dict:
                         msg_id = row[0].split()[0]
                         system_ids.append(msg_id)
                     continue
+                if _is_auto(msg):
+                    continue   # מענה אוטומטי ("תודה שפניתם", "אני מחוץ למשרד") אינו תשובה
                 for addr in senders:
                     if addr in wanted:
                         try:
-                            when = parsedate_to_datetime(msg.get("Date")).isoformat()
+                            when = parsedate_to_datetime(msg.get("Date")).astimezone(timezone.utc).isoformat()
                         except Exception:  # noqa: BLE001
                             when = ""
                         prev = out["replies"].get(addr)

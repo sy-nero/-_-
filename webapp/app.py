@@ -532,15 +532,24 @@ def _check_campaigns(campaigns) -> list[str]:
             lines.append(f"לא הצלחתי להיכנס לתיבה {key}: {exc}")
             continue
         found, bounces = result["replies"], result["bounces"]
-        new = 0
+        # נמען שקיבל כמה קמפיינים: התשובה שייכת לשליחה האחרונה שקדמה לה,
+        # ולא לכל הקמפיינים שהוא היה בהם
+        sends = {}
         for st, sent in box["items"]:
             for lead in sent:
-                addr = (lead["email"] or "").lower()
-                hit = found.get(addr)
-                if hit and not lead["replied_at"]:
+                sends.setdefault((lead["email"] or "").lower(), []).append((st, lead))
+        new = 0
+        for addr, items in sends.items():
+            hit = found.get(addr)
+            if hit:
+                when = hit[0] or "9999"
+                before = [it for it in items if (it[1]["emailed_at"] or "") <= when]
+                st, lead = max(before or items, key=lambda it: it[1]["emailed_at"] or "")
+                if not lead["replied_at"]:
                     st.mark_replied(lead["email"], f"ענה: {hit[1]}"[:200])
                     new += 1
-                if addr in bounces:
+            if addr in bounces:
+                for st, lead in items:
                     st.mark_bounced(lead["email"], f"המייל חזר: {bounces[addr]}"[:200])
         lines.append(f"{key}: {len(found)} ענו ({new} חדשים), {len(bounces)} מיילים חזרו")
     return lines or ["אין עדיין קמפיינים שנשלחו מהם מיילים"]
