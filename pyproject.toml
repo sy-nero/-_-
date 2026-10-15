@@ -1,0 +1,21 @@
+# הגדרות הפרויקט לפריסה ב-Vercel.
+#
+# Vercel מחפש נקודת כניסה בשמות קבועים (app.py, index.py, main.py...), ובשורש
+# הפרויקט יש main.py שהוא כלי ה-CLI ואין בו אובייקט app. לכן מצביעים כאן
+# במפורש על אפליקציית ה-Flask.
+#
+# רשימת התלויות חייבת להישאר זהה ל-requirements.txt, שממנו Render מתקין.
+
+[project]
+name = "sy-nero-campaigns"
+version = "1.0.0"
+requires-python = ">=3.12"
+dependencies = [
+    "requests>=2.31.0",
+    "beautifulsoup4>=4.12.0",
+    "python-dotenv>=1.0.0",
+    "Flask>=3.0.0",
+]
+
+[tool.vercel]
+entrypoint = "webapp.app:app"

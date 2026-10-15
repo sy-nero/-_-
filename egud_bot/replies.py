@@ -1,0 +1,140 @@
+"""
+בדיקת תשובות: מי מהנמענים כתב בחזרה.
+
+השליחה יוצאת ב-SMTP, ולכן האפליקציה לא רואה מה נכנס לתיבה. כאן נכנסים
+לאותה תיבה ב-IMAP, עם אותה סיסמת אפליקציה, ומחפשים מיילים שהגיעו
+מכתובות שנשלח אליהן. לא נוגעים במיילים, רק קוראים כותרות (BODY.PEEK),
+כך שהם נשארים "לא נקראו" בתיבה.
+"""
+import email
+import imaplib
+import logging
+from datetime import datetime, timedelta, timezone
+from email.header import decode_header, make_header
+from email.utils import getaddresses, parsedate_to_datetime
+
+logger = logging.getLogger(__name__)
+
+# כתובות שהן לא תשובה של אדם: החזרות של מערכת הדואר
+_SYSTEM = ("mailer-daemon@", "postmaster@", "no-reply@", "noreply@")
+
+
+def imap_host_for(smtp_host: str) -> str:
+    host = (smtp_host or "").strip().lower()
+    if not host or "gmail" in host or "google" in host:
+        return "imap.gmail.com"
+    return host.replace("smtp.", "imap.", 1)
+
+
+def _text(value) -> str:
+    try:
+        return str(make_header(decode_header(value or "")))
+    except Exception:  # noqa: BLE001
+        return value or ""
+
+
+# מענה אוטומטי: לפי הכותרות הסטנדרטיות, ולפי ניסוחים נפוצים בנושא
+_AUTO_SUBJECT = ("automatic reply", "auto reply", "autoreply", "out of office",
+                 "מענה אוטומטי", "תשובה אוטומטית", "תודה שפניתם", "תודה על פנייתך",
+                 "תודה על פנייתכם", "קיבלנו את פנייתך", "מחוץ למשרד")
+
+
+def _is_auto(msg) -> bool:
+    if (msg.get("Auto-Submitted") or "no").strip().lower() not in ("", "no"):
+        return True
+    if msg.get("X-Autoreply") or msg.get("X-Autorespond"):
+        return True
+    if (msg.get("Precedence") or "").strip().lower() in ("auto_reply", "bulk", "junk"):
+        return True
+    subject = _text(msg.get("Subject", "")).lower()
+    return any(k in subject for k in _AUTO_SUBJECT)
+
+
+def _fetch(conn, ids: list, query: str) -> list:
+    """
+    FETCH שלא נופל בגלל הודעה אחת. Gmail מחזיר לפעמים "System Error" על
+    קבוצת הודעות (הודעה פגומה, עומס רגעי). אז מחלקים לחצאים עד שמגיעים
+    להודעה הבעייתית, ומדלגים רק עליה.
+    """
+    if not ids:
+        return []
+    try:
+        status, rows = conn.fetch(b",".join(ids), query)
+        return rows if status == "OK" else []
+    except imaplib.IMAP4.abort:
+        raise   # החיבור נסגר: אין טעם להמשיך עליו
+    except imaplib.IMAP4.error as exc:
+        if len(ids) == 1:
+            logger.warning("דילוג על הודעה %s: %s", ids[0], exc)
+            return []
+        mid = len(ids) // 2
+        return _fetch(conn, ids[:mid], query) + _fetch(conn, ids[mid:], query)
+
+
+def find_replies(sender: dict, recipients, since_days: int = 60) -> dict:
+    """
+    מחזיר {"replies": {נמען: (תאריך, נושא)}, "bounces": {נמען: סיבה}}.
+
+    תשובה = מייל שהגיע מכתובת של נמען. החזרה = הודעת מערכת (mailer-daemon)
+    על נמען שהמייל אליו לא נמסר. Gmail שם את הכתובת בכותרת
+    X-Failed-Recipients; אם היא חסרה, מחפשים את הכתובת בתחילת גוף ההודעה.
+    sender: from_email / smtp_user / smtp_password / smtp_host.
+    """
+    wanted = {(r or "").strip().lower() for r in recipients if r}
+    wanted = {w for w in wanted if w and not w.startswith(_SYSTEM)}
+    out = {"replies": {}, "bounces": {}}
+    if not wanted:
+        return out
+    since = (datetime.now(timezone.utc) - timedelta(days=since_days)).strftime("%d-%b-%Y")
+    conn = imaplib.IMAP4_SSL(imap_host_for(sender.get("smtp_host")), 993)
+    try:
+        conn.login(sender.get("smtp_user") or sender["from_email"], sender["smtp_password"])
+        conn.select("INBOX", readonly=True)
+        status, data = conn.search(None, "SINCE", since)
+        ids = (data[0] or b"").split() if status == "OK" else []
+        system_ids = []
+        for start in range(0, len(ids), 200):
+            rows = _fetch(conn, ids[start:start + 200],
+                          "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE X-FAILED-RECIPIENTS "
+                          "AUTO-SUBMITTED X-AUTOREPLY X-AUTORESPOND PRECEDENCE)])")
+            for row in rows:
+                if not isinstance(row, tuple):
+                    continue
+                msg = email.message_from_bytes(row[1])
+                senders = [a.strip().lower() for _, a in getaddresses([msg.get("From", "")])]
+                if any(a.startswith(_SYSTEM) for a in senders):
+                    failed = [a.strip().lower() for _, a in
+                              getaddresses([msg.get("X-Failed-Recipients", "")])]
+                    hits = [a for a in failed if a in wanted]
+                    if hits:
+                        for a in hits:
+                            out["bounces"][a] = _text(msg.get("Subject", "")) or "המייל חזר"
+                    else:
+                        msg_id = row[0].split()[0]
+                        system_ids.append(msg_id)
+                    continue
+                if _is_auto(msg):
+                    continue   # מענה אוטומטי ("תודה שפניתם", "אני מחוץ למשרד") אינו תשובה
+                for addr in senders:
+                    if addr in wanted:
+                        try:
+                            when = parsedate_to_datetime(msg.get("Date")).astimezone(timezone.utc).isoformat()
+                        except Exception:  # noqa: BLE001
+                            when = ""
+                        prev = out["replies"].get(addr)
+                        if not prev or when > prev[0]:
+                            out["replies"][addr] = (when, _text(msg.get("Subject", "")))
+        # הודעות מערכת בלי כותרת: מחפשים את הכתובת בתחילת הגוף
+        for msg_id in system_ids:
+            rows = _fetch(conn, [msg_id], "(BODY.PEEK[TEXT]<0.6000>)")
+            body = b"".join(r[1] for r in rows if isinstance(r, tuple)).decode(
+                "utf-8", "replace").lower()
+            for addr in wanted:
+                if addr in body:
+                    out["bounces"].setdefault(addr, "המייל חזר")
+    finally:
+        try:
+            conn.logout()
+        except Exception:  # noqa: BLE001
+            pass
+    return out

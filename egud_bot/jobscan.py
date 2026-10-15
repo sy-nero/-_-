@@ -46,11 +46,19 @@ def _extract_company(card_text: str) -> str | None:
         return None
     return comp
 
-# דומיינים של רשתות חברתיות/דרושים שאינם "אתר החברה"
+# דומיינים שאינם "אתר החברה": רשתות חברתיות, לוחות דרושים, ובעיקר
+# אינדקסים עסקיים ישראליים. בלי האחרונים כל חיפוש "מצליח" — הוא מחזיר
+# את כרטיס העסק באינדקס במקום את האתר, ושם ממילא אין מייל.
 _SKIP_DOMAINS = (
     "facebook.", "instagram.", "linkedin.", "youtube.", "drushim.",
     "alljobs.", "jobmaster.", "indeed.", "glassdoor.", "google.",
     "wikipedia.", "gov.il", "twitter.", "tiktok.", "waze.",
+    # אינדקסים ומדריכים עסקיים
+    "b144.", "d.co.il", "dapey", "zap.co.il", "easy.co.il", "144.",
+    "yad2.", "bizmaknet", "nadlan", "xnet.", "mapa.co.il", "bezeq",
+    "rest.co.il", "kolzchut", "bhol.", "ynet.", "walla.", "mako.",
+    "themarker.", "globes.", "calcalist.", "pinterest.", "yelp.",
+    "tripadvisor.", "whatsapp.", "t.me", "telegram.",
 )
 
 _UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) "
@@ -65,45 +73,196 @@ def _first_good_host(urls) -> str | None:
     return None
 
 
+# מילות שירות: הליבה היא שם עצם שמסמן מקצוע ("יועץ", "ייעוץ"), והמילוי
+# הוא תארים שנלווים אליו ("עסקי", "פיננסי"). ההפרדה חשובה — "המרכז
+# לתודעה פיננסית" הוא שם עסק לגיטימי, ואילו "ייעוץ פיננסי" הוא תיאור.
+_SERVICE_CORE = {
+    "ייעוץ", "יעוץ", "יועץ", "יועצת", "ייעוצי", "מאמן", "מאמנת", "אימון",
+    "ליווי", "תכנון", "הכוונה", "הדרכה", "consulting", "coaching",
+    "consultant", "advisor",
+}
+_SERVICE_FILLER = {
+    "עסקי", "עסקית", "עסקים", "פיננסי", "פיננסית", "פנסיוני", "פנסיונית",
+    "כלכלי", "כלכלית", "אישי", "אישית", "מנטלי", "ומנטלי", "מס", "משכנתאות",
+    "השקעות", "ומימון", "מימון", "סיכונים", "ניהול", "business", "financial",
+    "ו", "של", "ל", "-",
+}
+_SPLIT_RE = re.compile(r"\s*[,|;]\s*|\s+[-–—]\s+")
+
+
+def _clean_company_name(name: str) -> str:
+    """
+    מנקה שם עסק מ-Google Places לכדי משהו שאפשר לחפש.
+
+    כרטיסי Google Maps עמוסים במילות מפתח, ולא בשם:
+      "ייעוץ פנסיוני, ייעוץ פיננסי, ייעוץ עסקי - המרכז לתודעה פיננסית - מזל צובאלי"
+    חיפוש של המחרוזת הזאת כמו שהיא לא מחזיר כלום בשום מנוע. לוקחים את
+    החלק הראשון שאינו תיאור שירות, וחותכים אותו לפני מילת השירות הראשונה.
+    """
+    raw = (name or "").strip().strip(".")
+    if not raw:
+        return ""
+
+    segments = [seg.strip(" .־-") for seg in _SPLIT_RE.split(raw)]
+    segments = [seg for seg in segments if seg]
+
+    def words_of(seg):
+        return [w for w in re.split(r"\s+", seg) if w]
+
+    def norm(word):
+        """ו' החיבור מסתירה מילה מהאוצר: "ומשכנתאות" היא "משכנתאות"."""
+        w = word.strip("־-").lower()
+        if len(w) > 3 and w.startswith("ו"):
+            w = w[1:]
+        return w
+
+    def is_service(word):
+        w = norm(word)
+        return w in _SERVICE_CORE or w in _SERVICE_FILLER
+
+    def is_description(seg):
+        ws = [norm(w) for w in words_of(seg)]
+        ws = [w for w in ws if w]
+        return bool(ws) and all(w in _SERVICE_CORE or w in _SERVICE_FILLER
+                                for w in ws)
+
+    chosen = next((seg for seg in segments if not is_description(seg)),
+                  segments[0] if segments else raw)
+
+    # להוריד תיאור שפותח את השם: "יועץ עסקי דוד כהן" -> "דוד כהן"
+    ws = words_of(chosen)
+    lead_cut = 0
+    while lead_cut < len(ws) and is_service(ws[lead_cut]):
+        lead_cut += 1
+    tail = ws[lead_cut:]
+    # לא למחוק שם שכולו תיאור, ולא להשאיר שריד חסר משמעות
+    if lead_cut and (len(tail) >= 2 or (len(tail) == 1 and len(tail[0]) >= 4)):
+        chosen = " ".join(tail)
+
+    # לחתוך לפני מילת השירות הראשונה: "דוד סלאנים יעוץ משכנתאות" -> "דוד סלאנים"
+    ws = words_of(chosen)
+    for i, w in enumerate(ws):
+        if norm(w) in _SERVICE_CORE:
+            head = ws[:i]
+            # לא לחתוך עד כדי שריד חסר משמעות: "Betty Coach Therapy" -> "Betty"
+            if len(head) >= 2 or (len(head) == 1 and len(head[0]) >= 6):
+                chosen = " ".join(head)
+            break
+
+    return chosen.strip() or raw
+
+
+class SearchQuotaError(RuntimeError):
+    """מכסת החיפוש היומית נגמרה. אין טעם להמשיך לנסות."""
+
+
+class SearchKeyError(RuntimeError):
+    """מפתח החיפוש אינו תקין. אין טעם להמשיך לנסות איתו."""
+
+
 def _search_google(company: str, key: str, cx: str) -> str | None:
-    """Google Custom Search API — אמין, לא נחסם."""
+    """
+    Google Custom Search API.
+
+    כל שגיאה נרשמת ללוג. הגרסה הקודמת החזירה רשימה ריקה בשקט על כל קוד
+    שאינו 200, ולכן 77 בקשות שנכשלו נראו בדיוק כמו 77 חיפושים שלא מצאו
+    כלום -- בלי שום רמז לסיבה.
+    """
     try:
         r = requests.get(
             "https://www.googleapis.com/customsearch/v1",
             params={"key": key, "cx": cx, "q": f"{company} אתר רשמי", "num": 5},
             timeout=20,
         )
-        items = r.json().get("items", []) if r.status_code == 200 else []
-    except (requests.RequestException, ValueError):
+    except requests.RequestException as exc:
+        logger.warning("חיפוש Google נכשל (רשת): %s", str(exc)[:120])
         return None
-    return _first_good_host(it.get("link", "") for it in items)
+
+    if r.status_code == 200:
+        try:
+            return _first_good_host(it.get("link", "")
+                                    for it in r.json().get("items", []))
+        except ValueError:
+            logger.warning("חיפוש Google החזיר תשובה לא תקינה")
+            return None
+
+    # שגיאה: מוציאים את ההודעה של גוגל, בלי המפתח שנמצא ב-URL
+    try:
+        message = (r.json().get("error", {}).get("message") or "")[:160]
+    except ValueError:
+        message = r.text[:160]
+    low = message.lower()
+    if r.status_code in (429, 403) and ("quota" in low or "limit" in low
+                                        or r.status_code == 429):
+        raise SearchQuotaError(message or "המכסה היומית נגמרה")
+    # מפתח פסול לא יתקן את עצמו בליד הבא. מדווחים פעם אחת ומפסיקים
+    # לנסות, במקום לשרוף בקשה כושלת על כל ליד ברשימה.
+    if r.status_code in (400, 403) and ("api key" in low or "api_key" in low
+                                        or "keyinvalid" in low):
+        raise SearchKeyError(message or "המפתח אינו תקין")
+    logger.warning("חיפוש Google נכשל (קוד %s): %s", r.status_code, message)
+    return None
 
 
 def _search_ddg(company: str) -> str | None:
-    """DuckDuckGo (חינמי, אך נחסם אחרי מספר חיפושים) — גיבוי בלבד."""
+    """
+    DuckDuckGo (חינמי, אך נחסם אחרי מספר חיפושים) — גיבוי.
+
+    כמו ב-_search_google, כל מסלול כישלון מדווח. בלי זה "נחסמנו",
+    "המבנה של הדף השתנה" ו"באמת אין אתק" נראים אותו דבר בדיוק: None.
+    """
     time.sleep(4.0)
+    query = f"{company} אתר רשמי"
+    logger.debug("DuckDuckGo: %s", query)
     try:
         r = requests.get("https://html.duckduckgo.com/html/",
-                         params={"q": f"{company} אתר רשמי"}, headers=_UA, timeout=20)
-    except requests.RequestException:
+                         params={"q": query}, headers=_UA, timeout=20)
+    except requests.RequestException as exc:
+        logger.warning("חיפוש DuckDuckGo נכשל (רשת): %s", str(exc)[:120])
         return None
     if r.status_code != 200:
+        logger.warning("חיפוש DuckDuckGo נכשל (קוד %s) — ייתכן שנחסמנו "
+                       "בגלל קצב החיפושים.", r.status_code)
         return None
+
     soup = BeautifulSoup(r.text, "html.parser")
+    # DuckDuckGo שינה לא פעם את מבנה הדף. הסלקטור הישן נשאר ראשון,
+    # ואם הוא לא תופס כלום לוקחים כל קישור תוצאה לפי הפרמטר uddg.
+    anchors = soup.select("a.result__a") or soup.select("a[href*='uddg=']")
     urls = []
-    for a in soup.select("a.result__a"):
+    for a in anchors:
         href = a.get("href") or ""
         if "uddg=" in href:
             href = unquote(parse_qs(urlparse(href).query).get("uddg", [""])[0])
         urls.append(href)
-    return _first_good_host(urls)
+
+    if not urls:
+        blocked = ("anomaly" in r.text.lower() or "unusual traffic" in r.text.lower()
+                   or "captcha" in r.text.lower())
+        logger.warning("DuckDuckGo החזיר דף בלי תוצאות (%s).",
+                       "נראה שנחסמנו" if blocked else "אולי המבנה השתנה")
+        return None
+
+    site = _first_good_host(urls)
+    if not site:
+        logger.debug("  כל %d התוצאות נפסלו (רשתות חברתיות/אינדקסים).", len(urls))
+    else:
+        logger.debug("  נמצא: %s", site)
+    return site
 
 
 def _find_company_website(company: str, delay: float = 1.0,
                           search_key: str = "", search_cx: str = "") -> str | None:
-    """מחפש את אתר החברה — דרך Google Custom Search אם מוגדר, אחרת DuckDuckGo."""
+    """
+    מחפש את אתר החברה — Google Custom Search אם מוגדר, אחרת DuckDuckGo.
+
+    כשחיפוש גוגל נכשל (ולא בגלל מכסה) נופלים ל-DuckDuckGo במקום לוותר:
+    עדיף חיפוש איטי יותר מאשר אפס תוצאות.
+    """
     if search_key and search_cx:
-        return _search_google(company, search_key, search_cx)
+        site = _search_google(company, search_key, search_cx)
+        if site:
+            return site
     return _search_ddg(company)
 
 
@@ -319,8 +478,51 @@ def import_csv(storage: Storage, path: str, email_col: str = "email",
                 lat=0.0, lng=0.0, phone=(row.get("phone") or "").strip(), website="",
                 rating=None, review_count=0, business_status="OPERATIONAL",
                 primary_type="", neighborhood="", types=[],
+                # שדות אישיים לקמפיין הסוכנים (אופציונליים ב-CSV)
+                first_name=(row.get("first_name") or "").strip(),
+                intro_how=(row.get("how") or "").strip(),
+                intro_fact=(row.get("fact") or "").strip(),
+                intro_why=(row.get("why") or "").strip(),
             )
             storage.upsert_lead(lead, email, status="found")
             added += 1
     logger.info("יובאו %d עסקים מ-%s", added, path)
     return added
+
+
+def import_rows(storage: Storage, rows, prefix: str = "up") -> dict:
+    """
+    מייבא אנשי קשר משורות (מילונים) — עמודות אפשריות: name, email, phone,
+    first_name, city, how, why, fact. משמש להעלאת קובץ מהאפליקציה.
+    מחזיר סיכום: כמה נוספו, כמה כבר היו, כמה שורות לא היו שמישות.
+    """
+    summary = {"נוספו": 0, "היו כבר": 0, "שורות לא שמישות": 0}
+    for row in rows:
+        row = {(k or "").strip().lower(): (v or "").strip()
+               for k, v in row.items() if k}
+        name = row.get("name") or row.get("שם") or ""
+        email = row.get("email") or row.get("מייל") or ""
+        phone = row.get("phone") or row.get("טלפון") or ""
+        if not (email or phone):
+            summary["שורות לא שמישות"] += 1
+            continue
+
+        # המזהה נגזר מהמייל/טלפון בלבד: אותו איש קשר פעמיים בקובץ לא ייכנס
+        # פעמיים, וגם העלאה חוזרת של אותו קובץ לא תיצור כפילויות.
+        pid = f"{prefix}_{(email or phone).lower()}"
+        if storage.exists(pid):
+            summary["היו כבר"] += 1
+            continue
+        lead = BusinessLead(
+            place_id=pid, name=name or email or phone, address="", lat=0.0,
+            lng=0.0, phone=phone, website="", rating=None, review_count=0,
+            business_status="OPERATIONAL", primary_type="",
+            neighborhood=row.get("city") or row.get("עיר") or "", types=[],
+            first_name=row.get("first_name") or row.get("שם_פרטי") or "",
+            intro_how=row.get("how") or "", intro_fact=row.get("fact") or "",
+            intro_why=row.get("why") or "")
+        storage.upsert_lead(lead, email or None,
+                            status="found" if email else "no_email")
+        summary["נוספו"] += 1
+    logger.info("ייבוא: %s", summary)
+    return summary
