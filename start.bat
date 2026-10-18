@@ -38,6 +38,8 @@ if not exist "%VENV%\Scripts\python.exe" (
   %PY% -m venv "%VENV%" || (echo יצירת הסביבה נכשלה & pause & exit /b 1)
 )
 
+rem עדכון אוטומטי מגיטהאב: כל שינוי שנדחף מגיע לכאן בהפעלה הבאה
+"%VENV%\Scripts\python.exe" updater.py
 "%VENV%\Scripts\python.exe" -m pip install --quiet --upgrade pip
 "%VENV%\Scripts\python.exe" -m pip install --quiet -r requirements.txt || (echo ההתקנה נכשלה & pause & exit /b 1)
 

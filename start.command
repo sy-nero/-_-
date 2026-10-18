@@ -26,6 +26,8 @@ if [ ! -x "$VENV/bin/python3" ]; then
 fi
 
 source "$VENV/bin/activate"
+# עדכון אוטומטי מגיטהאב (git pull בתיקייה שהורדה עם git)
+python3 updater.py
 pip install --quiet --upgrade pip
 pip install --quiet -r requirements.txt || {
   echo "❌ ההתקנה נכשלה"; read -r -p "Enter לסגירה" _; exit 1; }
