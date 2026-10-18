@@ -19,6 +19,8 @@ import shutil
 import ssl
 import subprocess
 import sys
+import tempfile
+import urllib.error
 import urllib.request
 import zipfile
 
@@ -63,8 +65,36 @@ def _context():
 
 def _get(url: str, timeout: int = 20) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": "egud-bot-updater"})
-    with urllib.request.urlopen(req, timeout=timeout, context=_context()) as resp:
-        return resp.read()
+    try:
+        with urllib.request.urlopen(req, timeout=timeout, context=_context()) as resp:
+            return resp.read()
+    except (ssl.SSLError, urllib.error.URLError) as exc:
+        if sys.platform != "win32" or "CERTIFICATE" not in str(exc).upper():
+            raise
+        return _get_windows(url, timeout)
+
+
+def _get_windows(url: str, timeout: int) -> bytes:
+    """
+    הורדה דרך PowerShell, כלומר דרך Windows עצמו. ברשת מסוננת זה עובד גם
+    כשפייתון פוסל את תעודת הסינון, כי Windows בודק אותה כמו הדפדפן.
+    """
+    fd, path = tempfile.mkstemp(prefix="egud-bot-")
+    os.close(fd)
+    try:
+        cmd = ("$ErrorActionPreference='Stop'; "
+               "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; "
+               f"Invoke-WebRequest -UseBasicParsing -TimeoutSec {timeout} "
+               f"-Headers @{{'User-Agent'='egud-bot-updater'}} '{url}' -OutFile '{path}'")
+        subprocess.run(["powershell", "-NoProfile", "-Command", cmd],
+                       check=True, capture_output=True, timeout=timeout + 30)
+        with open(path, "rb") as f:
+            return f.read()
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
 
 def _latest_sha() -> str:

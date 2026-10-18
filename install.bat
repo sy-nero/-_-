@@ -6,7 +6,6 @@ chcp 65001 >nul
 setlocal
 set "SRC=%~dp0"
 set "APP=%LOCALAPPDATA%\egud-bot"
-set "RAW=https://raw.githubusercontent.com/sy-nero/-_-/claude/agent-profile-recruitment-bykccn"
 
 echo === Campaign Board installer ===
 echo.
@@ -31,13 +30,13 @@ if not defined PY (
 )
 echo Python: OK
 
-rem --- 2. Program files (the updater downloads everything from GitHub) ---
+rem --- 2. Program files ---
+rem ההורדה דרך PowerShell, כלומר דרך Windows עצמו: סומך על אותן תעודות כמו
+rem הדפדפן, גם ברשת מסוננת (נטפרי, רימון) או עם אנטי-וירוס שבודק HTTPS.
 if not exist "%APP%" mkdir "%APP%"
-powershell -NoProfile -Command "Invoke-WebRequest -UseBasicParsing '%RAW%/updater.py' -OutFile '%APP%\updater.py'" || (echo Download failed. Check the internet connection. & pause & exit /b 1)
+echo Downloading the program...
+powershell -NoProfile -Command "$ErrorActionPreference='Stop'; [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; $z=Join-Path $env:TEMP 'egud-bot.zip'; $x=Join-Path $env:TEMP 'egud-bot-x'; Invoke-WebRequest -UseBasicParsing 'https://codeload.github.com/sy-nero/-_-/zip/refs/heads/claude/agent-profile-recruitment-bykccn' -OutFile $z; if (Test-Path $x) { Remove-Item $x -Recurse -Force }; Expand-Archive $z $x -Force; $src=(Get-ChildItem $x | Select-Object -First 1).FullName; Copy-Item (Join-Path $src '*') '%APP%' -Recurse -Force; Remove-Item $z, $x -Recurse -Force" || (echo Download failed. Check the internet connection. & pause & exit /b 1)
 del "%APP%\.app_version" >nul 2>&1
-pushd "%APP%"
-%PY% updater.py
-popd
 if not exist "%APP%\start.bat" (echo Download failed. & pause & exit /b 1)
 echo Program files: OK
 
