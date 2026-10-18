@@ -116,5 +116,13 @@ class Mailer:
             self._attach_logo(root)
         self._attach_media(root, html_body)
 
-        self._server.sendmail(self.from_email, [to_email], root.as_string())
+        try:
+            self._server.sendmail(self.from_email, [to_email], root.as_string())
+        except smtplib.SMTPServerDisconnected:
+            # Gmail סוגר חיבור שעבד הרבה זמן. בלי זה כל המיילים אחרי הניתוק
+            # נכשלו ("please run connect() first") ונרשמו כמיילים שחזרו.
+            logger.info("החיבור ל-SMTP נסגר, מתחבר מחדש")
+            self.close()
+            self.connect()
+            self._server.sendmail(self.from_email, [to_email], root.as_string())
         logger.info("מייל נשלח אל %s", to_email)

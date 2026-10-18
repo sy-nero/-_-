@@ -674,6 +674,23 @@ class Storage:
             emails |= self._read_log_file(path)
         return emails
 
+    def bounced_any_campaign(self) -> set:
+        """כל כתובת שחזרה אלינו (bounce) באיזשהו קמפיין: לא שולחים אליה שוב."""
+        with self._conn() as conn:
+            if db.d1_configured():
+                tables = [r["name"] for r in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'leads_%'"
+                ).fetchall()]
+            else:
+                tables = [self.leads]
+            out = set()
+            # שאילתה לכל טבלה: D1 לא מקבל UNION של עשרים טבלאות
+            for t in tables:
+                out |= {r["e"] for r in conn.execute(
+                    f"SELECT lower(email) AS e FROM {t} WHERE bounced_at IS NOT NULL"
+                ).fetchall() if r["e"]}
+        return out
+
     def record_sent(self, email: str) -> None:
         """רושם שכתובת קיבלה מייל, כדי שלא תקבל שוב לעולם."""
         email = (email or "").strip().lower()

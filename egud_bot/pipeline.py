@@ -960,6 +960,24 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
     invalid = [l for l in remaining if not is_valid_email(l["email"])]
     remaining = [l for l in remaining if is_valid_email(l["email"])]
 
+    # מייל שכנראה לא קיים: דומיין בלי שרת דואר, ספק ישן שהתיבות בו נסגרו,
+    # טעות הקלדה, או כתובת שכבר חזרה אלינו. כל החזרה פוגעת בתיבה כולה.
+    from egud_bot import emailcheck
+    try:
+        bounced_before = storage.bounced_any_campaign()
+    except Exception:  # noqa: BLE001 — מסד ישן בלי עמודת bounced_at
+        bounced_before = set()
+    undeliverable = []
+    keep = []
+    for l in remaining:
+        email = (l["email"] or "").strip().lower()
+        reason = ("טעות הקלדה בכתובת" if emailcheck.fix_typo(email) != email
+                  else emailcheck.check(email, bounced_before))
+        (undeliverable if reason else keep).append(l)
+        if reason:
+            logger.info("דילוג על %s: %s", email, reason)
+    remaining = keep
+
     # field: לשלוח רק לבעלי מקצוע מהתחום הזה. המאגר מצטבר ומכיל כמה
     # מקצועות, ונוסח שנכתב ליועצים עסקיים לא מתאים לעורכי דין.
     off_field = []
@@ -1002,6 +1020,7 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
                "skipped_already_sent": len(skipped),
                "skipped_blocked": len(blocked)}
     for label, group in (("דולגו: כתובת לא תקינה", invalid),
+                         ("דולגו: מייל שכנראה לא קיים", undeliverable),
                          ("דולגו: לא מהתחום", off_field),
                          ("דולגו: עיר אחרת", off_city)):
         if group:
