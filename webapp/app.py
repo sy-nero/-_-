@@ -446,7 +446,10 @@ def send_page(campaign_id):
         previews.append({"lead": lead, "subject": subject, "text": text})
     env_from, env_name, _, _ = config.sender_for(campaign["source_campaign"])
 
+    # ב-Vercel כל לחיצה שולחת עד SEND_BATCH, אז מסמנים מראש מנה כזו
+    first_n = int(os.getenv("SEND_BATCH", "50")) if os.getenv("VERCEL") else 150
     return render_template("send.html", campaign=campaign, previews=previews,
+                           first_n=first_n,
                            scan_only=bool(run_id), has_run=bool(run),
                            pool_total=st.pending_count_for(),
                            sample=previews[0] if previews else None,
@@ -484,6 +487,29 @@ def send_now(campaign_id):
         if errors:
             flash("חסרות הגדרות שליחה: " + ", ".join(errors))
             return redirect(url_for("send_page", campaign_id=campaign_id))
+
+    if os.getenv("VERCEL"):
+        # ב-Vercel אין עבודה ברקע: התהליך נעצר כשהתשובה נשלחת, וכל בקשה
+        # מוגבלת ל-300 שניות. לכן שולחים מנה שנכנסת בזמן הזה, ומי שנשאר
+        # נשאר מסומן בעמוד, ולחיצה נוספת שולחת את המנה הבאה.
+        batch = int(os.getenv("SEND_BATCH", "50"))
+        ordered = [p for p in request.form.getlist("place_id") if p in chosen]
+        now, rest = ordered[:batch], ordered[batch:]
+        try:
+            summary = pipeline.send_emails(
+                config, st, campaign=campaign["source_campaign"],
+                limit=len(now), variant=campaign["variant"] or "", only=set(now),
+                custom=custom_of(campaign), campaign_id=str(campaign_id),
+                sender=sender)
+        except Exception as exc:  # noqa: BLE001 — סיסמה שגויה וכו' מוצגים, לא 500
+            flash(f"השליחה נכשלה: {exc}")
+            return redirect(url_for("send_page", campaign_id=campaign_id))
+        msg = f"נשלחו {summary.get('sent', 0)} מיילים."
+        if rest:
+            msg += (f" נשארו {len(rest)} מאלה שסימנת: מסמנים שוב ולוחצים "
+                    f"שליחה, ויוצאת המנה הבאה (עד {batch} בכל לחיצה).")
+        flash(msg)
+        return redirect(url_for("send_page", campaign_id=campaign_id))
 
     # השליחה רצה ברקע: 150 מיילים עם השהיה ביניהם לוקחים כמה דקות, יותר
     # ממה שבקשת דפדפן (ו-gunicorn בענן) מחכים. עמוד ההרצות מציג התקדמות.

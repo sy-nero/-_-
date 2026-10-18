@@ -870,7 +870,10 @@ def enrich_missing_emails(cfg: Config, storage: Storage, limit: int = 50,
 
 #: מיילים שיצאו אבל לא נרשמו במסד (D1 לא היה נגיש ברגע הרישום). נשמר
 #: מקומית כדי שהשליחה הבאה לא תשלח להם שוב, ונרשם במסד בהזדמנות הבאה.
-UNRECORDED_PATH = os.path.join(os.getenv("DATA_DIR", "data"), "sent_unrecorded.json")
+# ב-Vercel רק /tmp ניתן לכתיבה
+UNRECORDED_PATH = os.path.join(
+    os.getenv("DATA_DIR") or ("/tmp" if os.getenv("VERCEL") else "data"),
+    "sent_unrecorded.json")
 
 
 def _load_unrecorded() -> list:
