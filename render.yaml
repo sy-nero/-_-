@@ -4,7 +4,9 @@ services:
   - type: web
     name: sy-nero-campaigns
     runtime: python
-    plan: starter          # דיסק קבוע דורש תוכנית בתשלום; ב-free הנתונים נמחקים
+    # starter (7$ לחודש): בתוכנית החינמית Render חוסם יציאה לשרתי מייל (SMTP),
+    # והשירות נרדם אחרי רבע שעה בלי שימוש.
+    plan: starter
     buildCommand: pip install -r requirements.txt
     # worker אחד בכוונה: הסריקה רצה כ-thread בתוך התהליך, ועם שני workers
     # הבקשה הבאה מגיעה לתהליך אחר שלא מכיר את ההרצה — וההתקדמות נעלמת.
@@ -13,16 +15,19 @@ services:
     # במקביל. timeout ארוך יותר כדי שהארביטר לא יהרוג את ה-worker באמצע.
     startCommand: gunicorn webapp.app:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 300
     healthCheckPath: /health
-    disk:
-      name: data
-      mountPath: /var/data   # הדיסק הקבוע — כאן יושבים כל קובצי ה-SQLite
-      sizeGB: 1
+    # בלי דיסק: כל הנתונים ב-Cloudflare D1, כמו במחשבים. ככה גם המחשבים וגם
+    # הענן רואים את אותם קמפיינים.
     envVars:
-      - key: DATA_DIR
-        value: /var/data
       - key: PYTHON_VERSION
         value: "3.11"
-      # כל השאר מוזנים ידנית בלוח הבקרה של Render:
+      # כל השאר מוזנים ידנית בלוח הבקרה של Render. הכי פשוט: Environment ->
+      # "Add from .env" ולהדביק את כל קובץ ה-.env מהמחשב.
+      - key: D1_ACCOUNT_ID
+        sync: false
+      - key: D1_DATABASE_ID
+        sync: false
+      - key: D1_API_TOKEN
+        sync: false
       - key: APP_PASSWORD          # סיסמת הכניסה לאפליקציה
         sync: false
       - key: FLASK_SECRET_KEY      # מפתח לחתימת העוגיות

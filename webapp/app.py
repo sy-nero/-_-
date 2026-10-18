@@ -332,7 +332,12 @@ def campaign_view(campaign) -> dict:
 # ---------------------------- הלוח ----------------------------
 @app.route("/")
 def board():
-    columns = [campaign_view(c) for c in store.all()]
+    # כל קמפיין דורש כמה שאילתות ל-D1, וכל שאילתה היא קריאת רשת. במקביל
+    # הלוח נטען בזמן של הקמפיין האיטי ביותר, ולא בסכום של כולם.
+    from concurrent.futures import ThreadPoolExecutor
+    campaigns = store.all()
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        columns = list(pool.map(campaign_view, campaigns))
     return render_template("board.html", columns=columns,
                            text_fields=TEXT_FIELDS, auto_fields=AUTO_FIELDS,
                            manual_fields=MANUAL_FIELDS,
@@ -480,17 +485,19 @@ def send_now(campaign_id):
             flash("חסרות הגדרות שליחה: " + ", ".join(errors))
             return redirect(url_for("send_page", campaign_id=campaign_id))
 
-    try:
-        summary = pipeline.send_emails(
+    # השליחה רצה ברקע: 150 מיילים עם השהיה ביניהם לוקחים כמה דקות, יותר
+    # ממה שבקשת דפדפן (ו-gunicorn בענן) מחכים. עמוד ההרצות מציג התקדמות.
+    def work(job):
+        return pipeline.send_emails(
             config, st, campaign=campaign["source_campaign"],
             limit=len(chosen), variant=campaign["variant"] or "", only=chosen,
             custom=custom_of(campaign), campaign_id=str(campaign_id),
             sender=sender)
-    except Exception as exc:  # noqa: BLE001 — סיסמה שגויה וכו' מוצגים, לא 500
-        flash(f"השליחה נכשלה: {exc}")
-        return redirect(url_for("send_page", campaign_id=campaign_id))
-    flash(f"נשלחו {summary.get('sent', 0)} מיילים")
-    return redirect(url_for("send_page", campaign_id=campaign_id))
+
+    ok, msg = runner.start("send", f"שליחה: {campaign['title']} ({len(chosen)} נמענים)", work)
+    flash(msg if not ok else f"השליחה התחילה ל-{len(chosen)} נמענים. "
+          "אפשר לעקוב כאן, ובסוף יופיע כמה נשלחו.")
+    return redirect(url_for("jobs_page"))
 
 
 def _campaign_sender(campaign) -> dict:
