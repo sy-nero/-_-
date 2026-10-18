@@ -382,14 +382,22 @@ def derived_fields(campaign) -> dict:
         out["קהל יעד"] = " · ".join(parsed["terms"])
     if city:
         out["מקום חיפוש"] = f"גוגל מפות — {city}"
-    reviews = parsed["min_reviews"]
-    rating = parsed["min_rating"]
-    out["מאפיין"] = (f"לפחות {reviews if reviews is not None else config.agent_min_reviews} "
-                     f"ביקורות, דירוג "
-                     f"{rating if rating is not None else config.agent_min_rating:g} ומעלה")
+    if _col(campaign, "search_query"):
+        reviews = parsed["min_reviews"]
+        rating = parsed["min_rating"]
+        out["מאפיין"] = (f"לפחות {reviews if reviews is not None else config.agent_min_reviews} "
+                         f"ביקורות, דירוג "
+                         f"{rating if rating is not None else config.agent_min_rating:g} ומעלה")
     subject = _col(campaign, "subject_tpl")
     if subject:
         out["נוסח"] = subject
+        out["נושא המייל"] = subject
+    try:
+        box = sender_box.SenderStore().get(_col(campaign, "sender_id"))
+    except Exception:  # noqa: BLE001
+        box = None
+    if box:
+        out["תיבת שליחה"] = f"{box['from_email']} (בשם {box['from_name'] or box['from_email']})"
     elif _col(campaign, "variant"):
         out["נוסח"] = f"נוסח {_col(campaign, 'variant').upper()}"
     return out
