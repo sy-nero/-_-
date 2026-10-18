@@ -100,6 +100,12 @@
     </label>
   </div>
   <div class="actionbar">
+    <label class="muted" style="display:inline-flex;align-items:center;gap:6px;">
+      סימון
+      <input type="number" id="firstN" value="150" min="1" style="width:70px;">
+      הראשונים
+      <button type="button" class="ghost small" onclick="pickFirst()">סמני</button>
+    </label>
     <button type="submit">שליחה לנמענים שסומנו</button>
     <span id="chosen" class="muted">לא נבחר אף נמען</span>
     <span class="muted" style="margin-inline-start:auto;">אחרי הלחיצה המיילים יוצאים מיד.</span>
@@ -150,6 +156,13 @@
 </div>
 
 <script>
+  // מנה יומית: מסמן רק את N הראשונים, כדי לא לשלוח מאות מיילים בבת אחת
+  function pickFirst() {
+    var n = parseInt(document.getElementById('firstN').value, 10) || 0;
+    document.querySelectorAll('.pick').forEach(function (c, i) { c.checked = i < n; });
+    document.getElementById('all').checked = false;
+    count();
+  }
   function count() {
     var n = document.querySelectorAll('.pick:checked').length;
     document.getElementById('chosen').textContent =
