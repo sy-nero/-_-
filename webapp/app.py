@@ -170,6 +170,110 @@ def leads_store(source_campaign: str):
     return leads_store_or_error(source_campaign)[0]
 
 
+# ---------- פילוח: מי נפתח, מי ענה ומי חזר, לפי תחום / עיר / ספק / קמפיין ----------
+_KNOWN_CITIES = ("בני ברק", "ירושלים", "בית שמש", "ביתר עילית", "מודיעין עילית", "אלעד",
+                 "אשדוד", "רכסים", "עמנואל", "קרית יערים", "צפת", "נתיבות", "טבריה",
+                 "פתח תקווה", "רמת גן", "נתניה", "רחובות", "אשקלון", "חיפה", "תל אביב",
+                 "חולון", "גבעתיים", "באר שבע", "כוכב יעקב", "קרית גת", "יבנה", "לוד")
+_ISP_OLD = {"netvision.net.il", "inter.net.il", "barak.net.il", "013.net", "013net.net",
+            "013.net.il", "017.net.il", "012.net.il", "zahav.net.il", "actcom.co.il",
+            "smile.net.il", "014.net", "bezeqint.net"}
+
+
+#: אותו תחום שנכתב בשמות שונים ברשימות שונות
+_FIELD_ALIASES = {"אדריכלות ועיצוב פנים": "אדריכלים", "ייעוץ מס": "יועצי מס",
+                  "יועצי ביטוח": "סוכני ביטוח", "תשמישי קדושה ויודאיקה": "יודאיקה",
+                  "תשמישי קדושה": "יודאיקה", "מהנדסים אזרחיים": "מהנדסי בניין",
+                  "הפקות דפוס": "בתי דפוס", "פרוייקטים - ניהול תיאום ופיקוח": "פיקוח בנייה",
+                  "ביקורת בניה": "פיקוח בנייה"}
+
+
+def _city_of(address: str) -> str:
+    address = address or ""
+    for city in _KNOWN_CITIES:
+        if city in address:
+            return city
+    tail = address.rsplit(",", 1)[-1].strip()
+    return tail if tail and not any(ch.isdigit() for ch in tail) and len(tail) < 20 else "לא ידוע"
+
+
+def _provider_of(email: str) -> str:
+    domain = (email or "").rsplit("@", 1)[-1].lower()
+    if domain == "gmail.com":
+        return "Gmail"
+    if domain.startswith("walla."):
+        return "וואלה"
+    if domain in _ISP_OLD:
+        return "ספק אינטרנט ותיק (בזק, נטוויז'ן, 012...)"
+    if domain.split(".")[0] in ("hotmail", "outlook", "yahoo", "icloud", "live", "aol"):
+        return "Hotmail / Yahoo / iCloud"
+    return "דומיין של העסק"
+
+
+def segment_rows(campaigns) -> list:
+    """שורה לכל נמען שקיבל מייל: התחום, העיר, הספק, ומה קרה איתו."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    def one(campaign):
+        st = leads_store(campaign["source_campaign"]) if campaign["source_campaign"] else None
+        if not st:
+            return []
+        with st._conn() as conn:
+            rows = conn.execute(
+                """SELECT email, primary_type, address, opened_at, replied_at, bounced_at,
+                          status, error FROM {leads}
+                   WHERE status IN ('emailed','failed') AND campaign_id=?""",
+                (str(campaign["id"]),)).fetchall()
+        return [{"campaign": campaign["title"], "field": _FIELD_ALIASES.get((r["primary_type"] or "").strip(),
+                                            (r["primary_type"] or "").strip()) or "לא ידוע",
+                 "city": _city_of(r["address"]), "provider": _provider_of(r["email"]),
+                 "opened": bool(r["opened_at"]), "replied": bool(r["replied_at"]),
+                 "bounced": bool(r["bounced_at"]) or (
+                     r["status"] == "failed" and "connect" not in (r["error"] or "").lower())}
+                for r in rows]
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        return [row for rows in pool.map(one, campaigns) for row in rows]
+
+
+def segment_table(rows, key: str, min_sent: int = 1) -> list:
+    groups = {}
+    for r in rows:
+        g = groups.setdefault(r[key], {"name": r[key], "sent": 0, "opened": 0,
+                                       "replied": 0, "bounced": 0})
+        g["sent"] += 1
+        g["opened"] += r["opened"]
+        g["replied"] += r["replied"]
+        g["bounced"] += r["bounced"]
+    out = []
+    for g in groups.values():
+        if g["sent"] < min_sent:
+            continue
+        delivered = max(g["sent"] - g["bounced"], 1)
+        g["open_rate"] = round(100 * g["opened"] / delivered)
+        g["reply_rate"] = round(100 * g["replied"] / delivered, 1)
+        g["bounce_rate"] = round(100 * g["bounced"] / g["sent"])
+        out.append(g)
+    return sorted(out, key=lambda g: (-g["reply_rate"], -g["sent"]))
+
+
+@app.route("/segments")
+def segments_page():
+    campaigns = [c for c in store.all() if c["source_campaign"]]
+    chosen = request.args.get("campaign", "")
+    if chosen:
+        campaigns = [c for c in campaigns if str(c["id"]) == chosen]
+    rows = segment_rows(campaigns)
+    min_sent = int(request.args.get("min", "5") or 5)
+    tables = [("תחום", segment_table(rows, "field", min_sent)),
+              ("עיר", segment_table(rows, "city", min_sent)),
+              ("ספק מייל", segment_table(rows, "provider", 1))]
+    if not chosen:
+        tables.append(("קמפיין", segment_table(rows, "campaign", 1)))
+    return render_template("segments.html", tables=tables, total=segment_table(rows, "provider", 0),
+                           sent=len(rows), campaigns=store.all(), chosen=chosen, min_sent=min_sent)
+
+
 def auto_metrics(campaign) -> dict:
     """נשלחו / נפתחו / השיבו — נמדדים מ-DB הלידים, לא מוזנים ביד."""
     empty = {"sent": 0, "opened": 0, "replied": 0, "bounced": 0}

@@ -7,6 +7,7 @@ import os
 import re
 import time
 import logging
+import smtplib
 
 from config import Config
 from data.neighborhoods import HAREDI_NEIGHBORHOODS, Neighborhood, neighborhoods_for
@@ -1106,6 +1107,15 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
                 html = tracking.add_pixel(html, cfg.tracking_base_url, track_id)
             try:
                 mailer.send(lead["email"], subject, html, text)
+            except (smtplib.SMTPServerDisconnected, smtplib.SMTPConnectError,
+                    ConnectionError, TimeoutError) as exc:
+                # החיבור ל-Gmail נפל ולא חזר: זו לא בעיה של הנמען. עוצרים, ומי
+                # שלא קיבל נשאר ממתין. בלי זה כל השאר סומנו "נכשל" ונספרו
+                # כמיילים שחזרו (כך קרה ל-207 בקמפיין 22).
+                raise RuntimeError(
+                    f"נשלחו {summary['sent']} מיילים, ואז Gmail ניתק את החיבור ({exc}). "
+                    "מי שלא קיבל נשאר ממתין. כדאי לנסות שוב בעוד שעה: ניתוק כזה "
+                    "קורה בדרך כלל כששולחים הרבה בבת אחת.") from exc
             except Exception as exc:  # noqa: BLE001
                 logger.warning("שליחה אל %s נכשלה: %s", lead["email"], exc)
                 storage.mark_emailed(lead["place_id"], success=False,

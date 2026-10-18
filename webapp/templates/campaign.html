@@ -32,6 +32,9 @@
             style="margin-top:8px; text-align:center;">
         <button type="submit" class="ghost small">בדיקת תשובות בתיבה</button>
       </form>
+      <div style="text-align:center; margin-top:6px;">
+        <a class="ghost small btn" href="{{ url_for('segments_page', campaign=campaign['id'], min=1) }}">
+          פילוח לפי תחום, עיר וספק</a></div>
       {% endif %}
     </div>
     {% endif %}

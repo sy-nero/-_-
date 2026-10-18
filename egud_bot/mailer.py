@@ -97,7 +97,7 @@ class Mailer:
 
     def send(self, to_email: str, subject: str, html_body: str, text_body: str) -> None:
         if not self._server:
-            raise RuntimeError("Mailer לא מחובר — יש לקרוא ל-connect() תחילה")
+            raise smtplib.SMTPServerDisconnected("Mailer לא מחובר")
 
         # מבנה: related( alternative(text, html), logo-image )
         root = MIMEMultipart("related")
