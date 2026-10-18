@@ -7,8 +7,13 @@ cd /d "%~dp0"
 rem קבצים ופלט בעברית: בלי זה Windows קורא אותם בקידוד הישן (cp1255)
 set PYTHONUTF8=1
 
+rem Windows מוסיף לפעמים סיומת בשקט (.env.txt), או שהנקודה נופלת בהורדה (env)
+if not exist ".env" if exist ".env.txt" ren ".env.txt" ".env"
+if not exist ".env" if exist "env.txt" ren "env.txt" ".env"
+if not exist ".env" if exist "env" ren "env" ".env"
 if not exist ".env" (
   echo אין קובץ .env בתיקייה. צריך להעתיק אותו מהמחשב הראשון.
+  echo Missing .env in: %CD%
   pause
   exit /b 1
 )
