@@ -32,15 +32,33 @@ LAUNCHERS = {"start.bat", "start.command", "install.bat"}
 
 
 def _context():
-    # תעודות שהוגדרו במפורש (רשת ארגונית עם פרוקסי) קודמות לכול
+    """
+    הקשר TLS שסומך על מה שמערכת ההפעלה סומכת עליו, כמו הדפדפן.
+
+    ברשת מסוננת (נטפרי, רימון) או עם אנטי-וירוס שבודק HTTPS, התעודה שמגיעה
+    חתומה על ידי הסינון, והתעודה שלו מותקנת במאגר של Windows ולא ב-certifi.
+    Python 3.13 גם פוסל תעודות כאלה בבדיקה המחמירה (VERIFY_X509_STRICT,
+    "Missing Authority Key Identifier"). האימות עצמו נשאר: השרשרת חייבת
+    להגיע לתעודה שמותקנת במחשב.
+    """
     cafile = os.getenv("SSL_CERT_FILE") or os.getenv("REQUESTS_CA_BUNDLE")
     if cafile and os.path.isfile(cafile):
-        return ssl.create_default_context(cafile=cafile)
-    try:
-        import certifi   # בא עם requests; ב-Mac בלעדיו אין תעודות
-        return ssl.create_default_context(cafile=certifi.where())
-    except ImportError:
-        return ssl.create_default_context()
+        ctx = ssl.create_default_context(cafile=cafile)
+    else:
+        try:
+            import truststore   # מאגר התעודות של Windows / Mac עצמם
+            return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        except ImportError:
+            pass
+        ctx = ssl.create_default_context()   # ב-Windows: טוען את מאגר המערכת
+        if sys.platform == "darwin":
+            try:
+                import certifi   # ב-Mac פייתון לא קורא את מאגר המערכת
+                ctx.load_verify_locations(certifi.where())
+            except ImportError:
+                pass
+    ctx.verify_flags &= ~getattr(ssl, "VERIFY_X509_STRICT", 0)
+    return ctx
 
 
 def _get(url: str, timeout: int = 20) -> bytes:
