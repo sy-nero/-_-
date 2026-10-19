@@ -634,13 +634,16 @@ _LINK_RE = re.compile(r"\[([^\]\n]+)\]\((https?://[^)\s]+)\)")
 #: תמונה מתוך assets/campaign_media שמוטמעת במייל: ![](שם_קובץ), ועם קישור
 #: סביבה [![](שם_קובץ)](https://...). קובץ GIF מונפש מתנגן בתוך המייל.
 _IMAGE_RE = re.compile(
-    r"(?:\[)?!\[([^\]\n]*)\]\(([\w.-]+\.(?:gif|png|jpe?g))\)(?:\]\((https?://[^)\s]+)\))?")
+    r"(?:\[)?!\[([^\]\n]*)\]\(((?:https?://[^)\s]+|[\w.-]+)\.(?:gif|png|jpe?g))\)"
+    r"(?:\]\((https?://[^)\s]+)\))?")
 
 
 def _image_html(match) -> str:
     # הטקסט החלופי (![טקסט](קובץ)) מוצג כשתוכנת המייל חוסמת תמונות
     alt = html_escape(match.group(1) or "", quote=True)
-    img = (f'<img src="cid:{match.group(2)}" alt="{alt}" width="480" '
+    # כתובת באינטרנט נטענת משם; שם קובץ מוטמע במייל עצמו (cid)
+    src = match.group(2) if match.group(2).startswith("http") else f"cid:{match.group(2)}"
+    img = (f'<img src="{src}" alt="{alt}" width="480" '
            'style="display:block;width:100%;max-width:480px;height:auto;border:0;'
            'border-radius:8px;">')
     if match.group(3):

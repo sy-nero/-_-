@@ -274,6 +274,30 @@ def segments_page():
                            sent=len(rows), campaigns=store.all(), chosen=chosen, min_sent=min_sent)
 
 
+def _app_version() -> str:
+    """הגרסה שרצה: מזהה הקומיט, כדי לדעת אם המחשב עודכן."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    try:
+        with open(os.path.join(root, ".app_version"), encoding="utf-8") as f:
+            return f.read().strip()[:7]
+    except OSError:
+        pass
+    try:
+        import subprocess
+        return subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=root,
+                              capture_output=True, text=True, timeout=5).stdout.strip()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+APP_VERSION = _app_version()
+
+
+@app.context_processor
+def _inject_version():
+    return {"app_version": APP_VERSION}
+
+
 def auto_metrics(campaign) -> dict:
     """נשלחו / נפתחו / השיבו — נמדדים מ-DB הלידים, לא מוזנים ביד."""
     empty = {"sent": 0, "opened": 0, "replied": 0, "bounced": 0}

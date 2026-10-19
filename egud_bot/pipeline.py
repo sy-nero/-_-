@@ -916,6 +916,18 @@ def _flush_unrecorded(storage) -> set:
     return {(i["lead"].get("email") or "").lower() for i in left}
 
 
+def _broken_render(html: str) -> str:
+    """סיבה בעברית אם במייל נשאר תחביר של הנוסח במקום תמונה או קישור."""
+    from egud_bot.mailer import MEDIA_DIR
+    body = re.sub(r"<[^>]+>", " ", html)
+    if "![" in body or re.search(r"\]\((?:https?://|[\w.-]+\.(?:gif|png|jpe?g)\))", body):
+        return "תמונה או קישור נשארו כטקסט"
+    for name in re.findall(r'src="cid:([\w.-]+)"', html):
+        if name != "logo" and not os.path.isfile(os.path.join(MEDIA_DIR, name)):
+            return f"קובץ התמונה {name} חסר במחשב"
+    return ""
+
+
 def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
                 campaign: str = "funding", skip_contacted: bool = False,
                 limit: int | None = None, confirm=None, confirm_batch=None,
@@ -1100,6 +1112,12 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
             subject, html, text = _render(
                 template_campaign,
                 build_ctx(cfg, campaign, lead, field_hint=field, sender=sender), custom)
+            # נוסח שלא נבנה עד הסוף (תמונה או קישור שנשארו כטקסט, קובץ תמונה
+            # שחסר במחשב) לא יוצא: עדיף לעצור מאשר לשלוח מאות מיילים שבורים
+            broken = _broken_render(html)
+            if broken:
+                raise RuntimeError(f"הנוסח לא נבנה נכון ({broken}), ולא נשלח אף מייל "
+                                   "מהמנה הזו. כדאי לעדכן את האפליקציה ולנסות שוב.")
             # פיקסל מעקב פתיחות (רק אם הוגדרה כתובת ציבורית)
             track_id = ""
             if cfg.tracking_base_url:

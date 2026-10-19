@@ -272,5 +272,6 @@
   {% endwith %}
   {% block body %}{% endblock %}
 </main>
+{% if app_version %}<div style="text-align:center; color:#9aa5b1; font-size:12px; margin:24px 0 12px;">גרסה {{ app_version }}</div>{% endif %}
 </body>
 </html>
