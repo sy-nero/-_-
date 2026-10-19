@@ -10,6 +10,7 @@
 (רכישת הקורס + הרשמה לכנס במייל).
 """
 import re
+from html import escape as html_escape
 from urllib.parse import quote
 
 from egud_bot import recommendations
@@ -633,15 +634,17 @@ _LINK_RE = re.compile(r"\[([^\]\n]+)\]\((https?://[^)\s]+)\)")
 #: תמונה מתוך assets/campaign_media שמוטמעת במייל: ![](שם_קובץ), ועם קישור
 #: סביבה [![](שם_קובץ)](https://...). קובץ GIF מונפש מתנגן בתוך המייל.
 _IMAGE_RE = re.compile(
-    r"(?:\[)?!\[\]\(([\w.-]+\.(?:gif|png|jpe?g))\)(?:\]\((https?://[^)\s]+)\))?")
+    r"(?:\[)?!\[([^\]\n]*)\]\(([\w.-]+\.(?:gif|png|jpe?g))\)(?:\]\((https?://[^)\s]+)\))?")
 
 
 def _image_html(match) -> str:
-    img = (f'<img src="cid:{match.group(1)}" alt="" width="480" '
+    # הטקסט החלופי (![טקסט](קובץ)) מוצג כשתוכנת המייל חוסמת תמונות
+    alt = html_escape(match.group(1) or "", quote=True)
+    img = (f'<img src="cid:{match.group(2)}" alt="{alt}" width="480" '
            'style="display:block;width:100%;max-width:480px;height:auto;border:0;'
            'border-radius:8px;">')
-    if match.group(2):
-        return f'<a href="{match.group(2)}">{img}</a>'
+    if match.group(3):
+        return f'<a href="{match.group(3)}">{img}</a>'
     return img
 
 
