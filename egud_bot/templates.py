@@ -656,6 +656,16 @@ def _image_text(match) -> str:
     return ""
 
 
+def _preheader_html(text: str) -> str:
+    """טקסט מוסתר שתוכנות המייל מציגות כתצוגה מקדימה, ואחריו ריפוד כדי
+    שלא יימשך לתצוגה המקדימה גם המשך המייל."""
+    if not text:
+        return ""
+    pad = "&#8204;&nbsp;" * 80
+    return ('    <div style="display:none;max-height:0;max-width:0;overflow:hidden;'
+            f'opacity:0;mso-hide:all;">{html_escape(text)}{pad}</div>\n')
+
+
 def render_custom(subject_tpl: str, body_tpl: str, **ctx):
     """
     מרנדר נוסח שנכתב באפליקציה. מחזיר (subject, html, text) באותו מבנה
@@ -666,6 +676,11 @@ def render_custom(subject_tpl: str, body_tpl: str, **ctx):
     body = _tidy(fill_placeholders(body_tpl, values))
 
     lines = [ln.strip() for ln in body.split("\n\n") if ln.strip()]
+    # "טקסט מקדים: ..." בתחילת הנוסח: השורה שתוכנת המייל מציגה ליד הנושא
+    # ברשימת המיילים. לא מופיע בגוף המייל עצמו.
+    preheader = ""
+    if lines and lines[0].startswith("טקסט מקדים:"):
+        preheader = lines.pop(0).split(":", 1)[1].strip()
     # [טקסט לחיץ](https://...) -> קישור עם טקסט ב-HTML, "טקסט: כתובת" בטקסט רגיל
     def plain(ln):
         ln = _IMAGE_RE.sub(_image_text, ln)
@@ -684,7 +699,7 @@ def render_custom(subject_tpl: str, body_tpl: str, **ctx):
   <div dir="rtl" style="direction:rtl;text-align:right;max-width:600px;margin:0 auto;
        padding:22px 20px;font-family:Arial,Helvetica,sans-serif;font-size:16px;
        line-height:1.75;color:#222222;">
-{html_lines}
+{_preheader_html(preheader)}{html_lines}
   </div>
 </body></html>"""
     return subject, html, text
