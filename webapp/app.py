@@ -276,6 +276,8 @@ def segments_page():
 
 def _app_version() -> str:
     """הגרסה שרצה: מזהה הקומיט, כדי לדעת אם המחשב עודכן."""
+    if os.getenv("VERCEL_GIT_COMMIT_SHA"):     # בענן אין git ואין .app_version
+        return os.environ["VERCEL_GIT_COMMIT_SHA"][:7]
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     try:
         with open(os.path.join(root, ".app_version"), encoding="utf-8") as f:
