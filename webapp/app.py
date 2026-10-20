@@ -77,7 +77,7 @@ def internal_error(exc):
 # האפליקציה מציגה לידים ושולחת מיילים בשם החברה, ולכן היא לא נשארת פתוחה
 # לכל מי שמגיע לכתובת. הפיקסל ובדיקת הבריאות נשארים ציבוריים בכוונה:
 # הפיקסל נטען מתוכנת המייל של הנמען, שאין לה סשן.
-PUBLIC_ENDPOINTS = {"pixel", "health", "login", "static"}
+PUBLIC_ENDPOINTS = {"pixel", "click", "click_ping", "health", "login", "static"}
 
 
 @app.context_processor
@@ -221,13 +221,14 @@ def segment_rows(campaigns) -> list:
         with st._conn() as conn:
             rows = conn.execute(
                 """SELECT email, primary_type, address, opened_at, replied_at, bounced_at,
-                          status, error FROM {leads}
+                          clicked_at, status, error FROM {leads}
                    WHERE status IN ('emailed','failed') AND campaign_id=?""",
                 (str(campaign["id"]),)).fetchall()
         return [{"campaign": campaign["title"], "field": _FIELD_ALIASES.get((r["primary_type"] or "").strip(),
                                             (r["primary_type"] or "").strip()) or "לא ידוע",
                  "city": _city_of(r["address"]), "provider": _provider_of(r["email"]),
                  "opened": bool(r["opened_at"]), "replied": bool(r["replied_at"]),
+                 "clicked": bool(r["clicked_at"]),
                  "bounced": bool(r["bounced_at"]) or (
                      r["status"] == "failed" and "connect" not in (r["error"] or "").lower())}
                 for r in rows]
@@ -240,10 +241,11 @@ def segment_table(rows, key: str, min_sent: int = 1) -> list:
     groups = {}
     for r in rows:
         g = groups.setdefault(r[key], {"name": r[key], "sent": 0, "opened": 0,
-                                       "replied": 0, "bounced": 0})
+                                       "clicked": 0, "replied": 0, "bounced": 0})
         g["sent"] += 1
         g["opened"] += r["opened"]
         g["replied"] += r["replied"]
+        g["clicked"] += r["clicked"]
         g["bounced"] += r["bounced"]
     out = []
     for g in groups.values():
@@ -252,6 +254,7 @@ def segment_table(rows, key: str, min_sent: int = 1) -> list:
         delivered = max(g["sent"] - g["bounced"], 1)
         g["open_rate"] = round(100 * g["opened"] / delivered)
         g["reply_rate"] = round(100 * g["replied"] / delivered, 1)
+        g["click_rate"] = round(100 * g["clicked"] / delivered, 1)
         g["bounce_rate"] = round(100 * g["bounced"] / g["sent"])
         out.append(g)
     return sorted(out, key=lambda g: (-g["reply_rate"], -g["sent"]))
@@ -302,7 +305,7 @@ def _inject_version():
 
 def auto_metrics(campaign) -> dict:
     """נשלחו / נפתחו / השיבו — נמדדים מ-DB הלידים, לא מוזנים ביד."""
-    empty = {"sent": 0, "opened": 0, "replied": 0, "bounced": 0}
+    empty = {"sent": 0, "opened": 0, "replied": 0, "clicked": 0, "bounced": 0}
     st = leads_store(campaign["source_campaign"])
     if not st:
         return empty
@@ -451,6 +454,7 @@ def campaign_view(campaign) -> dict:
             fields[name]["value"] = str(measured[key])
     open_pct = (metrics["opened"] * 100 // metrics["sent"]) if metrics["sent"] else 0
     reply_pct = (metrics["replied"] * 100 // metrics["sent"]) if metrics["sent"] else 0
+    click_pct = (metrics.get("clicked", 0) * 100 // metrics["sent"]) if metrics["sent"] else 0
 
     st = leads_store(campaign["source_campaign"])
     try:
@@ -462,6 +466,7 @@ def campaign_view(campaign) -> dict:
             "derived": derived_fields(campaign),
             "open_rate": f"{open_pct}%" if metrics["sent"] else "—",
             "reply_rate": f"{reply_pct}%" if metrics["sent"] else "—",
+            "click_rate": f"{click_pct}%" if metrics["sent"] else "—",
             "bounce_rate": (f"{metrics.get('bounced', 0) * 100 // metrics['sent']}%"
                             if metrics["sent"] else "—"),
             "open_pct": open_pct, "reply_pct": reply_pct, "pending": pending}
@@ -769,6 +774,23 @@ def pixel(track_id):
     return Response(tracking.TRANSPARENT_GIF, mimetype="image/gif",
                     headers={"Cache-Control": "no-store, no-cache, must-revalidate",
                              "Pragma": "no-cache"})
+
+
+@app.route("/c/ping")
+def click_ping():
+    return Response("clicks-ok", mimetype="text/plain")
+
+
+@app.route("/c/<track_id>/<int:link_id>")
+def click(track_id, link_id):
+    """לחיצה על קישור במייל: רושמים ומפנים ליעד. משמש כשאין Worker בענן."""
+    for campaign in {c["source_campaign"] for c in store.all()
+                     if c["source_campaign"]}:
+        st = leads_store(campaign)
+        url = st.link_url(link_id) if st else ""
+        if url and st.mark_clicked(track_id):
+            return redirect(url)
+    return Response("הקישור לא נמצא", status=404)
 
 
 # ---------------------------- סריקה והעשרה ----------------------------

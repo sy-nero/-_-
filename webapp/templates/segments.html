@@ -31,13 +31,14 @@
   {% if not rows %}<p class="muted">אין מספיק נתונים.</p>{% else %}
   <div class="scroll">
   <table>
-    <thead><tr><th>{{ title }}</th><th>נשלחו</th><th>נפתחו</th><th>ענו</th><th>חזרו</th></tr></thead>
+    <thead><tr><th>{{ title }}</th><th>נשלחו</th><th>נפתחו</th><th>לחצו</th><th>ענו</th><th>חזרו</th></tr></thead>
     <tbody>
     {% for g in rows %}
     <tr>
       <td><b>{{ g.name }}</b></td>
       <td>{{ g.sent }}</td>
       <td>{{ g.opened }} <span class="muted">({{ g.open_rate }}%)</span></td>
+      <td>{% if g.clicked %}<b>{{ g.clicked }}</b>{% else %}0{% endif %} <span class="muted">({{ g.click_rate }}%)</span></td>
       <td>{% if g.replied %}<b>{{ g.replied }}</b>{% else %}0{% endif %} <span class="muted">({{ g.reply_rate }}%)</span></td>
       <td>{% if g.bounce_rate >= 10 %}<span class="dash">{{ g.bounced }} ({{ g.bounce_rate }}%)</span>{% else %}{{ g.bounced }} <span class="muted">({{ g.bounce_rate }}%)</span>{% endif %}</td>
     </tr>

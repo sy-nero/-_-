@@ -1118,11 +1118,14 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
             if broken:
                 raise RuntimeError(f"הנוסח לא נבנה נכון ({broken}), ולא נשלח אף מייל "
                                    "מהמנה הזו. כדאי לעדכן את האפליקציה ולנסות שוב.")
-            # פיקסל מעקב פתיחות (רק אם הוגדרה כתובת ציבורית)
+            # מעקב פתיחות ולחיצות (רק אם הוגדרה כתובת ציבורית)
             track_id = ""
             if cfg.tracking_base_url:
                 track_id = tracking.new_track_id()
                 html = tracking.add_pixel(html, cfg.tracking_base_url, track_id)
+                if tracking.clicks_supported(cfg.tracking_base_url):
+                    html = tracking.add_click_tracking(html, cfg.tracking_base_url,
+                                                       track_id, storage.link_id)
             try:
                 mailer.send(lead["email"], subject, html, text)
             except (smtplib.SMTPServerDisconnected, smtplib.SMTPConnectError,

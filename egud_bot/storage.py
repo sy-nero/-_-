@@ -69,6 +69,14 @@ CREATE TABLE IF NOT EXISTS {sent_log} (
     sent_at    TEXT,
     PRIMARY KEY (email, campaign)
 );
+
+-- הקישורים שבמיילים. הקישור במייל מצביע על /c/<מזהה מייל>/<מזהה קישור>, ושירות
+-- המעקב מפנה לכתובת שכאן. כתובת היעד לא נמצאת בקישור עצמו, ולכן אי אפשר
+-- להשתמש בשירות כדי להפנות לאתר אחר (open redirect).
+CREATE TABLE IF NOT EXISTS tracked_links (
+    id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    url  TEXT UNIQUE
+);
 """
 
 
@@ -104,6 +112,9 @@ class _TableNames:
 #: מיגרציה חדשה עדיין רצה -- רק לא שוב ושוב באותה ריצה.
 _PREPARED: set = set()
 
+#: כתובת יעד -> מספר הקישור שלה, כדי לא לשאול את המסד על כל מייל מחדש
+_LINK_IDS: dict = {}
+
 
 def _safe(name: str) -> str:
     """שם קמפיין -> סיומת חוקית לשם טבלה."""
@@ -133,7 +144,7 @@ class Storage:
                                "intro_why", "rec_json", "variant", "replied_at",
                                "reply_note", "track_id", "opened_at", "open_count",
                                "run_id", "specialty", "campaign_id", "source",
-                               "bounced_at"):
+                               "bounced_at", "clicked_at", "click_count"):
                     try:
                         conn.execute(
                             f"ALTER TABLE {self.leads} ADD COLUMN {column} TEXT")
@@ -401,6 +412,40 @@ class Storage:
                 (_now(), track_id))
             return first
 
+    def link_id(self, url: str) -> int:
+        """מספר קבוע לכתובת יעד, לקישור המעקב. אותה כתובת תמיד מקבלת אותו מספר."""
+        if url in _LINK_IDS:
+            return _LINK_IDS[url]
+        with self._conn() as conn:
+            conn.execute("INSERT OR IGNORE INTO tracked_links (url) VALUES (?)", (url,))
+            row = conn.execute("SELECT id FROM tracked_links WHERE url=?", (url,)).fetchone()
+        _LINK_IDS[url] = int(row["id"])
+        return _LINK_IDS[url]
+
+    def link_url(self, link_id: int) -> str:
+        with self._conn() as conn:
+            row = conn.execute("SELECT url FROM tracked_links WHERE id=?",
+                               (int(link_id),)).fetchone()
+        return row["url"] if row else ""
+
+    def mark_clicked(self, track_id: str) -> bool:
+        """
+        רושם לחיצה על קישור. מי שלחץ גם פתח את המייל, גם אם הפיקסל לא נטען
+        אצלו (תמונות חסומות), ולכן גם הפתיחה נרשמת.
+        """
+        with self._conn() as conn:
+            row = conn.execute("SELECT place_id FROM {leads} WHERE track_id=?",
+                               (track_id,)).fetchone()
+            if not row:
+                return False
+            now = _now()
+            conn.execute(
+                """UPDATE {leads} SET clicked_at=COALESCE(NULLIF(clicked_at,''), ?),
+                   click_count=COALESCE(click_count,0)+1,
+                   opened_at=COALESCE(NULLIF(opened_at,''), ?) WHERE track_id=?""",
+                (now, now, track_id))
+            return True
+
     def has_attributed_sends(self, campaign_id: str) -> bool:
         """האם נרשמו שליחות על שם הקמפיין הזה."""
         with self._conn() as conn:
@@ -451,6 +496,8 @@ class Storage:
                              THEN lower(email) END) AS opened,
                        COUNT(DISTINCT CASE WHEN replied_at IS NOT NULL AND replied_at != ''
                              THEN lower(email) END) AS replied,
+                       COUNT(DISTINCT CASE WHEN clicked_at IS NOT NULL AND clicked_at != ''
+                             THEN lower(email) END) AS clicked,
                        COUNT(DISTINCT CASE WHEN bounced_at IS NOT NULL AND bounced_at != ''
                              THEN lower(email) END) AS bounced
                     FROM {self.leads} WHERE {where}""", params).fetchone()
@@ -460,7 +507,7 @@ class Storage:
                 f"SELECT COUNT(DISTINCT lower(email)) FROM {self.leads} WHERE {fwhere}",
                 params).fetchone()[0]
             return {"sent": row["sent"], "opened": row["opened"],
-                    "replied": row["replied"],
+                    "replied": row["replied"], "clicked": row["clicked"],
                     "bounced": (row["bounced"] or 0) + (failed or 0)}
 
     def lead_by_email(self, email: str):
