@@ -4,6 +4,9 @@
 # הפרויקט יש main.py שהוא כלי ה-CLI ואין בו אובייקט app. לכן מצביעים כאן
 # במפורש על אפליקציית ה-Flask.
 #
+# הענף שממנו Vercel בונה: claude/agent-profile-recruitment-bykccn
+# (Settings -> Environments -> Production -> Branch Tracking).
+#
 # רשימת התלויות חייבת להישאר זהה ל-requirements.txt, שממנו Render מתקין.
 
 [project]
