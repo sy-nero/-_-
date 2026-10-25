@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}תיבות שליחה{% endblock %}
+{% block body %}
+
+<div class="card">
+  <h2>תיבות שליחה</h2>
+  <p class="sub">
+    כל תיבה שמוגדרת כאן מופיעה בעמוד השליחה של כל קמפיין, ושם בוחרים ממנה
+    שולחים. הסיסמה היא <b>סיסמת אפליקציה</b> של Google, לא הסיסמה הרגילה
+    של התיבה. יוצרים אותה כשמחוברים לתיבה, בכתובת
+    <a href="https://myaccount.google.com/apppasswords" target="_blank">myaccount.google.com/apppasswords</a>.
+  </p>
+  {% if not senders %}
+    <p class="muted">עוד אין תיבות. מוסיפים את הראשונה בטופס למטה.</p>
+  {% else %}
+  <div class="scroll">
+  <table>
+    <thead><tr><th>שם ברשימה</th><th>שולח</th><th>כתובת</th><th>סיסמה</th><th></th></tr></thead>
+    <tbody>
+    {% for b in senders %}
+    <tr>
+      <td><b>{{ b['label'] or '—' }}</b></td>
+      <td>{{ b['from_name'] or '—' }}</td>
+      <td class="remail">{{ b['from_email'] }}</td>
+      <td>{% if b['smtp_password'] %}<span class="ok">שמורה</span>{% else %}<span class="dash">חסרה</span>{% endif %}</td>
+      <td style="display:flex; gap:6px; flex-wrap:wrap;">
+        <a class="btn ghost small" href="{{ url_for('senders_page', edit=b['id']) }}">עריכה</a>
+        <form method="post" action="{{ url_for('sender_test', sender_id=b['id']) }}">
+          <button type="submit" class="ghost small">בדיקת חיבור</button></form>
+        <form method="post" action="{{ url_for('sender_delete', sender_id=b['id']) }}"
+              onsubmit="return confirm('למחוק את התיבה?');">
+          <button type="submit" class="ghost small">מחיקה</button></form>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>{{ 'עריכת תיבה' if edit else 'הוספת תיבה' }}</h2>
+  <form method="post" action="{{ url_for('senders_page') }}">
+    {% if edit %}<input type="hidden" name="id" value="{{ edit['id'] }}">{% endif %}
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px;">
+      <label>שם ברשימה<br><input type="text" name="label" placeholder="למשל: משרד האיגוד"
+             value="{{ edit['label'] if edit else '' }}"></label>
+      <label>שם השולח (מה שהנמען רואה)<br><input type="text" name="from_name" placeholder="ברכה וייס"
+             value="{{ edit['from_name'] if edit else '' }}"></label>
+      <label>כתובת המייל<br><input type="email" name="from_email" required dir="ltr"
+             placeholder="office@egud.org.il" value="{{ edit['from_email'] if edit else '' }}"></label>
+      <label>סיסמת אפליקציה{% if edit %} (ריק = להשאיר את הקיימת){% endif %}<br>
+        <input type="password" name="smtp_password" dir="ltr" autocomplete="new-password"
+               placeholder="16 אותיות"></label>
+    </div>
+    <details style="margin-top:12px;">
+      <summary class="muted">הגדרות מתקדמות (רק לתיבה שאינה של Google)</summary>
+      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-top:10px;">
+        <label>משתמש (ריק = כמו הכתובת)<br><input type="text" name="smtp_user" dir="ltr"
+               value="{{ edit['smtp_user'] if edit else '' }}"></label>
+        <label>שרת<br><input type="text" name="smtp_host" dir="ltr"
+               value="{{ edit['smtp_host'] if edit else 'smtp.gmail.com' }}"></label>
+        <label>פורט<br><input type="text" name="smtp_port" dir="ltr"
+               value="{{ edit['smtp_port'] if edit else '587' }}"></label>
+        <label style="display:flex; gap:6px; align-items:center;">
+          <input type="checkbox" name="use_ssl" {{ 'checked' if edit and edit['use_ssl'] }}> SSL</label>
+      </div>
+    </details>
+    <div style="margin-top:14px; display:flex; gap:10px;">
+      <button type="submit">שמירה</button>
+      {% if edit %}<a class="btn ghost" href="{{ url_for('senders_page') }}">ביטול</a>{% endif %}
+    </div>
+  </form>
+</div>
+{% endblock %}
