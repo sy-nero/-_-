@@ -666,6 +666,11 @@ def _preheader_html(text: str) -> str:
             f'opacity:0;mso-hide:all;">{html_escape(text)}{pad}</div>\n')
 
 
+def render_subject(subject_tpl: str, **ctx) -> str:
+    """רק הנושא, כמו שהוא יוצא במייל (בלי לבנות את כל הגוף)."""
+    return _tidy(fill_placeholders(subject_tpl, custom_values(**ctx)))
+
+
 def render_custom(subject_tpl: str, body_tpl: str, **ctx):
     """
     מרנדר נוסח שנכתב באפליקציה. מחזיר (subject, html, text) באותו מבנה

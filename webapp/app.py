@@ -680,6 +680,44 @@ def _campaign_sender(campaign) -> dict:
             "smtp_password": password, "smtp_host": host}
 
 
+#: סימון של כתובת בדיקה פנימית (המייל של מירי שנוסף לקמפיין לבדיקה)
+INTERNAL_TEST = "בדיקה פנימית"
+
+
+def _is_internal_test(lead) -> bool:
+    return (lead["primary_type"] or "") == INTERNAL_TEST
+
+
+def _sent_subjects(items) -> dict:
+    """
+    {נושא שנשלח לנמען (מנורמל): הנמען}, כדי לזהות תשובה שהגיעה מכתובת אחרת.
+    נושא שנשלח ליותר מנמען אחד (נושא בלי שם העסק) לא נכנס: אי אפשר לדעת
+    למי מהם התשובה שייכת.
+    """
+    from egud_bot import replies
+    seen, out = set(), {}
+    for st, sent in items:
+        campaign = next((c for c in store.all()
+                         if c["source_campaign"] == st.campaign and c["subject_tpl"]), None)
+        if not campaign:
+            continue
+        for lead in sent:
+            if _is_internal_test(lead):
+                continue
+            subject = mail_templates.render_subject(
+                campaign["subject_tpl"], business_name=lead["name"] or "",
+                first_name=lead["first_name"] or "")
+            norm, _ = replies.normalize_subject(subject)
+            if not norm:
+                continue
+            if norm in out or norm in seen:
+                out.pop(norm, None)
+                seen.add(norm)
+                continue
+            out[norm] = (lead["email"] or "").lower()
+    return out
+
+
 def _check_campaigns(campaigns) -> list[str]:
     """
     בודק תשובות לכמה קמפיינים. נכנס לכל תיבה פעם אחת בלבד, גם כשכמה
@@ -703,7 +741,8 @@ def _check_campaigns(campaigns) -> list[str]:
     for key, box in by_box.items():
         emails = [l["email"] for _, sent in box["items"] for l in sent]
         try:
-            result = replies.find_replies(box["sender"], emails)
+            result = replies.find_replies(box["sender"], emails,
+                                          subjects=_sent_subjects(box["items"]))
         except Exception as exc:  # noqa: BLE001
             lines.append(f"לא הצלחתי להיכנס לתיבה {key}: {exc}")
             continue
@@ -713,6 +752,8 @@ def _check_campaigns(campaigns) -> list[str]:
         sends = {}
         for st, sent in box["items"]:
             for lead in sent:
+                if _is_internal_test(lead):
+                    continue   # כתובת בדיקה שלנו: מה שמגיע ממנה אינו תשובה של עסק
                 sends.setdefault((lead["email"] or "").lower(), []).append((st, lead))
         new = 0
         for addr, items in sends.items():
@@ -727,7 +768,8 @@ def _check_campaigns(campaigns) -> list[str]:
             if addr in bounces:
                 for st, lead in items:
                     st.mark_bounced(lead["email"], f"המייל חזר: {bounces[addr]}"[:200])
-        lines.append(f"{key}: {len(found)} ענו ({new} חדשים), {len(bounces)} מיילים חזרו")
+        answered = sum(1 for addr in sends if addr in found)
+        lines.append(f"{key}: {answered} ענו ({new} חדשים), {len(bounces)} מיילים חזרו")
     return lines or ["אין עדיין קמפיינים שנשלחו מהם מיילים"]
 
 

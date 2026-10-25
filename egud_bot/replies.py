@@ -5,10 +5,19 @@
 לאותה תיבה ב-IMAP, עם אותה סיסמת אפליקציה, ומחפשים מיילים שהגיעו
 מכתובות שנשלח אליהן. לא נוגעים במיילים, רק קוראים כותרות (BODY.PEEK),
 כך שהם נשארים "לא נקראו" בתיבה.
+
+איפה מחפשים: בכל הדואר ולא רק בדואר הנכנס. תשובה שהועברה לארכיון, שסומנה
+בתווית או שנמחקה מהדואר הנכנס היא עדיין תשובה, ובחיפוש ב-INBOX בלבד היא
+פשוט לא נספרה.
+
+תשובה מכתובת אחרת: לפעמים בעל העסק עונה מתיבה אחרת מזו שאליה שלחנו (מייל
+המשרד הועבר לנייד, או שהשותף ענה). לכן תשובה ("Re:") שהנושא שלה הוא בדיוק
+הנושא ששלחנו לנמען מסוים נספרת לנמען הזה, גם כשהכתובת שונה.
 """
 import email
 import imaplib
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from email.header import decode_header, make_header
 from email.utils import getaddresses, parsedate_to_datetime
@@ -50,6 +59,40 @@ def _is_auto(msg) -> bool:
     return any(k in subject for k in _AUTO_SUBJECT)
 
 
+#: קידומות של תשובה והעברה בנושא, בעברית ובאנגלית
+_REPLY_PREFIX = re.compile(r"^\s*(re|fw|fwd|השב|תגובה|הועבר|העבר)\s*(\[\d+\])?\s*:\s*", re.I)
+
+
+def normalize_subject(subject: str) -> tuple[str, bool]:
+    """הנושא בלי Re:/Fwd: ובלי רווחים כפולים, והאם הייתה לו קידומת של תשובה."""
+    text = _text(subject)
+    was_reply = False
+    while True:
+        new = _REPLY_PREFIX.sub("", text, count=1)
+        if new == text:
+            break
+        was_reply, text = True, new
+    return re.sub(r"\s+", " ", text).strip().lower(), was_reply
+
+
+def _all_mail(conn) -> str:
+    """
+    שם התיקייה "כל הדואר" ב-Gmail. השם משתנה לפי שפת הממשק ("[Gmail]/All
+    Mail", "[Gmail]/כל הדואר"), ולכן מזהים אותה לפי הדגל \\All ולא לפי השם.
+    בשרת שאין בו תיקייה כזו מחפשים ב-INBOX.
+    """
+    try:
+        status, rows = conn.list()
+    except imaplib.IMAP4.error:
+        return "INBOX"
+    for row in rows or []:
+        line = row.decode("utf-8", "replace") if isinstance(row, bytes) else str(row)
+        match = re.match(r'\((?P<flags>[^)]*)\)\s+(?:"[^"]*"|NIL)\s+(?P<name>.+)$', line)
+        if match and "\\all" in match.group("flags").lower():
+            return match.group("name").strip()
+    return "INBOX"
+
+
 def _fetch(conn, ids: list, query: str) -> list:
     """
     FETCH שלא נופל בגלל הודעה אחת. Gmail מחזיר לפעמים "System Error" על
@@ -71,9 +114,13 @@ def _fetch(conn, ids: list, query: str) -> list:
         return _fetch(conn, ids[:mid], query) + _fetch(conn, ids[mid:], query)
 
 
-def find_replies(sender: dict, recipients, since_days: int = 60) -> dict:
+def find_replies(sender: dict, recipients, since_days: int = 60,
+                 subjects: dict | None = None) -> dict:
     """
     מחזיר {"replies": {נמען: (תאריך, נושא)}, "bounces": {נמען: סיבה}}.
+
+    subjects: {נושא ששלחנו (מנורמל): נמען}. תשובה מכתובת אחרת עם אותו נושא
+    נספרת לנמען הזה.
 
     תשובה = מייל שהגיע מכתובת של נמען. החזרה = הודעת מערכת (mailer-daemon)
     על נמען שהמייל אליו לא נמסר. Gmail שם את הכתובת בכותרת
@@ -89,7 +136,12 @@ def find_replies(sender: dict, recipients, since_days: int = 60) -> dict:
     conn = imaplib.IMAP4_SSL(imap_host_for(sender.get("smtp_host")), 993)
     try:
         conn.login(sender.get("smtp_user") or sender["from_email"], sender["smtp_password"])
-        conn.select("INBOX", readonly=True)
+        status, _ = conn.select(_all_mail(conn), readonly=True)
+        if status != "OK":
+            conn.select("INBOX", readonly=True)
+        own = {(sender.get("from_email") or "").strip().lower(),
+               (sender.get("smtp_user") or "").strip().lower()} - {""}
+        subjects = subjects or {}
         status, data = conn.search(None, "SINCE", since)
         ids = (data[0] or b"").split() if status == "OK" else []
         system_ids = []
@@ -115,15 +167,23 @@ def find_replies(sender: dict, recipients, since_days: int = 60) -> dict:
                     continue
                 if _is_auto(msg):
                     continue   # מענה אוטומטי ("תודה שפניתם", "אני מחוץ למשרד") אינו תשובה
-                for addr in senders:
-                    if addr in wanted:
-                        try:
-                            when = parsedate_to_datetime(msg.get("Date")).astimezone(timezone.utc).isoformat()
-                        except Exception:  # noqa: BLE001
-                            when = ""
-                        prev = out["replies"].get(addr)
-                        if not prev or when > prev[0]:
-                            out["replies"][addr] = (when, _text(msg.get("Subject", "")))
+                if own & set(senders):
+                    continue   # מייל שיצא מהתיבה עצמה (ב"כל הדואר" יש גם את הנשלחים)
+                try:
+                    when = parsedate_to_datetime(msg.get("Date")).astimezone(timezone.utc).isoformat()
+                except Exception:  # noqa: BLE001
+                    when = ""
+                subject = _text(msg.get("Subject", ""))
+                hits = [(a, subject) for a in senders if a in wanted]
+                if not hits and subjects:
+                    norm, was_reply = normalize_subject(subject)
+                    target = subjects.get(norm) if was_reply else None
+                    if target:
+                        hits = [(target, f"{subject} (מהכתובת {senders[0] if senders else ''})")]
+                for addr, note in hits:
+                    prev = out["replies"].get(addr)
+                    if not prev or when > prev[0]:
+                        out["replies"][addr] = (when, note)
         # הודעות מערכת בלי כותרת: מחפשים את הכתובת בתחילת הגוף
         for msg_id in system_ids:
             rows = _fetch(conn, [msg_id], "(BODY.PEEK[TEXT]<0.6000>)")
