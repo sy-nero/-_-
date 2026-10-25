@@ -63,6 +63,43 @@ def _is_auto(msg) -> bool:
 _REPLY_PREFIX = re.compile(r"^\s*(re|fw|fwd|השב|תגובה|הועבר|העבר)\s*(\[\d+\])?\s*:\s*", re.I)
 
 
+#: מילים בתחילת תשובה שמשמעותן "אל תשלחו לי יותר"
+_REMOVE_WORDS = ("הסר", "הסירו", "להסיר", "תסירו", "תוריד", "תורידו", "הורידו", "הוריד",
+                 "לא מעוניין", "לא מעוניינת", "לא מעוניינים", "אל תשלחו", "תפסיקו",
+                 "unsubscribe", "remove")
+
+
+def asks_removal(text: str) -> bool:
+    """
+    האם התשובה מבקשת להפסיק לשלוח. בודקים רק את מה שהנמען כתב, לפני הציטוט
+    של המייל שלנו: אחרת "הסר" מתוך שורת ההסרה שלנו היה נספר כבקשה.
+    """
+    own = []
+    for line in (text or "").splitlines():
+        s = line.strip()
+        if s.startswith(">") or re.match(r"^(On .+wrote:|ב.+כתב.*:|-----Original|From:|מאת:)", s):
+            break
+        own.append(s)
+    head = " ".join(own)[:400].lower()
+    # מילה שלמה בלבד: "הסר" לא אמור להתאים ל"הסרטון"
+    letters = "\u0590-\u05ffa-z"
+    return any(re.search(rf"(?<![{letters}]){re.escape(w)}(?![{letters}])", head)
+               for w in _REMOVE_WORDS)
+
+
+def _plain_body(raw: bytes) -> str:
+    msg = email.message_from_bytes(raw)
+    parts = msg.walk() if msg.is_multipart() else [msg]
+    for part in parts:
+        if part.get_content_type() == "text/plain":
+            try:
+                return part.get_payload(decode=True).decode(
+                    part.get_content_charset() or "utf-8", "replace")
+            except Exception:  # noqa: BLE001
+                continue
+    return ""
+
+
 def normalize_subject(subject: str) -> tuple[str, bool]:
     """הנושא בלי Re:/Fwd: ובלי רווחים כפולים, והאם הייתה לו קידומת של תשובה."""
     text = _text(subject)
@@ -129,7 +166,7 @@ def find_replies(sender: dict, recipients, since_days: int = 60,
     """
     wanted = {(r or "").strip().lower() for r in recipients if r}
     wanted = {w for w in wanted if w and not w.startswith(_SYSTEM)}
-    out = {"replies": {}, "bounces": {}}
+    out = {"replies": {}, "bounces": {}, "unsubscribes": set()}
     if not wanted:
         return out
     since = (datetime.now(timezone.utc) - timedelta(days=since_days)).strftime("%d-%b-%Y")
@@ -142,6 +179,7 @@ def find_replies(sender: dict, recipients, since_days: int = 60,
         own = {(sender.get("from_email") or "").strip().lower(),
                (sender.get("smtp_user") or "").strip().lower()} - {""}
         subjects = subjects or {}
+        reply_ids = []
         status, data = conn.search(None, "SINCE", since)
         ids = (data[0] or b"").split() if status == "OK" else []
         system_ids = []
@@ -181,9 +219,17 @@ def find_replies(sender: dict, recipients, since_days: int = 60,
                     if target:
                         hits = [(target, f"{subject} (מהכתובת {senders[0] if senders else ''})")]
                 for addr, note in hits:
+                    reply_ids.append((addr, row[0].split()[0]))
                     prev = out["replies"].get(addr)
                     if not prev or when > prev[0]:
                         out["replies"][addr] = (when, note)
+        # תשובות: קוראים את הגוף (רק של התשובות, לא של כל התיבה) ובודקים
+        # אם הנמען ביקש שלא נפנה אליו שוב
+        for addr, msg_id in reply_ids:
+            rows = _fetch(conn, [msg_id], "(BODY.PEEK[])")
+            raw = b"".join(r[1] for r in rows if isinstance(r, tuple))
+            if raw and asks_removal(_plain_body(raw)):
+                out["unsubscribes"].add(addr)
         # הודעות מערכת בלי כותרת: מחפשים את הכתובת בתחילת הגוף
         for msg_id in system_ids:
             rows = _fetch(conn, [msg_id], "(BODY.PEEK[TEXT]<0.6000>)")

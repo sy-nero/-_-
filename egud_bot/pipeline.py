@@ -955,6 +955,8 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
     # סינון לפי יומן שליחות קבוע: לעולם לא לשלוח שוב למי שכבר קיבל (גם אחרי מחיקת DB)
     pending = _flush_unrecorded(storage) if not dry_run else set()
     sent_before = storage.already_sent_emails() | pending
+    # מי שביקש להסיר אותו: לא שולחים לו שוב, מאף קמפיין
+    sent_before = sent_before | storage.unsubscribed_emails()
     if skip_contacted:
         sent_before = sent_before | storage.contacted_any_campaign()
     all_candidates = storage.leads_to_email(10 ** 9)

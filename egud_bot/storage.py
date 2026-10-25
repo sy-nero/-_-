@@ -73,6 +73,14 @@ CREATE TABLE IF NOT EXISTS {sent_log} (
 -- הקישורים שבמיילים. הקישור במייל מצביע על /c/<מזהה מייל>/<מזהה קישור>, ושירות
 -- המעקב מפנה לכתובת שכאן. כתובת היעד לא נמצאת בקישור עצמו, ולכן אי אפשר
 -- להשתמש בשירות כדי להפנות לאתר אחר (open redirect).
+-- מי שביקש להסיר אותו מהדיוור ("הסר", "לא מעוניין"). משותף לכל הקמפיינים:
+-- כתובת שנכנסה לכאן לא מקבלת מאיתנו מייל יותר, באף קמפיין.
+CREATE TABLE IF NOT EXISTS unsubscribed (
+    email  TEXT PRIMARY KEY,
+    at     TEXT,
+    note   TEXT
+);
+
 CREATE TABLE IF NOT EXISTS tracked_links (
     id   INTEGER PRIMARY KEY AUTOINCREMENT,
     url  TEXT UNIQUE
@@ -623,6 +631,20 @@ class Storage:
                    WHERE lower(email)=lower(?) AND (bounced_at IS NULL OR bounced_at='')""",
                 (_now(), reason, (email or "").strip()))
             return cur.rowcount
+
+    def unsubscribe(self, email: str, note: str = "") -> None:
+        """מוסיף לרשימת ההסרה. לא שולחים לכתובת הזו יותר, מאף קמפיין."""
+        email = (email or "").strip().lower()
+        if not email:
+            return
+        with self._conn() as conn:
+            conn.execute("INSERT OR IGNORE INTO unsubscribed (email, at, note) VALUES (?, ?, ?)",
+                         (email, _now(), note))
+
+    def unsubscribed_emails(self) -> set:
+        with self._conn() as conn:
+            rows = conn.execute("SELECT email FROM unsubscribed").fetchall()
+        return {(r["email"] or "").lower() for r in rows}
 
     def mark_replied(self, email: str, note: str = "") -> int:
         """רושם שהסוכן השיב (וטלפון/הערה אם יש). מחזיר כמה שורות עודכנו."""

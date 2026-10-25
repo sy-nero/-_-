@@ -747,6 +747,7 @@ def _check_campaigns(campaigns) -> list[str]:
             lines.append(f"לא הצלחתי להיכנס לתיבה {key}: {exc}")
             continue
         found, bounces = result["replies"], result["bounces"]
+        removals = result.get("unsubscribes") or set()
         # נמען שקיבל כמה קמפיינים: התשובה שייכת לשליחה האחרונה שקדמה לה,
         # ולא לכל הקמפיינים שהוא היה בהם
         sends = {}
@@ -762,14 +763,19 @@ def _check_campaigns(campaigns) -> list[str]:
                 when = hit[0] or "9999"
                 before = [it for it in items if (it[1]["emailed_at"] or "") <= when]
                 st, lead = max(before or items, key=lambda it: it[1]["emailed_at"] or "")
-                if not lead["replied_at"]:
+                if addr in removals:
+                    # לא נספר כ"ענה": בקשת הסרה היא לא עניין במענק
+                    st.unsubscribe(addr, f"ביקש להסיר: {hit[1]}"[:200])
+                elif not lead["replied_at"]:
                     st.mark_replied(lead["email"], f"ענה: {hit[1]}"[:200])
                     new += 1
             if addr in bounces:
                 for st, lead in items:
                     st.mark_bounced(lead["email"], f"המייל חזר: {bounces[addr]}"[:200])
         answered = sum(1 for addr in sends if addr in found)
-        lines.append(f"{key}: {answered} ענו ({new} חדשים), {len(bounces)} מיילים חזרו")
+        removed = sum(1 for addr in sends if addr in removals)
+        lines.append(f"{key}: {answered} ענו ({new} חדשים), {len(bounces)} מיילים חזרו"
+                     + (f", {removed} ביקשו להסיר" if removed else ""))
     return lines or ["אין עדיין קמפיינים שנשלחו מהם מיילים"]
 
 
