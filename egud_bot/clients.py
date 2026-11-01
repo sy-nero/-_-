@@ -109,6 +109,12 @@ class ClientStore:
             conn.execute(f"UPDATE clients SET {', '.join(f'{k}=?' for k in sets)} WHERE id=?",
                          (*sets.values(), int(client_id)))
 
+    def delete(self, client_id: int) -> None:
+        """מוחק את הלקוח ואת תנועות הארנק שלו."""
+        with self._conn() as conn:
+            conn.execute("DELETE FROM wallet_tx WHERE client_id=?", (int(client_id),))
+            conn.execute("DELETE FROM clients WHERE id=?", (int(client_id),))
+
     # ---------- ארנק ----------
     def add_tx(self, client_id: int, kind: str, emails: int, amount: float, note: str = "") -> None:
         with self._conn() as conn:

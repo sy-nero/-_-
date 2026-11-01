@@ -127,6 +127,9 @@
       <label class="field"><span>הערות</span><textarea name="notes">{{ client['notes'] or '' }}</textarea></label>
       <div><button type="submit">שמירה</button></div>
     </form>
+    <div class="subsec">
+      <button type="button" class="danger small" onclick="document.getElementById('delClient').showModal()">מחיקת הלקוח</button>
+    </div>
   </details>
 </div>
 
@@ -156,6 +159,24 @@
       <label class="field"><span>הערה (רשות)</span><input type="text" name="note" placeholder="למשל: שולם בהעברה בנקאית"></label>
     </div>
     <div class="d-foot"><button type="submit">רישום בארנק</button>
+      <button type="button" class="ghost" onclick="this.closest('dialog').close()">ביטול</button></div>
+  </form>
+</dialog>
+
+<dialog id="delClient">
+  <form method="post" action="{{ url_for('client_delete', client_id=client['id']) }}">
+    <div class="d-head"><h2>מחיקת {{ client['name'] }}</h2></div>
+    <div class="d-body">
+      <p style="margin:0;">יימחקו: התיקייה, {{ columns|length }} הקמפיינים שלו, הארנק
+        ({{ tx|length }} תנועות) ותיבות השליחה שלו כולל הסיסמאות. אי אפשר לבטל את זה.</p>
+      {% if wallet.balance > 0 %}
+      <div class="warn" style="margin:0;">בארנק נשארו <b>{{ wallet.balance }}</b> מיילים ששולמו ולא נוצלו.</div>
+      {% endif %}
+      <p class="muted" style="margin:0;">רשימות הנמענים נשארות במאגר, כדי שלא יישלח פעמיים לאותם אנשים.</p>
+      <label class="field"><span>להקליד את שם הלקוח כדי לאשר</span>
+        <input type="text" name="confirm" placeholder="{{ client['name'] }}" required autocomplete="off"></label>
+    </div>
+    <div class="d-foot"><button type="submit" class="danger">מחיקה סופית</button>
       <button type="button" class="ghost" onclick="this.closest('dialog').close()">ביטול</button></div>
   </form>
 </dialog>

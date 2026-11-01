@@ -633,6 +633,32 @@ def client_page(client_id):
                            per_email=cs.per_email_price())
 
 
+@app.route("/client/<int:client_id>/delete", methods=["POST"])
+def client_delete(client_id):
+    """
+    מחיקת לקוח: התיקייה, הקמפיינים שלו, הארנק והתיבות שלו (כולל הסיסמאות).
+    רשימות הנמענים עצמן נשארות במאגר, כדי שאם ייפתח שוב לא יישלח פעמיים.
+    """
+    cs = client_store()
+    client = cs.get(client_id)
+    if not client:
+        return redirect(url_for("clients_page"))
+    if (request.form.get("confirm") or "").strip() != client["name"].strip():
+        flash("כדי למחוק צריך להקליד את שם הלקוח בדיוק")
+        return redirect(url_for("client_page", client_id=client_id))
+    removed = 0
+    for c in store.all(include_archived=True):
+        if _client_of(c) == client_id:
+            store.delete(c["id"])
+            removed += 1
+    boxes = sender_box.SenderStore()
+    for b in boxes.for_client(client_id):
+        boxes.delete(b["id"])
+    cs.delete(client_id)
+    flash(f"הלקוח {client['name']} נמחק, עם {removed} קמפיינים, הארנק ותיבות השליחה שלו.")
+    return redirect(url_for("clients_page"))
+
+
 @app.route("/client/<int:client_id>/wallet", methods=["POST"])
 def client_wallet_add(client_id):
     """רכישת חבילה, רכישה לפי מספר מיילים, או תיקון ידני."""
