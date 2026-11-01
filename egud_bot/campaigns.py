@@ -110,7 +110,7 @@ class CampaignStore:
             conn.executescript(SCHEMA)
             # מיגרציה למאגר שנוצר לפני שהשדות האלה נוספו
             for column in ("search_query", "subject_tpl", "body_tpl", "sender_id",
-                           "client_id"):
+                           "client_id", "subject_b", "body_b"):
                 try:
                     conn.execute(f"ALTER TABLE campaigns ADD COLUMN {column} TEXT")
                 except Exception:  # noqa: BLE001 — העמודה כבר קיימת
@@ -187,7 +187,7 @@ class CampaignStore:
     def update(self, campaign_id: int, **fields) -> None:
         allowed = {"title", "kind", "started_on", "source_campaign", "variant",
                    "archived", "position", "search_query", "subject_tpl",
-                   "body_tpl", "sender_id", "client_id"}
+                   "body_tpl", "sender_id", "client_id", "subject_b", "body_b"}
         sets = {k: v for k, v in fields.items() if k in allowed}
         if not sets:
             return

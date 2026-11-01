@@ -39,6 +39,32 @@
   <div class="stat"><div class="label">חזרו</div><div class="value">{{ metrics.bounced or 0 }}</div><div class="note">{{ bounce_rate }}</div></div>
 </div>
 
+{% if ab %}
+<div class="card">
+  <div class="card-head"><h2>השוואת נוסחים</h2>
+    <span class="muted">{{ ab.verdict }}</span></div>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>נוסח</th><th>נושא</th><th class="num">נשלחו</th><th class="num">נפתחו</th>
+      <th class="num">לחצו</th><th class="num">השיבו</th><th class="num">חזרו</th></tr></thead>
+    <tbody>{% for arm in ab.arms %}
+      <tr class="{{ 'best' if arm.name == ab.winner }}">
+        <td><b>{{ arm.name }}</b>{% if arm.name == ab.winner %} <span class="pill is-done">מוביל</span>{% endif %}</td>
+        <td>{{ arm.subject }}</td>
+        <td class="num">{{ arm.sent }}</td>
+        <td class="num">{{ arm.opened }} <span class="muted">({{ arm.open_rate }}%)</span></td>
+        <td class="num">{{ arm.clicked }} <span class="muted">({{ arm.click_rate }}%)</span></td>
+        <td class="num"><b>{{ arm.replied }}</b> <span class="muted">({{ arm.reply_rate }}%)</span></td>
+        <td class="num">{{ arm.bounced }}</td>
+      </tr>{% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="muted" style="margin:10px 0 0;">המוביל נקבע לפי תשובות, ואם אין הבדל, לפי לחיצות.
+    לחיצות שנרשמו בדקה הראשונה אחרי השליחה (סורקי אבטחה) לא נספרות.</p>
+</div>
+{% endif %}
+
 <dialog id="dupDialog">
   <form method="post" action="{{ url_for('campaign_duplicate', campaign_id=campaign['id']) }}">
     <div class="d-head"><h2>שכפול הקמפיין</h2></div>
@@ -107,6 +133,17 @@
     {% for key in placeholders %}<code>{{ '{{' }}{{ key }}{{ '}}' }}</code>{{ " · " if not loop.last }}{% endfor %}
     — שורה ריקה בין פסקאות מפרידה פסקה במייל.
   </p>
+  <details class="subsec" id="ab" {{ 'open' if campaign['subject_b'] or campaign['body_b'] }}>
+    <summary style="cursor:pointer; font-weight:700;">השוואת נוסחים (A/B)</summary>
+    <p class="muted" style="margin:8px 0 12px;">ממלאים כאן נוסח ב'. בשליחה הנמענים מתחלקים לבד חצי-חצי:
+      חצי מקבלים את הנוסח למעלה (A) וחצי את הנוסח כאן (B). שדה שנשאר ריק לוקח את הנוסח של A,
+      כך שאפשר לבדוק רק נושא, או רק גוף. התוצאות מופיעות בראש העמוד.</p>
+    <label class="field"><span>נושא המייל, נוסח B</span>
+      <input type="text" name="subject_b" value="{{ campaign['subject_b'] or '' }}"
+             placeholder="ריק = כמו נוסח A"></label>
+    <label class="field" style="margin-top:12px;"><span>גוף המייל, נוסח B</span>
+      <textarea name="body_b" style="min-height:140px;" placeholder="ריק = כמו נוסח A">{{ campaign['body_b'] or '' }}</textarea></label>
+  </details>
 </div>
 
 {% endif %}

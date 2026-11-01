@@ -123,6 +123,26 @@ _PREPARED: set = set()
 #: כתובת יעד -> מספר הקישור שלה, כדי לא לשאול את המסד על כל מייל מחדש
 _LINK_IDS: dict = {}
 
+#: לחיצה בדקה הראשונה אחרי השליחה = סורק אבטחה, לא אדם
+HUMAN_CLICK_SECONDS = 60
+
+#: לחיצה של אדם: נרשמה ככזו, או (בנתונים מלפני השינוי) הלחיצה הראשונה
+#: הייתה יותר מדקה אחרי השליחה
+REAL_CLICK = ("((human_clicked_at IS NOT NULL AND human_clicked_at != '') OR "
+              "(clicked_at IS NOT NULL AND clicked_at != '' AND emailed_at IS NOT NULL AND "
+              f"(julianday(clicked_at) - julianday(emailed_at)) * 86400 > {HUMAN_CLICK_SECONDS}))")
+
+
+def _seconds_since(start: str, end: str) -> float:
+    try:
+        a = datetime.fromisoformat((start or "").replace("Z", "+00:00"))
+        b = datetime.fromisoformat(end)
+        if a.tzinfo is None:
+            a = a.replace(tzinfo=timezone.utc)
+        return (b - a).total_seconds()
+    except ValueError:
+        return 10 ** 9     # בלי זמן שליחה: לא חוסמים
+
 
 def _safe(name: str) -> str:
     """שם קמפיין -> סיומת חוקית לשם טבלה."""
@@ -152,7 +172,8 @@ class Storage:
                                "intro_why", "rec_json", "variant", "replied_at",
                                "reply_note", "track_id", "opened_at", "open_count",
                                "run_id", "specialty", "campaign_id", "source",
-                               "bounced_at", "clicked_at", "click_count"):
+                               "bounced_at", "clicked_at", "click_count",
+                               "human_clicked_at", "ab"):
                     try:
                         conn.execute(
                             f"ALTER TABLE {self.leads} ADD COLUMN {column} TEXT")
@@ -440,19 +461,49 @@ class Storage:
         """
         רושם לחיצה על קישור. מי שלחץ גם פתח את המייל, גם אם הפיקסל לא נטען
         אצלו (תמונות חסומות), ולכן גם הפתיחה נרשמת.
+
+        לחיצה בדקה הראשונה אחרי השליחה היא כמעט תמיד סורק אבטחה של שרת
+        המייל, לא אדם. היא נרשמת ב-clicked_at, אבל רק לחיצה אחרי הדקה
+        הראשונה נרשמת ב-human_clicked_at, ורק היא נספרת בתוצאות.
         """
         with self._conn() as conn:
-            row = conn.execute("SELECT place_id FROM {leads} WHERE track_id=?",
+            row = conn.execute("SELECT place_id, emailed_at FROM {leads} WHERE track_id=?",
                                (track_id,)).fetchone()
             if not row:
                 return False
             now = _now()
+            human = _seconds_since(row["emailed_at"], now) > HUMAN_CLICK_SECONDS
             conn.execute(
                 """UPDATE {leads} SET clicked_at=COALESCE(NULLIF(clicked_at,''), ?),
                    click_count=COALESCE(click_count,0)+1,
+                   human_clicked_at=CASE WHEN ? THEN COALESCE(NULLIF(human_clicked_at,''), ?)
+                                         ELSE human_clicked_at END,
                    opened_at=COALESCE(NULLIF(opened_at,''), ?) WHERE track_id=?""",
-                (now, now, track_id))
+                (now, 1 if human else 0, now, now, track_id))
             return True
+
+    def set_ab(self, place_id: str, arm: str) -> None:
+        """איזה נוסח (A או B) קיבל הנמען, בהשוואת נוסחים."""
+        with self._conn() as conn:
+            conn.execute("UPDATE {leads} SET ab=? WHERE place_id=?", (arm, place_id))
+
+    def ab_metrics(self, campaign_id: str) -> dict:
+        """{"A": {...}, "B": {...}}: נשלחו, נפתחו, לחצו, ענו, חזרו לכל נוסח."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                f"""SELECT ab, COUNT(DISTINCT lower(email)) AS sent,
+                       COUNT(DISTINCT CASE WHEN opened_at IS NOT NULL AND opened_at != ''
+                             THEN lower(email) END) AS opened,
+                       COUNT(DISTINCT CASE WHEN {REAL_CLICK} THEN lower(email) END) AS clicked,
+                       COUNT(DISTINCT CASE WHEN replied_at IS NOT NULL AND replied_at != ''
+                             THEN lower(email) END) AS replied,
+                       COUNT(DISTINCT CASE WHEN bounced_at IS NOT NULL AND bounced_at != ''
+                             THEN lower(email) END) AS bounced
+                    FROM {{leads}} WHERE status='emailed' AND campaign_id=?
+                      AND ab IN ('A','B')
+                      AND coalesce(primary_type,'') != 'בדיקה פנימית'
+                    GROUP BY ab""", (str(campaign_id),)).fetchall()
+        return {r["ab"]: dict(r) for r in rows}
 
     def has_attributed_sends(self, campaign_id: str) -> bool:
         """האם נרשמו שליחות על שם הקמפיין הזה."""
@@ -505,8 +556,7 @@ class Storage:
                              THEN lower(email) END) AS opened,
                        COUNT(DISTINCT CASE WHEN replied_at IS NOT NULL AND replied_at != ''
                              THEN lower(email) END) AS replied,
-                       COUNT(DISTINCT CASE WHEN clicked_at IS NOT NULL AND clicked_at != ''
-                             THEN lower(email) END) AS clicked,
+                       COUNT(DISTINCT CASE WHEN {REAL_CLICK} THEN lower(email) END) AS clicked,
                        COUNT(DISTINCT CASE WHEN bounced_at IS NOT NULL AND bounced_at != ''
                              THEN lower(email) END) AS bounced,
                        MAX(emailed_at) AS last_sent

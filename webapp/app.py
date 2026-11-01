@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 from webapp.jobs import runner  # noqa: E402
 from egud_bot.campaigns import (CampaignStore, TEXT_FIELDS, AUTO_FIELDS,  # noqa: E402
                                 MANUAL_FIELDS, ALL_FIELDS)
-from egud_bot.storage import Storage  # noqa: E402
+from egud_bot.storage import Storage, REAL_CLICK  # noqa: E402
 from egud_bot import senders as sender_box  # noqa: E402
 from egud_bot import importer  # noqa: E402
 from egud_bot.clients import ClientStore, TX_KINDS  # noqa: E402
@@ -224,15 +224,16 @@ def segment_rows(campaigns) -> list:
             return []
         with st._conn() as conn:
             rows = conn.execute(
-                """SELECT email, primary_type, address, opened_at, replied_at, bounced_at,
-                          clicked_at, status, error FROM {leads}
+                f"""SELECT email, primary_type, address, opened_at, replied_at, bounced_at,
+                          CASE WHEN {REAL_CLICK} THEN 1 ELSE 0 END AS real_click,
+                          status, error FROM {{leads}}
                    WHERE status IN ('emailed','failed') AND campaign_id=?""",
                 (str(campaign["id"]),)).fetchall()
         return [{"campaign": campaign["title"], "field": _FIELD_ALIASES.get((r["primary_type"] or "").strip(),
                                             (r["primary_type"] or "").strip()) or "לא ידוע",
                  "city": _city_of(r["address"]), "provider": _provider_of(r["email"]),
                  "opened": bool(r["opened_at"]), "replied": bool(r["replied_at"]),
-                 "clicked": bool(r["clicked_at"]),
+                 "clicked": bool(r["real_click"]),
                  "bounced": bool(r["bounced_at"]) or (
                      r["status"] == "failed" and "connect" not in (r["error"] or "").lower())}
                 for r in rows]
@@ -352,7 +353,9 @@ def custom_of(campaign):
     body = _col(campaign, "body_tpl")
     if not (subject or body):
         return None
-    return (subject, body, campaign_profession(campaign))
+    # נוסח ב' להשוואה: אם מולא, השליחה מחלקת את הנמענים חצי-חצי
+    return (subject, body, campaign_profession(campaign),
+            _col(campaign, "subject_b"), _col(campaign, "body_b"))
 
 
 def _col(row, name: str) -> str:
@@ -480,6 +483,52 @@ def campaign_view(campaign) -> dict:
             "bounce_pct": (metrics.get("bounced", 0) * 100 // metrics["sent"]) if metrics["sent"] else 0,
             "reply_exact": round(100 * metrics["replied"] / metrics["sent"], 1) if metrics["sent"] else 0,
             "pending": pending, "status": _status(metrics["sent"], pending)}
+
+
+def ab_summary(campaign):
+    """
+    תוצאות השוואת הנוסחים של הקמפיין, ומי מוביל. None כשאין נוסח B.
+    "מוביל" לפי אחוז תשובות, ואם שווה, לפי אחוז לחיצות. מבחן z לשני
+    אחוזים אומר אם ההבדל כבר מספיק גדול כדי לסמוך עליו.
+    """
+    import math
+    if not (_col(campaign, "subject_b") or _col(campaign, "body_b")):
+        return None
+    st = leads_store(_col(campaign, "source_campaign"))
+    try:
+        data = st.ab_metrics(campaign["id"]) if st else {}
+    except Exception:  # noqa: BLE001
+        data = {}
+    subjects = {"A": _col(campaign, "subject_tpl"),
+                "B": _col(campaign, "subject_b") or _col(campaign, "subject_tpl")}
+    arms = []
+    for name in ("A", "B"):
+        d = data.get(name, {"sent": 0, "opened": 0, "clicked": 0, "replied": 0, "bounced": 0})
+        n = max(d["sent"] - d["bounced"], 0)
+
+        def rate(k, n=n, d=d):
+            return round(100 * d[k] / n, 1) if n else 0
+        arms.append({"name": name, "subject": subjects[name], **d, "delivered": n,
+                     "open_rate": rate("opened"), "click_rate": rate("clicked"),
+                     "reply_rate": rate("replied")})
+    a, b = arms
+    if not (a["delivered"] and b["delivered"]):
+        return {"arms": arms, "winner": "", "verdict": "עוד לא נשלח לשני הנוסחים"}
+
+    def z(key):
+        p1, p2 = a[key] / a["delivered"], b[key] / b["delivered"]
+        p = (a[key] + b[key]) / (a["delivered"] + b["delivered"])
+        se = math.sqrt(p * (1 - p) * (1 / a["delivered"] + 1 / b["delivered"])) if 0 < p < 1 else 0
+        return (p1 - p2) / se if se else 0.0
+    key = "replied" if a["replied"] != b["replied"] else "clicked"
+    if a[key] == b[key]:
+        return {"arms": arms, "winner": "", "verdict": "עוד אין הבדל בין הנוסחים"}
+    winner = "A" if a[key] / a["delivered"] > b[key] / b["delivered"] else "B"
+    sure = abs(z(key)) >= 1.96
+    label = "תשובות" if key == "replied" else "לחיצות"
+    verdict = (f"נוסח {winner} מוביל ב{label}, וההבדל מובהק: אפשר לסמוך עליו"
+               if sure else f"נוסח {winner} מוביל ב{label}, אבל עוד מוקדם לקבוע. כדאי לשלוח לעוד נמענים")
+    return {"arms": arms, "winner": winner, "verdict": verdict}
 
 
 def _status(sent: int, pending: int) -> tuple[str, str]:
@@ -828,7 +877,8 @@ def campaign_edit(campaign_id):
         # ובלי הבדיקה הזאת כל שמירה מחקה את נושא המייל וגוף המייל של הקמפיין.
         posted = {k: (request.form.get(k) or "").strip()
                   for k in ("title", "started_on", "source_campaign", "variant",
-                            "search_query", "subject_tpl", "body_tpl")
+                            "search_query", "subject_tpl", "body_tpl",
+                            "subject_b", "body_b")
                   if k in request.form}
         if "kind" in request.form:
             posted["kind"] = request.form.get("kind", "email")
@@ -857,6 +907,7 @@ def campaign_edit(campaign_id):
     run = store.run_of(campaign_id)
     client = client_store().get(_client_of(campaign)) if _client_of(campaign) else None
     return render_template("campaign.html", **view, text_fields=TEXT_FIELDS, client=client,
+                           ab=ab_summary(campaign),
                            ready=ready_to_send(campaign, run),
                            auto_fields=AUTO_FIELDS, manual_fields=MANUAL_FIELDS,
                            cities=CITIES, pool=pool[0], pool_error=pool[1],
@@ -904,12 +955,13 @@ def send_page(campaign_id):
         template_campaign = (f"{campaign['source_campaign']}_offer"
                              if campaign["variant"] == "b"
                              else campaign["source_campaign"])
+        lead_custom, arm = pipeline.pick_custom(custom_of(campaign), lead["email"])
         subject, _html, text = pipeline._render(
             template_campaign,
             pipeline.build_ctx(config, campaign["source_campaign"], lead,
                                sender=sender),
-            custom_of(campaign))
-        previews.append({"lead": lead, "subject": subject, "text": text})
+            lead_custom)
+        previews.append({"lead": lead, "subject": subject, "text": text, "arm": arm})
     env_from, env_name, _, _ = config.sender_for(campaign["source_campaign"])
 
     # ב-Vercel כל לחיצה שולחת עד SEND_BATCH, אז מסמנים מראש מנה כזו

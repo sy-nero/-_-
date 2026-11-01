@@ -63,6 +63,29 @@ def _render(template_campaign: str, ctx: dict, custom=None):
     return templates.render(template_campaign, **ctx)
 
 
+def ab_arm(email: str) -> str:
+    """
+    לאיזה נוסח הנמען שייך בהשוואת נוסחים: A או B. נקבע לפי הכתובת עצמה,
+    כך שאותו נמען תמיד באותה קבוצה (גם בתצוגה המקדימה וגם בשליחה),
+    והחלוקה יוצאת בערך חצי-חצי.
+    """
+    import hashlib
+    return "B" if hashlib.md5((email or "").strip().lower().encode()).digest()[0] % 2 else "A"
+
+
+def pick_custom(custom, email: str):
+    """
+    (הנוסח שיישלח לנמען, A/B או ""). custom הוא (נושא, גוף, תחום, נושא ב', גוף ב').
+    נוסח ב' שהשאירו בו שדה ריק משתמש בשדה של נוסח א': כך אפשר לבדוק רק נושא.
+    """
+    if not custom or len(custom) < 5 or not (custom[3] or custom[4]):
+        return custom, ""
+    arm = ab_arm(email)
+    if arm == "A":
+        return custom[:3], "A"
+    return (custom[3] or custom[0], custom[4] or custom[1], custom[2]), "B"
+
+
 def _area_of(lead) -> str:
     """שם העיר בעברית, לשורת "חיפשתי ... באזור X"."""
     from data.neighborhoods import city_of
@@ -1111,9 +1134,10 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
         logo_path="",                # מייל אישי, ללא לוגו
     ) as mailer:
         for lead in leads:
+            lead_custom, arm = pick_custom(custom, lead["email"])
             subject, html, text = _render(
                 template_campaign,
-                build_ctx(cfg, campaign, lead, field_hint=field, sender=sender), custom)
+                build_ctx(cfg, campaign, lead, field_hint=field, sender=sender), lead_custom)
             # נוסח שלא נבנה עד הסוף (תמונה או קישור שנשארו כטקסט, קובץ תמונה
             # שחסר במחשב) לא יוצא: עדיף לעצור מאשר לשלוח מאות מיילים שבורים
             broken = _broken_render(html)
@@ -1148,6 +1172,8 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
                 continue
             summary["sent"] += 1
             try:
+                if arm:
+                    storage.set_ab(lead["place_id"], arm)
                 _record_success(storage, lead, track_id, campaign_id, variant)
             except Exception as exc:  # noqa: BLE001
                 # המייל יצא, אבל המסד לא זמין. שומרים מקומית כדי לא לשלוח

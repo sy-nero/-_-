@@ -71,7 +71,7 @@
         <td><input class="pick" type="checkbox" name="place_id"
                    value="{{ p.lead['place_id'] }}" onclick="count()"
                    style="width:17px;height:17px;accent-color:#16324f;"></td>
-        <td><b>{{ p.lead['name'] }}</b></td>
+        <td><b>{{ p.lead['name'] }}</b>{% if p.arm %} <span class="chip" title="השוואת נוסחים">נוסח {{ p.arm }}</span>{% endif %}</td>
         <td class="remail">{{ p.lead['email'] }}</td>
         <td>{{ p.lead['neighborhood'] }}</td>
         <td class="num">{{ p.lead['review_count'] }}</td>

@@ -54,21 +54,42 @@ async function markOpened(db, trackId) {
   return false;
 }
 
-/** רושם לחיצה. מי שלחץ גם פתח, גם אם הפיקסל לא נטען אצלו. */
+/**
+ * רושם לחיצה. מי שלחץ גם פתח, גם אם הפיקסל לא נטען אצלו.
+ * לחיצה בדקה הראשונה אחרי השליחה היא כמעט תמיד סורק אבטחה של שרת המייל,
+ * ולכן רק לחיצה מאוחרת יותר נרשמת גם ב-human_clicked_at, שהוא מה שנספר.
+ */
+const HUMAN_CLICK_SECONDS = 60;
+
 async function markClicked(db, trackId) {
   const now = new Date().toISOString().replace("T", " ").slice(0, 19);
   for (const table of await leadTables(db)) {
     const hit = await db
-      .prepare(`SELECT place_id FROM ${table} WHERE track_id = ?`)
+      .prepare(`SELECT place_id, emailed_at FROM ${table} WHERE track_id = ?`)
       .bind(trackId).first();
     if (!hit) continue;
-    await db.prepare(
-      `UPDATE ${table}
-          SET clicked_at  = COALESCE(NULLIF(clicked_at, ''), ?),
-              click_count = COALESCE(click_count, 0) + 1,
-              opened_at   = COALESCE(NULLIF(opened_at, ''), ?)
-        WHERE track_id = ?`
-    ).bind(now, now, trackId).run();
+    const sentAt = Date.parse(hit.emailed_at || "");
+    const human = isNaN(sentAt) || (Date.now() - sentAt) / 1000 > HUMAN_CLICK_SECONDS;
+    try {
+      await db.prepare(
+        `UPDATE ${table}
+            SET clicked_at       = COALESCE(NULLIF(clicked_at, ''), ?),
+                click_count      = COALESCE(click_count, 0) + 1,
+                human_clicked_at = CASE WHEN ? THEN COALESCE(NULLIF(human_clicked_at, ''), ?)
+                                        ELSE human_clicked_at END,
+                opened_at        = COALESCE(NULLIF(opened_at, ''), ?)
+          WHERE track_id = ?`
+      ).bind(now, human ? 1 : 0, now, now, trackId).run();
+    } catch (err) {
+      // טבלה ישנה בלי העמודה החדשה: לפחות הלחיצה עצמה נרשמת
+      await db.prepare(
+        `UPDATE ${table}
+            SET clicked_at  = COALESCE(NULLIF(clicked_at, ''), ?),
+                click_count = COALESCE(click_count, 0) + 1,
+                opened_at   = COALESCE(NULLIF(opened_at, ''), ?)
+          WHERE track_id = ?`
+      ).bind(now, now, trackId).run();
+    }
     return true;
   }
   return false;
