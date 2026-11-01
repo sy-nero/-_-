@@ -8,7 +8,10 @@
     <h1>לוח בקרה</h1>
   </div>
   <div class="actions">
-    <form method="post" action="{{ url_for('check_all_replies') }}">
+    <button type="button" class="quiet" onclick="startTour()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01"/></svg>
+      סיור מודרך</button>
+    <form method="post" action="{{ url_for('check_all_replies') }}" data-tour="replies">
       <button type="submit" class="ghost">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/></svg>
         בדיקת תשובות</button>
@@ -25,7 +28,7 @@
 {% endif %}
 
 {# ---------- מספרים ראשיים ---------- #}
-<div class="stats">
+<div class="stats" data-tour="stats">
   <div class="stat"><div class="label">נשלחו</div>
     <div class="value">{{ '{:,}'.format(totals.sent) }}</div>
     <div class="note">בכל קמפייני המייל</div></div>
@@ -48,7 +51,7 @@
 
 {# ---------- מה מחכה לשליחה ---------- #}
 {% if todo %}
-<div class="card">
+<div class="card" data-tour="todo">
   <div class="card-head"><h2>ממתינים לשליחה</h2>
     <span class="muted">מאותה תיבה כדאי לשלוח עד כ-80 ביום</span></div>
   <div style="display:flex; flex-direction:column; gap:8px;">
@@ -67,7 +70,7 @@
 {% endif %}
 
 {# ---------- כל הקמפיינים ---------- #}
-<div class="card flush">
+<div class="card flush" data-tour="table">
   <div class="toolbar">
     <h2 style="margin:0;">קמפיינים</h2>
     <div class="seg" id="filters">
@@ -176,6 +179,20 @@
 
 {% block scripts %}
 <script>
+window.TOUR = [
+  {title: 'ברוכים הבאים ללוח הקמפיינים', text: 'סיור קצר של דקה על מה יש כאן ואיך עובדים. אפשר לעצור בכל רגע עם "דילוג" או Esc, ולחזור אליו מהכפתור "סיור מודרך".'},
+  {el: '[data-tour=stats]', title: 'המספרים החשובים', text: 'כמה מיילים יצאו, כמה מחכים, וכמה ענו, לחצו, פתחו וחזרו, בכל הקמפיינים שלנו יחד. הכי חשוב: <b>השיבו</b>. פתיחות הן רק הערכה.'},
+  {el: '[data-tour=todo]', title: 'מה מחכה לשליחה', text: 'קמפיינים שיש בהם נמענים שעוד לא קיבלו מייל. כפתור "שליחה" לוקח ישר לבחירת הנמענים. מאותה תיבה כדאי לשלוח עד כ-80 ביום.'},
+  {el: '[data-tour=table]', title: 'כל הקמפיינים', text: 'לחיצה על כותרת עמודה ממיינת (למשל לפי "השיבו"). אפשר לחפש לפי שם ולסנן פעילים או כאלה שהסתיימו. הקמפיין עם הכי הרבה תשובות מסומן.'},
+  {el: '[data-tour=replies]', title: 'בדיקת תשובות', text: 'נכנס לתיבות המייל ובודק מי ענה, מי ביקש הסרה ולאן המייל לא הגיע. כדאי ללחוץ פעם ביום.'},
+  {el: '[data-tour=new]', title: 'קמפיין חדש', text: 'פותח קמפיין ריק. כדי להתחיל מנוסח שכבר עבד, נכנסים לקמפיין הקיים ולוחצים "שכפול".'},
+  {el: '[data-tour=clients]', title: 'לקוחות', text: 'תיקייה לכל לקוח: קמפיינים משלו, תיבת שליחה משלו וארנק. שולחים רק כמה שיש לו בארנק, ומייל שחזר לא נגבה.'},
+  {el: '[data-tour=segments]', title: 'פילוח ותוצאות', text: 'מי מגיב יותר: לפי תחום, עיר, ספק מייל וקמפיין. כאן מחליטים לאן לשלוח בפעם הבאה.'},
+  {el: '[data-tour=senders]', title: 'תיבות שליחה', text: 'התיבות שמהן יוצאים המיילים. מוסיפים כתובת Gmail וסיסמת אפליקציה, ובוחרים אותה בעמוד השליחה.'},
+  {el: '[data-tour=connect]', title: 'חיבור לשיחת החיפוש', text: 'מפתח והנחיה להעתקה, כדי ששיחת החיפוש ב-Claude תשלח רשימות עסקים ישר לקמפיין.'},
+  {el: '[data-tour=guide]', title: 'המדריך המלא', text: 'כל מה שצריך לדעת, צעד אחרי צעד: כתיבת נוסח, העלאת רשימה, שליחה, השוואת נוסחים, לקוחות וארנק. אפשר לחזור אליו בכל זמן.'}
+];
+try { if (!localStorage.getItem('tourDone')) setTimeout(() => window.startTour(), 600); } catch (e) {}
 (function () {
   const table = document.getElementById('campaigns');
   if (!table) return;

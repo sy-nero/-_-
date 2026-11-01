@@ -308,17 +308,17 @@
     <a class="logo" href="{{ url_for('board') }}"><i>ס</i>
       <div>סינרו<small>ניהול קמפיינים</small></div></a>
     {% if auth_ok %}
-    <button type="button" class="new" onclick="document.getElementById('newCampaign').showModal()">
+    <button type="button" class="new" data-tour="new" onclick="document.getElementById('newCampaign').showModal()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
       קמפיין חדש</button>
     <nav>
       <a href="{{ url_for('board') }}" class="{{ 'on' if ep in ('board',) }}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
         <span>לוח בקרה</span></a>
-      <a href="{{ url_for('clients_page') }}" class="{{ 'on' if ep in ('clients_page','client_page','pricing_page') }}">
+      <a href="{{ url_for('clients_page') }}" data-tour="clients" class="{{ 'on' if ep in ('clients_page','client_page','pricing_page') }}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
         <span>לקוחות</span></a>
-      <a href="{{ url_for('segments_page') }}" class="{{ 'on' if ep == 'segments_page' }}">
+      <a href="{{ url_for('segments_page') }}" data-tour="segments" class="{{ 'on' if ep == 'segments_page' }}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
         <span>פילוח ותוצאות</span></a>
       {% if full_mode %}
@@ -326,12 +326,15 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
         <span>סריקה</span></a>
       {% endif %}
-      <a href="{{ url_for('senders_page') }}" class="{{ 'on' if ep == 'senders_page' }}">
+      <a href="{{ url_for('senders_page') }}" data-tour="senders" class="{{ 'on' if ep == 'senders_page' }}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
         <span>תיבות שליחה</span></a>
-      <a href="{{ url_for('connect_page') }}" class="{{ 'on' if ep == 'connect_page' }}">
+      <a href="{{ url_for('connect_page') }}" data-tour="connect" class="{{ 'on' if ep == 'connect_page' }}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>
         <span>חיבור לחיפוש</span></a>
+      <a href="{{ url_for('guide_page') }}" data-tour="guide" class="{{ 'on' if ep == 'guide_page' }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM4 19V5M19 19v2H6"/></svg>
+        <span>מדריך</span></a>
       <a href="{{ url_for('backup_page') }}" class="{{ 'on' if ep == 'backup_page' }}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
         <span>גיבוי</span></a>
@@ -371,5 +374,62 @@
   </form>
 </dialog>
 {% block scripts %}{% endblock %}
+<style>
+  .tour-hole { position:fixed; z-index:90; border-radius:10px; pointer-events:none;
+               box-shadow:0 0 0 9999px rgba(18,20,23,.55); transition:all .25s ease; }
+  .tour-tip { position:fixed; z-index:91; width:min(340px,92vw); background:#fff; color:var(--ink);
+              border-radius:12px; box-shadow:0 18px 50px rgba(0,0,0,.25); padding:16px 18px 14px; }
+  .tour-tip .step { font-size:12px; color:var(--accent); font-weight:700; }
+  .tour-tip h3 { margin:4px 0 6px; font-size:16px; }
+  .tour-tip p { margin:0; font-size:13.5px; color:var(--ink-2); line-height:1.65; }
+  .tour-tip .nav { display:flex; gap:8px; margin-top:14px; align-items:center; }
+  .tour-tip .dots { margin-inline-start:auto; display:flex; gap:4px; }
+  .tour-tip .dots i { width:6px; height:6px; border-radius:50%; background:var(--line-strong); }
+  .tour-tip .dots i.on { background:var(--accent); }
+</style>
+<script>
+/* סיור מודרך: מסמן רכיב במסך ומסביר אותו, צעד אחרי צעד.
+   כל עמוד מגדיר window.TOUR = [{el: '[data-tour=x]', title, text}, ...] */
+window.startTour = function () {
+  const steps = (window.TOUR || []).filter(s => !s.el || document.querySelector(s.el));
+  if (!steps.length) return;
+  let i = 0;
+  const hole = document.createElement('div'); hole.className = 'tour-hole';
+  const tip = document.createElement('div'); tip.className = 'tour-tip';
+  document.body.append(hole, tip);
+  function end() { hole.remove(); tip.remove(); document.removeEventListener('keydown', key);
+    try { localStorage.setItem('tourDone', '1'); } catch (e) {} }
+  function key(e) { if (e.key === 'Escape') end(); if (e.key === 'ArrowLeft') next(); if (e.key === 'ArrowRight') prev(); }
+  function next() { if (i < steps.length - 1) { i++; show(); } else end(); }
+  function prev() { if (i > 0) { i--; show(); } }
+  function show() {
+    const s = steps[i], el = s.el && document.querySelector(s.el);
+    tip.innerHTML = `<div class="step">${i + 1} מתוך ${steps.length}</div><h3>${s.title}</h3><p>${s.text}</p>
+      <div class="nav"><button type="button" class="small" data-a="n">${i === steps.length - 1 ? 'סיום' : 'הבא'}</button>
+      ${i ? '<button type="button" class="ghost small" data-a="p">הקודם</button>' : ''}
+      <button type="button" class="quiet small" data-a="x">דילוג</button>
+      <span class="dots">${steps.map((_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('')}</span></div>`;
+    tip.querySelector('[data-a=n]').onclick = next;
+    const p = tip.querySelector('[data-a=p]'); if (p) p.onclick = prev;
+    tip.querySelector('[data-a=x]').onclick = end;
+    if (!el) { hole.style.cssText = 'top:50%;left:50%;width:0;height:0;';
+      tip.style.top = '50%'; tip.style.left = '50%'; tip.style.transform = 'translate(-50%,-50%)'; return; }
+    el.scrollIntoView({block: 'center', behavior: 'smooth'});
+    setTimeout(() => {
+      const r = el.getBoundingClientRect(), pad = 6;
+      Object.assign(hole.style, {top: r.top - pad + 'px', left: r.left - pad + 'px',
+        width: r.width + pad * 2 + 'px', height: r.height + pad * 2 + 'px'});
+      tip.style.transform = '';
+      const tw = tip.offsetWidth, th = tip.offsetHeight, vw = innerWidth, vh = innerHeight;
+      let top = r.bottom + 14 + th < vh ? r.bottom + 14 : Math.max(12, r.top - th - 14);
+      let left = Math.min(Math.max(12, r.left + r.width / 2 - tw / 2), vw - tw - 12);
+      if (r.width < 260 && r.left > vw / 2) { left = Math.max(12, r.left - tw - 16); top = Math.min(Math.max(12, r.top), vh - th - 12); }
+      tip.style.top = top + 'px'; tip.style.left = left + 'px';
+    }, 260);
+  }
+  document.addEventListener('keydown', key);
+  show();
+};
+</script>
 </body>
 </html>

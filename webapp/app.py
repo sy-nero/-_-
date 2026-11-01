@@ -763,6 +763,11 @@ def pricing_page():
 
 
 # ---------------------------- חיבור לשיחת החיפוש ----------------------------
+@app.route("/guide")
+def guide_page():
+    return render_template("guide.html")
+
+
 @app.route("/connect", methods=["GET", "POST"])
 def connect_page():
     """המפתח והכתובת שאיתם שיחת החיפוש שולחת רשימות ישר לקמפיין."""

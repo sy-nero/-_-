@@ -14,7 +14,8 @@
     </div>
   </div>
   <div class="actions">
-    <button type="button" class="ghost" onclick="document.getElementById('dupDialog').showModal()">
+    <button type="button" class="quiet" onclick="startTour()">סיור בעמוד</button>
+    <button type="button" class="ghost" data-tour="dup" onclick="document.getElementById('dupDialog').showModal()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>
       שכפול</button>
     {% if metrics.sent %}
@@ -22,10 +23,10 @@
       <button type="submit" class="ghost">בדיקת תשובות</button></form>
     <a class="btn ghost" href="{{ url_for('segments_page', campaign=campaign['id'], min=1) }}">פילוח</a>
     {% endif %}
-    <a class="btn ghost" href="{{ url_for('add_recipients_page', campaign_id=campaign['id']) }}">
+    <a class="btn ghost" data-tour="add" href="{{ url_for('add_recipients_page', campaign_id=campaign['id']) }}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
       הוספת נמענים</a>
-    <a class="btn" href="{{ url_for('send_page', campaign_id=campaign['id']) }}">שליחה</a>
+    <a class="btn" data-tour="send" href="{{ url_for('send_page', campaign_id=campaign['id']) }}">שליחה</a>
   </div>
 </div>
 
@@ -120,7 +121,7 @@
     <code>יועצים עסקיים באזור בית שמש, 20 נמענים, דירוג 4.5 ומעלה</code> ·
     <code>תביא לי 15 סוכני ביטוח באלעד שיש להם לפחות 5 תגובות</code>
   </p>
-  <div class="grid c2">
+  <div class="grid c2" data-tour="copy">
     <label class="field"><span>נושא המייל</span>
       <input type="text" name="subject_tpl" placeholder="{{ '{{שם}}' }}, בקשר לשיתוף פעולה"
              value="{{ campaign['subject_tpl'] or '' }}"></label>
@@ -133,7 +134,7 @@
     {% for key in placeholders %}<code>{{ '{{' }}{{ key }}{{ '}}' }}</code>{{ " · " if not loop.last }}{% endfor %}
     — שורה ריקה בין פסקאות מפרידה פסקה במייל.
   </p>
-  <details class="subsec" id="ab" {{ 'open' if campaign['subject_b'] or campaign['body_b'] }}>
+  <details class="subsec" id="ab" data-tour="ab" {{ 'open' if campaign['subject_b'] or campaign['body_b'] }}>
     <summary style="cursor:pointer; font-weight:700;">השוואת נוסחים (A/B)</summary>
     <p class="muted" style="margin:8px 0 12px;">ממלאים כאן נוסח ב'. בשליחה הנמענים מתחלקים לבד חצי-חצי:
       חצי מקבלים את הנוסח למעלה (A) וחצי את הנוסח כאן (B). שדה שנשאר ריק לוקח את הנוסח של A,
@@ -332,5 +333,16 @@
     setTimeout(function () { el.classList.remove('flashfield'); }, 1600);
     return false;
   }
+</script>
+{% endblock %}
+{% block scripts %}
+<script>
+window.TOUR = [
+  {el: '[data-tour=copy]', title: 'הנוסח', text: 'נושא וגוף המייל. מציני מקום כמו {{ '{{' }}שם_העסק{{ '}}' }} מתחלפים לכל נמען. שורה ריקה מפרידה בין פסקאות. בסוף לוחצים "שמירה" בתחתית הטבלה.'},
+  {el: '[data-tour=ab]', title: 'השוואת נוסחים', text: 'ממלאים כאן נוסח ב\', והשליחה מחלקת את הנמענים חצי-חצי לבד. התוצאות, ומי מוביל, מופיעות בראש העמוד.'},
+  {el: '[data-tour=add]', title: 'הוספת נמענים', text: 'גוררים קובץ CSV או Excel. הלוח בודק כפילויות, מי שכבר קיבל, ספקים ישנים ועוד, ומראה דוח של מה נכנס ולמה השאר לא.'},
+  {el: '[data-tour=send]', title: 'שליחה', text: 'בוחרים תיבה, מסמנים נמענים ושולחים. אפשר לפתוח כל שורה ולראות בדיוק את המייל שיצא. כדאי לשלוח קודם לכתובת בדיקה.'},
+  {el: '[data-tour=dup]', title: 'שכפול', text: 'קמפיין חדש עם אותו נוסח, סרטון ותיבה, בלי נמענים. הדרך המהירה להריץ שוב נוסח שעבד, לקהל חדש.'}
+];
 </script>
 {% endblock %}
