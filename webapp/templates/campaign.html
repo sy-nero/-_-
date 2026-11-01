@@ -2,45 +2,56 @@
 {% block title %}{{ campaign['title'] }}{% endblock %}
 {% block body %}
 
-<div class="card">
-  <div style="display:flex; align-items:flex-start; gap:24px; flex-wrap:wrap;">
-    <div style="flex:1; min-width:240px;">
-      <h2 style="font-size:20px;">{{ campaign['title'] }}</h2>
-      <p class="sub" style="margin:2px 0 0;">
-        <span class="chip {{ 'phone' if campaign['kind'] != 'email' }}">
-          {{ 'מיילים' if campaign['kind'] == 'email' else 'שיחות טלפון' }}</span>
-        {% if campaign['variant'] %}
-          <span class="chip">נוסח {{ 'א׳' if campaign['variant']=='a' else 'ב׳' }}</span>
-        {% endif %}
-        {% if campaign['started_on'] %}&nbsp;{{ campaign['started_on'] }}{% endif %}
-      </p>
+<div class="page-head">
+  <div>
+    <div class="crumb"><a href="{{ url_for('board') }}">לוח בקרה</a> · קמפיין #{{ campaign['id'] }}
+      {% if campaign['started_on'] %} · {{ campaign['started_on'] }}{% endif %}</div>
+    <h1>{{ campaign['title'] }}</h1>
+    <div style="margin-top:6px; display:flex; gap:6px; align-items:center;">
+      <span class="pill is-{{ status[0] }}">{{ status[1] }}</span>
+      {% if campaign['kind'] != 'email' %}<span class="chip phone">שיחות טלפון</span>{% endif %}
+      {% if pending %}<span class="muted">{{ pending }} ממתינים לשליחה</span>{% endif %}
     </div>
-    <div class="kpis">
-      <div class="kpi"><b>{{ metrics.sent }}</b><span>נשלחו</span></div>
-      <div class="kpi"><b>{{ metrics.opened }}</b><span>נפתחו {{ open_rate }}</span></div>
-      <div class="kpi"><b>{{ metrics.clicked or 0 }}</b><span>לחצו {{ click_rate }}</span></div>
-      <div class="kpi"><b>{{ metrics.replied }}</b><span>השיבו {{ reply_rate }}</span></div>
-      <div class="kpi"><b>{{ metrics.bounced or 0 }}</b><span>חזרו {{ bounce_rate }}</span></div>
-    </div>
-    {% if campaign['source_campaign'] %}
-    <div>
-      <a class="btn" href="{{ url_for('send_page', campaign_id=campaign['id']) }}">
-        שליחה לנמענים</a>
-      <div class="muted" style="text-align:center; margin-top:6px;">
-        {{ pending }} ממתינים</div>
-      {% if metrics.sent %}
-      <form method="post" action="{{ url_for('check_replies', campaign_id=campaign['id']) }}"
-            style="margin-top:8px; text-align:center;">
-        <button type="submit" class="ghost small">בדיקת תשובות בתיבה</button>
-      </form>
-      <div style="text-align:center; margin-top:6px;">
-        <a class="ghost small btn" href="{{ url_for('segments_page', campaign=campaign['id'], min=1) }}">
-          פילוח לפי תחום, עיר וספק</a></div>
-      {% endif %}
-    </div>
+  </div>
+  <div class="actions">
+    <button type="button" class="ghost" onclick="document.getElementById('dupDialog').showModal()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>
+      שכפול</button>
+    {% if metrics.sent %}
+    <form method="post" action="{{ url_for('check_replies', campaign_id=campaign['id']) }}">
+      <button type="submit" class="ghost">בדיקת תשובות</button></form>
+    <a class="btn ghost" href="{{ url_for('segments_page', campaign=campaign['id'], min=1) }}">פילוח</a>
     {% endif %}
+    <a class="btn ghost" href="{{ url_for('add_recipients_page', campaign_id=campaign['id']) }}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+      הוספת נמענים</a>
+    <a class="btn" href="{{ url_for('send_page', campaign_id=campaign['id']) }}">שליחה</a>
   </div>
 </div>
+
+<div class="stats">
+  <div class="stat"><div class="label">נשלחו</div><div class="value">{{ metrics.sent }}</div>
+    <div class="note">{% if metrics.last_sent %}אחרון: {{ metrics.last_sent }}{% else %}&nbsp;{% endif %}</div></div>
+  <div class="stat"><div class="label">ממתינים</div><div class="value">{{ pending }}</div><div class="note">&nbsp;</div></div>
+  <div class="stat"><div class="label">נפתחו</div><div class="value">{{ metrics.opened }}</div><div class="note">{{ open_rate }}</div></div>
+  <div class="stat"><div class="label">לחצו</div><div class="value">{{ metrics.clicked or 0 }}</div><div class="note">{{ click_rate }}</div></div>
+  <div class="stat hi"><div class="label">השיבו</div><div class="value">{{ metrics.replied }}</div><div class="note">{{ reply_rate }}</div></div>
+  <div class="stat"><div class="label">חזרו</div><div class="value">{{ metrics.bounced or 0 }}</div><div class="note">{{ bounce_rate }}</div></div>
+</div>
+
+<dialog id="dupDialog">
+  <form method="post" action="{{ url_for('campaign_duplicate', campaign_id=campaign['id']) }}">
+    <div class="d-head"><h2>שכפול הקמפיין</h2></div>
+    <div class="d-body">
+      <p class="muted" style="margin:0;">הקמפיין החדש יקבל את אותו נושא, נוסח, סרטון ותיבת שליחה, בלי נמענים.
+        מיד אחרי זה אפשר להעלות אליו קובץ.</p>
+      <label class="field"><span>שם הקמפיין החדש</span>
+        <input type="text" name="title" value="{{ campaign['title'] }} (עותק)" required></label>
+    </div>
+    <div class="d-foot"><button type="submit">שכפול</button>
+      <button type="button" class="ghost" onclick="this.closest('dialog').close()">ביטול</button></div>
+  </form>
+</dialog>
 
 <form method="post">
 <div class="card">
@@ -249,14 +260,8 @@
   {% endif %}
 
   <h3 class="step">2. או העלאת רשימה משלך</h3>
-  <form method="post" action="{{ url_for('campaign_upload', campaign_id=campaign['id']) }}"
-        enctype="multipart/form-data" class="grid c3">
-    <label class="field"><span>קובץ CSV</span>
-      <input type="file" name="contacts" accept=".csv" required></label>
-    <label class="field"><span>&nbsp;</span>
-      <button type="submit" class="ghost">העלאה</button></label>
-    <div class="muted" style="align-self:center;">עמודות: שם, מייל, טלפון, עיר</div>
-  </form>
+  <p><a class="btn ghost" href="{{ url_for('add_recipients_page', campaign_id=campaign['id']) }}">העלאת קובץ נמענים</a>
+    <span class="muted">CSV או Excel, עם בדיקת כפילויות וכתובות</span></p>
 
   <h3 class="step">3. ומה לעשות עם הרשימה</h3>
   <div style="display:flex; gap:8px; flex-wrap:wrap;">

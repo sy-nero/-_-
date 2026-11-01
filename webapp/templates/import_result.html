@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}תוצאות ההעלאה{% endblock %}
+{% block body %}
+<div class="page-head">
+  <div>
+    <div class="crumb"><a href="{{ url_for('board') }}">לוח בקרה</a> ·
+      <a href="{{ url_for('campaign_edit', campaign_id=campaign['id']) }}">{{ campaign['title'] }}</a></div>
+    <h1>תוצאות ההעלאה</h1>
+  </div>
+  <div class="actions">
+    <a class="btn ghost" href="{{ url_for('add_recipients_page', campaign_id=campaign['id']) }}">העלאת קובץ נוסף</a>
+    {% if added %}<a class="btn" href="{{ url_for('send_page', campaign_id=campaign['id']) }}">לשליחה</a>{% endif %}
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="label">שורות בקובץ</div><div class="value">{{ total }}</div>
+    <div class="note">{{ filename }}</div></div>
+  <div class="stat hi"><div class="label">נוספו לקמפיין</div><div class="value">{{ added|length }}</div>
+    <div class="note">ממתינים לשליחה</div></div>
+  <div class="stat"><div class="label">לא נכנסו</div><div class="value">{{ skipped|length }}</div>
+    <div class="note">הסיבות למטה</div></div>
+</div>
+
+<div class="grid c2">
+  {% if reasons %}
+  <div class="card">
+    <h2>למה לא נכנסו</h2>
+    <table style="margin-top:8px;">
+      {% for reason, n in reasons %}<tr><td>{{ reason }}</td><td class="num"><b>{{ n }}</b></td></tr>{% endfor %}
+    </table>
+  </div>
+  {% endif %}
+  {% if groups %}
+  <div class="card">
+    <h2>מה נכנס, לפי קבוצה</h2>
+    <table style="margin-top:8px;">
+      {% for g, n in groups %}<tr><td>{{ g }}</td><td class="num"><b>{{ n }}</b></td></tr>{% endfor %}
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>העמודות שזוהו בקובץ</h2>
+  <p class="sub">אם עמודה זוהתה לא נכון, אפשר לשנות את שם הכותרת בקובץ ולהעלות שוב. מי שכבר נכנס לא ייכנס פעמיים.</p>
+  {% set labels = {'name':'שם העסק','email':'מייל','phone':'טלפון','first_name':'שם פרטי','city':'עיר','group':'קבוצה','website':'אתר'} %}
+  {% for key, label in labels.items() %}
+    <span class="tag">{{ label }}: {% if columns.get(key) %}<b>{{ columns[key] }}</b>{% else %}<span class="muted">לא נמצאה</span>{% endif %}</span>
+  {% endfor %}
+</div>
+
+{% if skipped %}
+<details class="card" {% if skipped|length <= 30 %}open{% endif %}>
+  <summary>מי לא נכנס ({{ skipped|length }})</summary>
+  <div class="scroll" style="margin-top:12px;">
+  <table>
+    <thead><tr><th>שם</th><th>מייל</th><th>סיבה</th></tr></thead>
+    <tbody>{% for s in skipped %}
+      <tr><td>{{ s.name }}</td><td dir="ltr" style="text-align:right;">{{ s.email }}</td><td class="muted">{{ s.reason }}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  </div>
+</details>
+{% endif %}
+
+{% if added %}
+<details class="card">
+  <summary>מי נכנס ({{ added|length }})</summary>
+  <div class="scroll" style="margin-top:12px;">
+  <table>
+    <thead><tr><th>שם העסק (כמו שיופיע במייל)</th><th>מייל</th><th>קבוצה</th></tr></thead>
+    <tbody>{% for a in added %}
+      <tr><td>{{ a.name }}</td><td dir="ltr" style="text-align:right;">{{ a.email }}</td><td class="muted">{{ a.group }}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  </div>
+</details>
+{% endif %}
+{% endblock %}

@@ -507,7 +507,8 @@ class Storage:
                        COUNT(DISTINCT CASE WHEN clicked_at IS NOT NULL AND clicked_at != ''
                              THEN lower(email) END) AS clicked,
                        COUNT(DISTINCT CASE WHEN bounced_at IS NOT NULL AND bounced_at != ''
-                             THEN lower(email) END) AS bounced
+                             THEN lower(email) END) AS bounced,
+                       MAX(emailed_at) AS last_sent
                     FROM {self.leads} WHERE {where}""", params).fetchone()
             # מיילים שהשרת סירב לשלוח בכלל (status='failed') גם הם "לא טובים"
             fwhere = where.replace("status = 'emailed'", "status = 'failed'")
@@ -516,6 +517,7 @@ class Storage:
                 params).fetchone()[0]
             return {"sent": row["sent"], "opened": row["opened"],
                     "replied": row["replied"], "clicked": row["clicked"],
+                    "last_sent": (row["last_sent"] or "")[:10],
                     "bounced": (row["bounced"] or 0) + (failed or 0)}
 
     def lead_by_email(self, email: str):
