@@ -105,8 +105,8 @@
   </div>
 </div>
 
-{% if full_mode %}
 <div class="card" id="what">
+  {% if full_mode %}
   <h2>מה לחפש ומה לשלוח</h2>
   <p class="sub">
     את החיפוש כותבים כמשפט אחד, בשפה רגילה. אפשר לציין תחום, עיר, כמות
@@ -121,6 +121,10 @@
     <code>יועצים עסקיים באזור בית שמש, 20 נמענים, דירוג 4.5 ומעלה</code> ·
     <code>תביא לי 15 סוכני ביטוח באלעד שיש להם לפחות 5 תגובות</code>
   </p>
+  {% else %}
+  <h2>הנוסח</h2>
+  <p class="sub">הנושא והגוף שיוצאים לנמענים. אחרי שינוי לוחצים "שמירה" בתחתית העמוד.</p>
+  {% endif %}
   <div class="grid c2" data-tour="copy">
     <label class="field"><span>נושא המייל</span>
       <input type="text" name="subject_tpl" placeholder="{{ '{{שם}}' }}, בקשר לשיתוף פעולה"
@@ -146,8 +150,6 @@
       <textarea name="body_b" style="min-height:140px;" placeholder="ריק = כמו נוסח A">{{ campaign['body_b'] or '' }}</textarea></label>
   </details>
 </div>
-
-{% endif %}
 
 <div class="card">
   <h2>פרטי הקמפיין</h2>

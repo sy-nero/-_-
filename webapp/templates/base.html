@@ -398,6 +398,7 @@ window.startTour = function () {
   const tip = document.createElement('div'); tip.className = 'tour-tip';
   document.body.append(hole, tip);
   function end() { hole.remove(); tip.remove(); document.removeEventListener('keydown', key);
+    removeEventListener('scroll', place); removeEventListener('resize', place);
     try { localStorage.setItem('tourDone', '1'); } catch (e) {} }
   function key(e) { if (e.key === 'Escape') end(); if (e.key === 'ArrowLeft') next(); if (e.key === 'ArrowRight') prev(); }
   function next() { if (i < steps.length - 1) { i++; show(); } else end(); }
@@ -414,19 +415,31 @@ window.startTour = function () {
     tip.querySelector('[data-a=x]').onclick = end;
     if (!el) { hole.style.cssText = 'top:50%;left:50%;width:0;height:0;';
       tip.style.top = '50%'; tip.style.left = '50%'; tip.style.transform = 'translate(-50%,-50%)'; return; }
-    el.scrollIntoView({block: 'center', behavior: 'smooth'});
-    setTimeout(() => {
-      const r = el.getBoundingClientRect(), pad = 6;
-      Object.assign(hole.style, {top: r.top - pad + 'px', left: r.left - pad + 'px',
-        width: r.width + pad * 2 + 'px', height: r.height + pad * 2 + 'px'});
-      tip.style.transform = '';
-      const tw = tip.offsetWidth, th = tip.offsetHeight, vw = innerWidth, vh = innerHeight;
-      let top = r.bottom + 14 + th < vh ? r.bottom + 14 : Math.max(12, r.top - th - 14);
-      let left = Math.min(Math.max(12, r.left + r.width / 2 - tw / 2), vw - tw - 12);
-      if (r.width < 260 && r.left > vw / 2) { left = Math.max(12, r.left - tw - 16); top = Math.min(Math.max(12, r.top), vh - th - 12); }
-      tip.style.top = top + 'px'; tip.style.left = left + 'px';
-    }, 260);
+    const r0 = el.getBoundingClientRect();
+    el.scrollIntoView({block: r0.height > innerHeight * 0.6 ? 'start' : 'center', behavior: 'instant'});
+    requestAnimationFrame(place);
   }
+  /* ממקם את ההדגשה וההסבר לפי מיקום הרכיב עכשיו, ותמיד בתוך המסך */
+  function place() {
+    const s = steps[i], el = s && s.el && document.querySelector(s.el);
+    if (!el) return;
+    const vw = innerWidth, vh = innerHeight, pad = 6, r = el.getBoundingClientRect();
+    const top = Math.max(4, r.top - pad), bottom = Math.min(vh - 4, r.bottom + pad);
+    Object.assign(hole.style, {top: top + 'px', left: r.left - pad + 'px',
+      width: r.width + pad * 2 + 'px', height: Math.max(0, bottom - top) + 'px'});
+    tip.style.transform = '';
+    const tw = tip.offsetWidth, th = tip.offsetHeight;
+    let t, l;
+    if (r.width < 260 && r.left > vw / 2 && vw > 700) {           // רכיב צר בצד ימין, למשל תפריט הצד
+      l = r.left - tw - 16; t = r.top;
+    } else if (bottom + 14 + th < vh) { t = bottom + 14; l = r.left + r.width / 2 - tw / 2; }
+    else if (top - th - 14 > 0) { t = top - th - 14; l = r.left + r.width / 2 - tw / 2; }
+    else { t = vh - th - 16; l = 16; }                             // רכיב גדול: ההסבר בפינה
+    tip.style.top = Math.min(Math.max(12, t), vh - th - 12) + 'px';
+    tip.style.left = Math.min(Math.max(12, l), vw - tw - 12) + 'px';
+  }
+  addEventListener('scroll', place, {passive: true});
+  addEventListener('resize', place);
   document.addEventListener('keydown', key);
   show();
 };
