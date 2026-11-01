@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 {% block title %}שליחה — {{ campaign['title'] }}{% endblock %}
 {% block body %}
+{% if wallet %}
+<div class="{{ 'warn' if wallet.balance < 50 else 'saved' }}">
+  קמפיין של <a href="{{ url_for('client_page', client_id=client['id']) }}">{{ client['name'] }}</a>:
+  ביתרה <b>{{ wallet.balance }}</b> מיילים. אי אפשר לשלוח יותר מזה{% if wallet.balance <= 0 %}, ולכן צריך קודם להוסיף חבילה בארנק{% endif %}.
+</div>
+{% endif %}
 
 <div class="card">
   <h2>{{ campaign['title'] }} — שליחה</h2>

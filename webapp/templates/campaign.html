@@ -4,7 +4,7 @@
 
 <div class="page-head">
   <div>
-    <div class="crumb"><a href="{{ url_for('board') }}">לוח בקרה</a> · קמפיין #{{ campaign['id'] }}
+    <div class="crumb">{% if client %}<a href="{{ url_for('client_page', client_id=client['id']) }}">{{ client['name'] }}</a>{% else %}<a href="{{ url_for('board') }}">לוח בקרה</a>{% endif %} · קמפיין #{{ campaign['id'] }}
       {% if campaign['started_on'] %} · {{ campaign['started_on'] }}{% endif %}</div>
     <h1>{{ campaign['title'] }}</h1>
     <div style="margin-top:6px; display:flex; gap:6px; align-items:center;">

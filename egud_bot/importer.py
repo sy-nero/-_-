@@ -139,14 +139,21 @@ def own_key(storage) -> str:
     return storage.leads if db.d1_configured() else os.path.abspath(storage.db_path)
 
 
-def known_addresses(data_dir: str, own: str = "") -> dict:
+def known_addresses(data_dir: str, own: str = "", scope=None, sent_keys=None) -> dict:
     """
     {"sent": מי שקיבל מייל, "pending": {מייל: טבלה}, "own": מי שכבר ברשימה
     של הקמפיין הזה, "bounced", "unsubscribed"}.
+
     own: המזהה של מאגר הקמפיין שאליו מעלים (own_key).
+    scope: אילו מאגרים נחשבים (סט של מזהים). לקוח בודק כפילויות רק מול
+    הקמפיינים שלו, ולכן אפשר לשלוח עבורו גם למי שקיבל מאיתנו מייל. None = הכל.
+    sent_keys: שמות הקמפיינים ביומן השליחות (sent_emails) ששייכים לאותו תחום.
+    כתובת שחזרה נחשבת בכל מקרה: היא לא קיימת, אצל אף אחד.
     """
     sent, bounced, pending, unsub, mine = set(), set(), {}, set(), set()
+    log_done = False
     for conn, table, key in _lead_connections(data_dir):
+        in_scope = scope is None or key in scope or key == own
         try:
             rows = conn.execute(
                 f"SELECT lower(email) AS e, status, bounced_at FROM {table} "
@@ -155,6 +162,10 @@ def known_addresses(data_dir: str, own: str = "") -> dict:
             logger.warning("לא הצלחתי לקרוא את %s: %s", table, exc)
             continue
         for r in rows:
+            if r["bounced_at"]:
+                bounced.add(r["e"])
+            if not in_scope:
+                continue
             if r["status"] == "emailed":
                 sent.add(r["e"])
             elif r["status"] in ("found", "no_email"):
@@ -162,17 +173,29 @@ def known_addresses(data_dir: str, own: str = "") -> dict:
                     mine.add(r["e"])
                 else:
                     pending.setdefault(r["e"], table)
-            if r["bounced_at"]:
-                bounced.add(r["e"])
-        for extra, target in (("sent_emails", sent), ("unsubscribed", unsub)):
-            try:
-                target.update(x["email"].lower() for x in
-                              conn.execute(f"SELECT email FROM {extra}").fetchall()
-                              if x["email"])
-            except Exception:  # noqa: BLE001 — מאגר ישן בלי הטבלה
-                pass
+        if log_done and db.d1_configured():
+            continue   # ב-D1 יומן השליחות ורשימת ההסרה משותפים: קוראים פעם אחת
+        log_done = True
+        try:
+            for x in conn.execute("SELECT email, campaign FROM sent_emails").fetchall():
+                if x["email"] and (sent_keys is None or x["campaign"] in sent_keys):
+                    sent.add(x["email"].lower())
+        except Exception:  # noqa: BLE001 — מאגר ישן בלי הטבלה
+            pass
+        try:
+            unsub.update(x["email"].lower() for x in
+                         conn.execute("SELECT email FROM unsubscribed").fetchall() if x["email"])
+        except Exception:  # noqa: BLE001
+            pass
     return {"sent": sent, "pending": pending, "own": mine, "bounced": bounced,
             "unsubscribed": unsub}
+
+
+def key_for(source: str, path: str) -> str:
+    """המזהה של מאגר הלידים של קמפיין (כמו ב-_lead_connections)."""
+    if db.d1_configured():
+        return "leads_" + "".join(c if c.isalnum() else "_" for c in (source or "x"))
+    return os.path.abspath(path)
 
 
 def campaign_titles(store) -> dict:

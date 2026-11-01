@@ -488,7 +488,8 @@ class Storage:
         --variant לא נספרה כלל: חמישה מיילים שנשלחו הוצגו בלוח כאחד.
         שיוך לנוסח גם אינו אומר שנשלח — הוא נרשם לפני השליחה.
         """
-        where = "status = 'emailed'"
+        # כתובות בדיקה (המייל של מירי) לא נספרות: לא בתוצאות ולא בארנק של לקוח
+        where = "status = 'emailed' AND coalesce(primary_type,'') != 'בדיקה פנימית'"
         params: tuple = ()
         if campaign_id and self.has_attributed_sends(campaign_id):
             # שליחות שנרשם עליהן הקמפיין: זו המדידה המדויקת
