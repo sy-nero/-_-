@@ -1673,7 +1673,7 @@ def health():
     """
     return {"status": "ok", "tracking": bool(config.tracking_base_url),
             "storage": "d1" if db.d1_configured() else "local",
-            "password": bool(config.app_password)}
+            "password": bool(config.app_password), "version": APP_VERSION}
 
 
 @app.route("/status")

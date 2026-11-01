@@ -23,6 +23,9 @@
     {% endif %}
   </div>
   <div class="actions">
+    <button type="button" class="danger" onclick="document.getElementById('delClient').showModal()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+      מחיקת לקוח</button>
     <a class="btn ghost" href="{{ url_for('segments_page', client=client['id'], min=1) }}">פילוח</a>
     <button type="button" class="ghost" onclick="document.getElementById('buy').showModal()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="13" rx="2"/><path d="M16 12.5h2M2 10h20"/></svg>
