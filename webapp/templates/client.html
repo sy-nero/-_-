@@ -82,6 +82,22 @@
   {% endif %}
 </div>
 
+<div class="card">
+  <div class="card-head"><h2>תיבות שליחה</h2>
+    <span class="muted">הקמפיינים של {{ client['name'] }} יוצאים רק מהתיבות שלו</span>
+    <a class="btn ghost small spacer" href="{{ url_for('senders_page', client=client['id']) }}">
+      {{ 'ניהול התיבות' if boxes else 'הוספת תיבה' }}</a></div>
+  {% if not boxes %}
+    <div class="warn" style="margin:0;"><b>ללקוח עוד אין תיבת שליחה,</b> ולכן אי אפשר לשלוח עבורו.
+      מוסיפים את תיבת ה-Gmail שלו עם סיסמת אפליקציה.</div>
+  {% else %}
+    {% for b in boxes %}
+      <span class="tag">{{ b['from_name'] or b['label'] or '' }} &lt;<span dir="ltr">{{ b['from_email'] }}</span>&gt;
+        {% if not b['smtp_password'] %}<span style="color:var(--bad);">חסרה סיסמה</span>{% endif %}</span>
+    {% endfor %}
+  {% endif %}
+</div>
+
 <div class="grid c2">
   <div class="card">
     <div class="card-head"><h2>תנועות בארנק</h2></div>

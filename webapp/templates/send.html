@@ -94,15 +94,20 @@
     <label style="display:flex; gap:8px; align-items:center;">
       <b>שליחה מ:</b>
       <select name="sender_id" style="min-width:260px;">
+        {% if not client %}
         <option value="" {{ 'selected' if not sender_id }}>
           {{ env_sender or 'ברירת המחדל מ-.env' }} (ברירת מחדל)</option>
+        {% elif not senders %}
+        <option value="">ללקוח עוד אין תיבת שליחה</option>
+        {% endif %}
         {% for b in senders %}
         <option value="{{ b['id'] }}" {{ 'selected' if (b['id']|string) == (sender_id|string) }}>
           {{ b['label'] or b['from_name'] }} &lt;{{ b['from_email'] }}&gt;
           {% if not b['smtp_password'] %}(חסרה סיסמה){% endif %}</option>
         {% endfor %}
       </select>
-      <a class="muted" href="{{ url_for('senders_page') }}">ניהול תיבות</a>
+      <a class="muted" href="{{ url_for('senders_page', client=client['id']) if client else url_for('senders_page') }}">
+        {{ 'התיבות של ' ~ client['name'] if client else 'ניהול תיבות' }}</a>
     </label>
   </div>
   <div class="actionbar">

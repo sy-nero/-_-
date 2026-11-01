@@ -629,6 +629,7 @@ def client_page(client_id):
     return render_template("client.html", client=client, **data,
                            wallet=wallet(client_id, mine), tx=cs.transactions(client_id),
                            kinds=TX_KINDS, packages=cs.packages(),
+                           boxes=sender_box.SenderStore().for_client(client_id),
                            per_email=cs.per_email_price())
 
 
@@ -865,7 +866,12 @@ def send_page(campaign_id):
     run_id = "" if all_pool or not run else str(run["id"])
     pending = st.leads_to_email(limit, run_id=run_id)
     boxes = sender_box.SenderStore()
-    chosen = boxes.get(_col(campaign, "sender_id"))
+    own_boxes = boxes.for_client(_client_of(campaign))
+    sender_id = str(_col(campaign, "sender_id") or "")
+    if sender_id not in {str(b["id"]) for b in own_boxes}:
+        # תיבה של תיקייה אחרת לא נבחרת. ללקוח עם תיבה אחת, היא נבחרת לבד.
+        sender_id = str(own_boxes[0]["id"]) if _client_of(campaign) and len(own_boxes) == 1 else ""
+    chosen = boxes.get(sender_id)
     sender = sender_box.as_smtp(chosen)
     previews = []
     for lead in pending:
@@ -890,7 +896,7 @@ def send_page(campaign_id):
                            sent=st.sent_leads(campaign["variant"] or "", 200,
                                          campaign_id=str(campaign_id)),
                            tracking_on=bool(config.tracking_base_url),
-                           senders=boxes.all(), sender_id=_col(campaign, "sender_id"),
+                           senders=own_boxes, sender_id=sender_id,
                            env_sender=f"{env_name} <{env_from}>" if env_from else "",
                            client=client_store().get(_client_of(campaign)) if _client_of(campaign) else None,
                            wallet=wallet(_client_of(campaign)) if _client_of(campaign) else None)
@@ -922,6 +928,13 @@ def send_now(campaign_id):
 
     # מאיזו תיבה לשלוח: נבחרת בעמוד השליחה ונזכרת לקמפיין לפעם הבאה
     sender_id = (request.form.get("sender_id") or "").strip()
+    owner = str(_client_of(campaign) or "")
+    if sender_id and sender_box.owner_of(sender_box.SenderStore().get(sender_id)) != owner:
+        flash("התיבה שנבחרה לא שייכת לתיקייה של הקמפיין הזה")
+        return redirect(url_for("send_page", campaign_id=campaign_id))
+    if owner and not sender_id:
+        flash("ללקוח צריך תיבת שליחה משלו. מוסיפים אותה בעמוד הלקוח, תחת 'תיבות שליחה'.")
+        return redirect(url_for("send_page", campaign_id=campaign_id))
     store.update(campaign_id, sender_id=sender_id)
     sender = sender_box.as_smtp(sender_box.SenderStore().get(sender_id))
     if sender:
@@ -1506,32 +1519,52 @@ def phones_csv(campaign_id):
 # ---------------------------- תיבות שליחה ----------------------------
 @app.route("/senders", methods=["GET", "POST"])
 def senders_page():
+    """תיבות השליחה שלנו, או של לקוח (?client=)."""
     boxes = sender_box.SenderStore()
+    client_id = (request.values.get("client") or "").strip()
+    client = client_store().get(client_id) if client_id.isdigit() else None
+    back = url_for("senders_page", client=client["id"]) if client else url_for("senders_page")
     if request.method == "POST":
         if not (request.form.get("from_email") or "").strip():
             flash("חסרה כתובת מייל")
-            return redirect(url_for("senders_page"))
-        boxes.save(request.form.get("id") or None, **request.form.to_dict())
+            return redirect(back)
+        existing = boxes.get(request.form.get("id"))
+        if existing and sender_box.owner_of(existing) != (str(client["id"]) if client else ""):
+            flash("התיבה הזו שייכת לתיקייה אחרת")
+            return redirect(back)
+        data = request.form.to_dict()
+        data["client_id"] = str(client["id"]) if client else ""
+        boxes.save(request.form.get("id") or None, **data)
         flash("התיבה נשמרה")
-        return redirect(url_for("senders_page"))
+        return redirect(back)
     edit = boxes.get(request.args.get("edit"))
-    return render_template("senders.html", senders=boxes.all(), edit=edit)
+    if edit and sender_box.owner_of(edit) != (str(client["id"]) if client else ""):
+        edit = None
+    return render_template("senders.html", senders=boxes.for_client(client["id"] if client else None),
+                           edit=edit, client=client)
+
+
+def _box_back(sender_id):
+    owner = sender_box.owner_of(sender_box.SenderStore().get(sender_id))
+    return url_for("senders_page", client=owner) if owner else url_for("senders_page")
 
 
 @app.route("/senders/<int:sender_id>/delete", methods=["POST"])
 def sender_delete(sender_id):
+    back = _box_back(sender_id)
     sender_box.SenderStore().delete(sender_id)
     flash("התיבה נמחקה")
-    return redirect(url_for("senders_page"))
+    return redirect(back)
 
 
 @app.route("/senders/<int:sender_id>/test", methods=["POST"])
 def sender_test(sender_id):
     """בודק שאפשר להתחבר לתיבה, בלי לשלוח כלום."""
     from egud_bot.mailer import Mailer
+    back = _box_back(sender_id)
     sender = sender_box.as_smtp(sender_box.SenderStore().get(sender_id))
     if not sender:
-        return redirect(url_for("senders_page"))
+        return redirect(back)
     try:
         with Mailer(host=sender["smtp_host"], port=sender["smtp_port"],
                     user=sender["smtp_user"], password=sender["smtp_password"],
@@ -1540,7 +1573,7 @@ def sender_test(sender_id):
         flash(f"החיבור ל-{sender['from_email']} עובד")
     except Exception as exc:  # noqa: BLE001
         flash(f"החיבור ל-{sender['from_email']} נכשל: {exc}")
-    return redirect(url_for("senders_page"))
+    return redirect(back)
 
 
 # ---------------------------- גיבוי ושחזור ----------------------------

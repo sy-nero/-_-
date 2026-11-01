@@ -35,6 +35,11 @@ class SenderStore:
         self.db_path = db_path
         with self._conn() as conn:
             conn.executescript(SCHEMA)
+            # תיבה של לקוח: נראית ונבחרת רק בקמפיינים של אותו לקוח
+            try:
+                conn.execute("ALTER TABLE senders ADD COLUMN client_id TEXT")
+            except Exception:  # noqa: BLE001 — העמודה כבר קיימת
+                pass
 
     @contextmanager
     def _conn(self):
@@ -48,6 +53,11 @@ class SenderStore:
     def all(self) -> list:
         with self._conn() as conn:
             return conn.execute("SELECT * FROM senders ORDER BY id").fetchall()
+
+    def for_client(self, client_id=None) -> list:
+        """התיבות של לקוח מסוים, או שלנו (client_id=None)."""
+        want = str(client_id) if client_id else ""
+        return [b for b in self.all() if str(_owner(b) or "") == want]
 
     def get(self, sender_id):
         if not str(sender_id or "").strip().isdigit():
@@ -67,6 +77,8 @@ class SenderStore:
             "smtp_port": int(str(f.get("smtp_port") or "587").strip() or 587),
             "use_ssl": 1 if f.get("use_ssl") else 0,
         }
+        if "client_id" in f:
+            values["client_id"] = str(f.get("client_id") or "").strip()
         # Google מציג את הסיסמה בקבוצות של ארבע עם רווחים
         password = (f.get("smtp_password") or "").replace(" ", "").strip()
         with self._conn() as conn:
@@ -88,6 +100,18 @@ class SenderStore:
     def delete(self, sender_id) -> None:
         with self._conn() as conn:
             conn.execute("DELETE FROM senders WHERE id=?", (int(sender_id),))
+
+
+def _owner(row):
+    try:
+        return row["client_id"]
+    except (IndexError, KeyError):
+        return None
+
+
+def owner_of(row) -> str:
+    """מספר הלקוח שהתיבה שלו, או "" לתיבה שלנו."""
+    return str(_owner(row) or "") if row else ""
 
 
 def as_smtp(row) -> dict | None:
