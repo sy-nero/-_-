@@ -30,6 +30,14 @@ CREATE TABLE IF NOT EXISTS senders (
 """
 
 
+
+def norm_id(value) -> str:
+    """מספר תיבה כטקסט: "5", גם אם נשמר כמספר עשרוני (5.0)."""
+    text = str(value if value is not None else "").strip()
+    if text.endswith(".0") and text[:-2].isdigit():
+        text = text[:-2]
+    return text
+
 class SenderStore:
     def __init__(self, db_path: str = DB_PATH):
         self.db_path = db_path
@@ -60,7 +68,8 @@ class SenderStore:
         return [b for b in self.all() if str(_owner(b) or "") == want]
 
     def get(self, sender_id):
-        if not str(sender_id or "").strip().isdigit():
+        sender_id = norm_id(sender_id)
+        if not sender_id.isdigit():
             return None
         with self._conn() as conn:
             return conn.execute("SELECT * FROM senders WHERE id=?",

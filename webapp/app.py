@@ -571,7 +571,7 @@ def _dashboard(campaigns) -> dict:
     except Exception:  # noqa: BLE001
         boxes = {}
     for col in columns:
-        col["sender"] = boxes.get(str(_col(col["campaign"], "sender_id") or ""), "")
+        col["sender"] = boxes.get(sender_box.norm_id(_col(col["campaign"], "sender_id")), "")
     mail = [c for c in columns if c["campaign"]["kind"] == "email"]
     sent = sum(c["metrics"]["sent"] for c in mail)
 
@@ -949,7 +949,7 @@ def send_page(campaign_id):
     pending = st.leads_to_email(limit, run_id=run_id)
     boxes = sender_box.SenderStore()
     own_boxes = boxes.for_client(_client_of(campaign))
-    sender_id = str(_col(campaign, "sender_id") or "")
+    sender_id = sender_box.norm_id(_col(campaign, "sender_id"))
     if sender_id not in {str(b["id"]) for b in own_boxes}:
         # תיבה של תיקייה אחרת לא נבחרת. ללקוח עם תיבה אחת, היא נבחרת לבד.
         sender_id = str(own_boxes[0]["id"]) if _client_of(campaign) and len(own_boxes) == 1 else ""
