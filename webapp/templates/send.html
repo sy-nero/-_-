@@ -51,7 +51,9 @@
 
 <form method="post">
 <div class="card">
-  <h2>ממתינים לשליחה ({{ previews|length }})</h2>
+  <h2>ממתינים לשליחה ({{ previews|length }})
+    {% if previews %}<a class="btn ghost small" style="margin-inline-start:12px;"
+       href="{{ url_for('recipients_csv', campaign_id=campaign['id'], state='pending') }}">הורדה לאקסל</a>{% endif %}</h2>
   {% if not previews %}
     <p class="muted">אין נמענים ממתינים במאגר. אפשר להריץ <code>scan</code> או
       <code>enrich</code> בטרמינל כדי להוסיף.</p>
@@ -73,7 +75,7 @@
                    style="width:17px;height:17px;accent-color:#16324f;"></td>
         <td><b>{{ p.lead['name'] }}</b>{% if p.arm %} <span class="chip" title="השוואת נוסחים">נוסח {{ p.arm }}</span>{% endif %}</td>
         <td class="remail">{{ p.lead['email'] }}</td>
-        <td>{{ p.lead['neighborhood'] }}</td>
+        <td>{{ p.lead['neighborhood'] or p.lead['address'] or '—' }}</td>
         <td class="num">{{ p.lead['review_count'] }}</td>
         <td class="num">{{ p.lead['rating'] or '—' }}</td>
         <td><button type="button" class="ghost small"
