@@ -493,7 +493,7 @@ def import_csv(storage: Storage, path: str, email_col: str = "email",
 def import_rows(storage: Storage, rows, prefix: str = "up") -> dict:
     """
     מייבא אנשי קשר משורות (מילונים) — עמודות אפשריות: name, email, phone,
-    first_name, city, how, why, fact. משמש להעלאת קובץ מהאפליקציה.
+    first_name, city, how (או "מקור העסק"), why, fact. משמש להעלאת קובץ מהאפליקציה.
     מחזיר סיכום: כמה נוספו, כמה כבר היו, כמה שורות לא היו שמישות.
     """
     summary = {"נוספו": 0, "היו כבר": 0, "שורות לא שמישות": 0}
@@ -519,7 +519,9 @@ def import_rows(storage: Storage, rows, prefix: str = "up") -> dict:
             business_status="OPERATIONAL", primary_type="",
             neighborhood=row.get("city") or row.get("עיר") or "", types=[],
             first_name=row.get("first_name") or row.get("שם_פרטי") or "",
-            intro_how=row.get("how") or "", intro_fact=row.get("fact") or "",
+            intro_how=(row.get("how") or row.get("מקור העסק")
+                       or row.get("מקור_העסק") or row.get("איפה מצאנו את העסק") or ""),
+            intro_fact=row.get("fact") or "",
             intro_why=row.get("why") or "")
         storage.upsert_lead(lead, email or None,
                             status="found" if email else "no_email")

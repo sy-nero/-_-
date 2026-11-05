@@ -539,6 +539,7 @@ PLACEHOLDERS = {
     "אתר": "website",
     "מייל_שולח": "contact_email",
     "התמחות": "specialty",
+    "מקור_העסק": "found_at",
 }
 
 _PLACEHOLDER_RE = re.compile(r"\{\{?\s*([^{}]+?)\s*\}?\}")
@@ -546,7 +547,8 @@ _PLACEHOLDER_RE = re.compile(r"\{\{?\s*([^{}]+?)\s*\}?\}")
 
 def custom_values(business_name="", first_name="", field="", neighborhood="",
                   area="", rec=None, sender_name="", contact_email="",
-                  website="", profession_hint="", specialty="", **_) -> dict:
+                  website="", profession_hint="", specialty="", intro_how="",
+                  **_) -> dict:
     """
     הערכים שמוזרקים לנוסח מותאם, מנתוני הליד.
 
@@ -576,6 +578,9 @@ def custom_values(business_name="", first_name="", field="", neighborhood="",
         # מה שהעסק כותב על עצמו באתר. ריק כשלא נמצא משהו נקי -- ואז
         # _tidy מוחק את הרווח שנשאר, ולא נשלח משפט קטוע.
         "specialty": specialty,
+        # איפה ראינו את העסק (עמודת "מקור העסק" בקובץ שהועלה). בלי ערך
+        # נופלים לניסוח כללי שנכון לכל ליד, כדי שמשפט הפתיחה לא יימחק.
+        "found_at": intro_how.strip() or "מדריך העסקים",
     }
 
 
