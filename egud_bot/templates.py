@@ -568,7 +568,8 @@ def custom_values(business_name="", first_name="", field="", neighborhood="",
         "profession": (AGENT_PROFESSIONS.get(field) or field
                        or profession_hint or "בעל מקצוע"),
         "area": area or city_of(neighborhood) or neighborhood,
-        "neighborhood": neighborhood,
+        # בלי שכונה ידועה: העיר. "ראיתי את העסק בבני ברק" עדיף על משפט ריק
+        "neighborhood": neighborhood or area or city_of(neighborhood),
         "review_count": str(rec.get("count") or ""),
         "rating": str(rec.get("rating") or ""),
         "sender_name": sender_name,
@@ -587,6 +588,8 @@ OPTIONAL_FIELDS = {"specialty", "review_count", "rating"}
 
 #: תו פנימי שמסמן "כאן היה מציין רשות שלא התמלא". לא מופיע בטקסט אמיתי.
 _DROP_MARK = "\uf8ff"
+#: תו פנימי למציין שהתמלא בערך ריק (לא רשות)
+_EMPTY_MARK = "\uf8fe"
 
 
 def fill_placeholders(text: str, values: dict) -> str:
@@ -605,8 +608,12 @@ def fill_placeholders(text: str, values: dict) -> str:
         value = values.get(field, "")
         if not value and field in OPTIONAL_FIELDS:
             return _DROP_MARK
-        return value
-    return _PLACEHOLDER_RE.sub(sub, text or "")
+        return value or _EMPTY_MARK
+    filled = _PLACEHOLDER_RE.sub(sub, text or "")
+    # מציין ריק שהיה צמוד לאות שימוש ("ב{{שכונה}}"): האות יורדת איתו,
+    # אחרת נשאר "ראיתי את העסק ב ורציתי"
+    filled = re.sub(r"(?<![\u0590-\u05FF])[בלמוהכש]" + _EMPTY_MARK, "", filled)
+    return filled.replace(_EMPTY_MARK, "")
 
 
 def _tidy(text: str) -> str:
