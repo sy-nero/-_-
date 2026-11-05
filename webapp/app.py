@@ -80,8 +80,7 @@ def internal_error(exc):
 # לכל מי שמגיע לכתובת. הפיקסל ובדיקת הבריאות נשארים ציבוריים בכוונה:
 # הפיקסל נטען מתוכנת המייל של הנמען, שאין לה סשן.
 PUBLIC_ENDPOINTS = {"pixel", "click", "click_ping", "health", "login", "static",
-                    "api_campaigns", "api_import",   # ה-API בודק מפתח בעצמו
-                    "fix_campaign_47"}
+                    "api_campaigns", "api_import"}   # ה-API בודק מפתח בעצמו
 
 
 @app.context_processor
@@ -1719,27 +1718,6 @@ def backup_upload():
     return redirect(url_for("board"))
 
 
-
-
-# ---- עדכון חד פעמי: קישור על הסרטון בקמפיין 47 (יוסר אחרי שיופעל) ----
-_FIX47_IMG = ("![רנטגן עסקי: האיגוד מממן 40% מאבחון עסקי ל-15 עסקים נבחרים החודש]"
-              "(https://raw.githubusercontent.com/sy-nero/-_-/claude/agent-profile-recruitment-bykccn"
-              "/assets/campaign_media/xray_diagnosis.gif)")
-_FIX47_LINK = "https://c62k9xgdd5.zite.so"
-
-
-@app.route("/fix47")
-def fix_campaign_47():
-    """עוטף את הסרטון בקישור, רק אם הוא עדיין בלי קישור."""
-    campaign = store.get(47)
-    body = (_col(campaign, "body_tpl") or "") if campaign else ""
-    linked = f"[{_FIX47_IMG}]({_FIX47_LINK})"
-    if linked in body:
-        return {"result": "already"}
-    if body.count(_FIX47_IMG) != 1:
-        return {"result": "skipped-edited"}
-    store.update(47, body_tpl=body.replace(_FIX47_IMG, linked))
-    return {"result": "applied" if linked in (_col(store.get(47), "body_tpl") or "") else "failed"}
 
 @app.route("/health")
 def health():
