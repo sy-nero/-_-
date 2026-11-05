@@ -1599,6 +1599,33 @@ def phones_csv(campaign_id):
         "Content-Disposition": f'attachment; filename="phones-{campaign_id}.csv"'})
 
 
+
+@app.route("/campaign/<int:campaign_id>/recipients.csv")
+def recipients_csv(campaign_id):
+    """הנמענים במצב מסוים (ברירת מחדל: מי שעוד לא קיבל), כקובץ שנפתח באקסל."""
+    import csv
+    campaign = store.get(campaign_id)
+    st = leads_store(_col(campaign, "source_campaign")) if campaign else None
+    if not st:
+        return redirect(url_for("board"))
+    state = request.args.get("state", "pending")
+    if state not in Storage.STATES:
+        state = "pending"
+    leads = [l for l in st.leads_by_state(state, 100000)
+             if _col(l, "primary_type") != "בדיקה פנימית"]
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["שם", "שם_פרטי", "מייל", "טלפון", "עיר", "איפה מצאנו", "group"])
+    for lead in leads:
+        first = _col(lead, "first_name") or ""
+        writer.writerow([_col(lead, "name") or "", "" if first == "-" else first,
+                         _col(lead, "email") or "", _col(lead, "phone") or "",
+                         _col(lead, "address") or "", _col(lead, "intro_how") or "",
+                         _col(lead, "primary_type") or ""])
+    data = "\ufeff" + buf.getvalue()      # BOM כדי שאקסל יציג עברית נכון
+    return Response(data, mimetype="text/csv", headers={
+        "Content-Disposition": f'attachment; filename="campaign-{campaign_id}-{state}.csv"'})
+
 # ---------------------------- תיבות שליחה ----------------------------
 @app.route("/senders", methods=["GET", "POST"])
 def senders_page():

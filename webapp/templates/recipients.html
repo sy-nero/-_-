@@ -22,7 +22,9 @@
 </div>
 
 <div class="card">
-  <h2>{{ states[state][0] }} <span class="muted">({{ leads|length }} מוצגים)</span></h2>
+  <h2>{{ states[state][0] }} <span class="muted">({{ leads|length }} מוצגים)</span>
+    <a class="btn ghost small" style="margin-inline-start:12px;"
+       href="{{ url_for('recipients_csv', campaign_id=campaign['id'], state=state) }}">הורדה לאקסל</a></h2>
   {% if not leads %}
   <p class="sub">אין כאן אף אחד.</p>
   {% else %}
