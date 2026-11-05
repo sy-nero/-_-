@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}הוספת נמענים{% endblock %}
+{% block head %}
+<style>
+  .drop { display:block; border:2px dashed var(--line-strong); border-radius:12px; background:var(--sunken);
+          padding:34px 20px; text-align:center; cursor:pointer; transition:.15s; }
+  .drop:hover, .drop.over { border-color:var(--accent); background:var(--accent-soft); }
+  .drop svg { width:34px; height:34px; color:var(--accent); }
+  .drop b { display:block; font-size:16px; margin:8px 0 2px; }
+  .drop .file { margin-top:10px; font-weight:600; color:var(--accent); }
+  .checks { margin:0; padding:0; list-style:none; display:grid; gap:6px;
+            grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); }
+  .checks li { font-size:13px; color:var(--ink-2); padding-inline-start:20px; position:relative; }
+  .checks li::before { content:"✓"; position:absolute; inset-inline-start:0; color:var(--accent); font-weight:700; }
+  .counts { display:flex; gap:22px; flex-wrap:wrap; }
+  .counts div b { display:block; font-size:22px; }
+  .counts div span { font-size:12px; color:var(--muted); }
+</style>
+{% endblock %}
+{% block body %}
+<div class="page-head">
+  <div>
+    <div class="crumb"><a href="{{ url_for('board') }}">לוח בקרה</a> ·
+      <a href="{{ url_for('campaign_edit', campaign_id=campaign['id']) }}">{{ campaign['title'] }}</a></div>
+    <h1>הוספת נמענים</h1>
+  </div>
+  <div class="actions">
+    <a class="btn ghost" href="{{ url_for('recipients_page', campaign_id=campaign['id']) }}">מי ברשימה</a>
+    <a class="btn" href="{{ url_for('send_page', campaign_id=campaign['id']) }}">לשליחה</a>
+  </div>
+</div>
+
+{% if counts %}
+<div class="card tight">
+  <div class="counts">
+    {% for key, item in counts.items() %}
+      <div><b>{{ item.count }}</b><span>{{ item.label }}</span></div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-head"><h2>העלאת קובץ</h2>
+    <span class="muted">CSV או Excel. עמודה של מייל היא חובה, השאר רשות.</span></div>
+  <form method="post" action="{{ url_for('campaign_upload', campaign_id=campaign['id']) }}"
+        enctype="multipart/form-data" id="upForm">
+    <label class="drop" id="drop">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+      <b>גוררים לכאן את הקובץ, או לוחצים לבחירה</b>
+      <span class="muted">עמודות שמזוהות לבד: שם העסק, מייל, טלפון, שם פרטי, עיר, קבוצה או תחום</span>
+      <div class="file" id="fname"></div>
+      <input type="file" name="contacts" id="file" accept=".csv,.xlsx,.txt" hidden required>
+    </label>
+    <div class="grid c2" style="margin-top:14px; align-items:end;">
+      <label class="field"><span>קבוצה לכל הרשימה (רשות)</span>
+        <input type="text" name="group" placeholder="למשל: אולמות אירועים. אם בקובץ יש עמודת קבוצה, היא קובעת"></label>
+      <div><button type="submit" id="go" disabled>בדיקה והוספה לקמפיין</button></div>
+    </div>
+  </form>
+  <div class="subsec">
+    <h3>מה נבדק לפני שכתובת נכנסת</h3>
+    <ul class="checks">
+      <li>כתובת תקינה (וטעויות כמו gmial.com מתוקנות)</li>
+      <li>לא מופיעה פעמיים בקובץ</li>
+      <li>לא קיבלה מאיתנו מייל אף פעם</li>
+      <li>לא ממתינה בקמפיין אחר</li>
+      <li>לא חזרה אלינו ולא ביקשה הסרה</li>
+      <li>לא תיבת גיוס או מערכת (jobs@, cv@)</li>
+      <li>הדומיין מקבל מיילים ואינו ספק ישן</li>
+      <li>שמות מנוקים: בלי בע"מ, טלפון ותיאור</li>
+    </ul>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head"><h2>כתובת בדיקה</h2>
+    <span class="muted">נכנסת תמיד, גם אם כבר קיבלה מייל, ולא נספרת בתוצאות</span></div>
+  <form method="post" action="{{ url_for('add_test_recipient', campaign_id=campaign['id']) }}"
+        class="grid c4" style="align-items:end;">
+    <label class="field"><span>מייל</span><input type="email" name="email" required
+           placeholder="miri.elko@gmail.com" dir="ltr"></label>
+    <label class="field"><span>שם עסק לדוגמה</span><input type="text" name="business" value="בדיקת מייל"></label>
+    <label class="field"><span>שם פרטי</span><input type="text" name="first_name" value="מירי"></label>
+    <div><button type="submit" class="ghost">הוספת כתובת בדיקה</button></div>
+  </form>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const drop = document.getElementById('drop'), input = document.getElementById('file');
+  const go = document.getElementById('go'), fname = document.getElementById('fname');
+  function show() { const f = input.files[0]; fname.textContent = f ? f.name : ''; go.disabled = !f; }
+  input.addEventListener('change', show);
+  ['dragenter', 'dragover'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', ev => { if (ev.dataTransfer.files.length) { input.files = ev.dataTransfer.files; show(); } });
+  document.getElementById('upForm').addEventListener('submit', () => {
+    go.disabled = true; go.textContent = 'בודקת את הכתובות... זה יכול לקחת דקה';
+  });
+})();
+</script>
+{% endblock %}
