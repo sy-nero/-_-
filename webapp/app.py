@@ -80,8 +80,7 @@ def internal_error(exc):
 # לכל מי שמגיע לכתובת. הפיקסל ובדיקת הבריאות נשארים ציבוריים בכוונה:
 # הפיקסל נטען מתוכנת המייל של הנמען, שאין לה סשן.
 PUBLIC_ENDPOINTS = {"pixel", "click", "click_ping", "health", "login", "static",
-                    "api_campaigns", "api_import",   # ה-API בודק מפתח בעצמו
-                    "fix_campaign_47"}
+                    "api_campaigns", "api_import"}   # ה-API בודק מפתח בעצמו
 
 
 @app.context_processor
@@ -1746,22 +1745,6 @@ def backup_upload():
     return redirect(url_for("board"))
 
 
-
-
-# ---- עדכון חד פעמי: נושא חדש לקמפיין 47 (יוסר אחרי שיופעל) ----
-_FIX47_SUBJECT = "{{שם_העסק}}, אולי מגיע לכם אבחון עסקי במימון האיגוד"
-
-
-@app.route("/fix47")
-def fix_campaign_47():
-    campaign = store.get(47)
-    subject = ((_col(campaign, "subject_tpl") or "") if campaign else "").strip()
-    if subject == _FIX47_SUBJECT:
-        return {"result": "already"}
-    if subject != "{{שם_העסק}}":
-        return {"result": "skipped-edited"}
-    store.update(47, subject_tpl=_FIX47_SUBJECT)
-    return {"result": "applied" if (_col(store.get(47), "subject_tpl") or "") == _FIX47_SUBJECT else "failed"}
 
 @app.route("/health")
 def health():
