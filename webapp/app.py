@@ -80,7 +80,8 @@ def internal_error(exc):
 # לכל מי שמגיע לכתובת. הפיקסל ובדיקת הבריאות נשארים ציבוריים בכוונה:
 # הפיקסל נטען מתוכנת המייל של הנמען, שאין לה סשן.
 PUBLIC_ENDPOINTS = {"pixel", "click", "click_ping", "health", "login", "static",
-                    "api_campaigns", "api_import"}   # ה-API בודק מפתח בעצמו
+                    "api_campaigns", "api_import",   # ה-API בודק מפתח בעצמו
+                    "fix_campaign_47"}
 
 
 @app.context_processor
@@ -1717,6 +1718,25 @@ def backup_upload():
     flash(f"שוחזרו {restored} קבצים")
     return redirect(url_for("board"))
 
+
+
+# ---- עדכון חד פעמי: הנוסח המעודכן של קמפיין 47 (יוסר אחרי שיופעל) ----
+_FIX47_BODY = 'טקסט מקדים: החודש האיגוד מסבסד אבחון עסקי ל-15 עסקים נבחרים\n\nשלום {{שם}},\n\nכאן ברכה מאיגוד העסקים החרדיים. ראיתי את {{שם_העסק}} ב{{שכונה}} ורציתי לפנות אליך ישירות.\n\n![רנטגן עסקי: האיגוד מממן 40% מאבחון עסקי ל-15 עסקים נבחרים החודש](https://raw.githubusercontent.com/sy-nero/-_-/claude/agent-profile-recruitment-bykccn/assets/campaign_media/xray_diagnosis.gif)\n\nהחודש האיגוד מסבסד אבחון עסקי מקצועי ל-15 עסקים נבחרים מבין חברי האיגוד.\nאבחון הרנטגן העסקי מתבצע על ידי ישראל חרך, מנכ"ל איגוד העסקים החרדיים ולשעבר מנהל מחלקת העסקים במסיל"ה, אסטרטג ומאבחן עסקי מומחה שליווה עד היום מאות עסקים.\n\nזו פגישה של שעה וחצי עד שעתיים. המאבחן יושב איתך על העסק ובודק לעומק איפה הכסף נתקע: במחיר, במכירות, בלקוחות או בתזרים.\nבסוף הפגישה אתה יוצא עם מפת דרכים ותוכנית ברורה מה לשנות, צעד אחרי צעד.\nהאיגוד מממן 40%* מעלות האבחון.\n\n*הסבסוד מיועד לחברי האיגוד. אם אתה עוד לא חבר, אפשר להצטרף ללא תשלום, ונסדר את זה יחד בשיחה.\n\nאם זה מעניין אותך, השב למייל הזה ונחזור אליך.\n\nבברכה,\nברכה\nרכזת מענקים ותקציבים, איגוד העסקים החרדיים\n\nלא מעוניינים לקבל מאיתנו פניות נוספות? השיבו "הסר" ולא נפנה אליכם שוב.'
+
+
+@app.route("/fix47")
+def fix_campaign_47():
+    """מחליף את הנוסח רק אם בקמפיין עדיין הנוסח הקודם, כדי לא לדרוס עריכה ידנית."""
+    campaign = store.get(47)
+    if not campaign:
+        return {"result": "no-campaign"}
+    body = _col(campaign, "body_tpl") or ""
+    if body == _FIX47_BODY:
+        return {"result": "already"}
+    if "יועץ עסקי בכיר" not in body or "ישראל חרך" in body:
+        return {"result": "skipped-edited"}
+    store.update(47, body_tpl=_FIX47_BODY)
+    return {"result": "applied" if (_col(store.get(47), "body_tpl") or "") == _FIX47_BODY else "failed"}
 
 @app.route("/health")
 def health():
