@@ -33,6 +33,9 @@ COLUMNS = {
     "city": ("עיר", "city", "יישוב", "ישוב"),
     "group": ("קבוצה", "תחום", "סוג", "קטגוריה", "group", "category", "field"),
     "website": ("אתר", "website", "site", "url"),
+    # איפה מצאנו את העסק ("אינדקס העסקים של מודיעין עילית"), ל-{{מקור}} בנוסח
+    "found_where": ("איפה מצאנו", "איפה_מצאנו", "מקור_פנייה", "מקור הפנייה", "נמצא ב",
+                    "found_where", "found at"),
 }
 
 #: תיבות שלא מגיעות למי שמחליט בעסק
@@ -261,7 +264,7 @@ def import_contacts(storage, rows: list[dict], prefix: str, known: dict,
         first = get("first_name") or "-"
         batch.append((f"{prefix}:{email}", name, get("city"), get("phone"),
                       get("website"), email, "", first,
-                      get("group") or default_group, now))
+                      get("group") or default_group, get("found_where"), now))
         added.append({"name": name, "email": email, "group": get("group") or default_group})
 
     with storage._conn() as conn:
@@ -269,8 +272,8 @@ def import_contacts(storage, rows: list[dict], prefix: str, known: dict,
             chunk = batch[i:i + 9]
             conn.execute(
                 "INSERT INTO {leads} (place_id,name,address,phone,website,email,specialty,"
-                "first_name,primary_type,lat,lng,review_count,status,source,found_at) VALUES "
-                + ",".join(["(?,?,?,?,?,?,?,?,?,0,0,0,'found','manual',?)"] * len(chunk))
+                "first_name,primary_type,intro_how,lat,lng,review_count,status,source,found_at) VALUES "
+                + ",".join(["(?,?,?,?,?,?,?,?,?,?,0,0,0,'found','manual',?)"] * len(chunk))
                 + " ON CONFLICT(place_id) DO NOTHING",
                 [v for t in chunk for v in t])
     logger.info("ייבוא: נוספו %d, דולגו %d", len(added), len(skipped))
