@@ -46,7 +46,7 @@
 <div class="card">
   <h2>העמודות שזוהו בקובץ</h2>
   <p class="sub">אם עמודה זוהתה לא נכון, אפשר לשנות את שם הכותרת בקובץ ולהעלות שוב. מי שכבר נכנס לא ייכנס פעמיים.</p>
-  {% set labels = {'name':'שם העסק','email':'מייל','phone':'טלפון','first_name':'שם פרטי','city':'עיר','group':'קבוצה','website':'אתר'} %}
+  {% set labels = {'name':'שם העסק','email':'מייל','phone':'טלפון','first_name':'שם פרטי','city':'עיר','group':'קבוצה','website':'אתר','found_where':'איפה מצאנו'} %}
   {% for key, label in labels.items() %}
     <span class="tag">{{ label }}: {% if columns.get(key) %}<b>{{ columns[key] }}</b>{% else %}<span class="muted">לא נמצאה</span>{% endif %}</span>
   {% endfor %}
