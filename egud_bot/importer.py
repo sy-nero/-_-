@@ -248,7 +248,7 @@ def import_contacts(storage, rows: list[dict], prefix: str, known: dict,
     cols = map_columns(headers)
     added, skipped, seen = [], [], set()
     now = datetime.now(timezone.utc).isoformat()
-    batch = []
+    batch, fill = [], []
     for row in rows:
         def get(field):
             col = cols.get(field)
@@ -259,6 +259,10 @@ def import_contacts(storage, rows: list[dict], prefix: str, known: dict,
         name = clean_name(raw_name) or raw_name or email
         if reason:
             skipped.append({"name": raw_name or email, "email": email, "reason": reason})
+            # עסק שכבר ממתין בקמפיין הזה: משלימים לו "איפה מצאנו" אם חסר,
+            # כדי שהעלאה חוזרת של קובץ מתוקן תעדכן את מי שכבר בפנים
+            if reason == "כבר ברשימה של הקמפיין הזה" and get("found_where"):
+                fill.append((get("found_where"), email))
             continue
         seen.add(email)
         first = get("first_name") or "-"
@@ -276,8 +280,15 @@ def import_contacts(storage, rows: list[dict], prefix: str, known: dict,
                 + ",".join(["(?,?,?,?,?,?,?,?,?,?,0,0,0,'found','manual',?)"] * len(chunk))
                 + " ON CONFLICT(place_id) DO NOTHING",
                 [v for t in chunk for v in t])
-    logger.info("ייבוא: נוספו %d, דולגו %d", len(added), len(skipped))
-    return {"added": added, "skipped": skipped, "columns": cols}
+        updated = 0
+        for found_where, email in fill:
+            cur = conn.execute(
+                "UPDATE {leads} SET intro_how=? WHERE lower(email)=? "
+                "AND status IN ('found','no_email') AND (intro_how IS NULL OR intro_how='')",
+                (found_where, email))
+            updated += max(getattr(cur, "rowcount", 0) or 0, 0)
+    logger.info("ייבוא: נוספו %d, דולגו %d, הושלם מקור ל-%d", len(added), len(skipped), updated)
+    return {"added": added, "skipped": skipped, "columns": cols, "updated": updated}
 
 
 def add_test_address(storage, email: str, business_name: str, first_name: str,

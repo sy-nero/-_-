@@ -20,6 +20,8 @@
     <div class="note">ממתינים לשליחה</div></div>
   <div class="stat"><div class="label">לא נכנסו</div><div class="value">{{ skipped|length }}</div>
     <div class="note">הסיבות למטה</div></div>
+  {% if updated %}<div class="stat"><div class="label">עודכן "איפה מצאנו"</div><div class="value">{{ updated }}</div>
+    <div class="note">לעסקים שכבר היו בקמפיין</div></div>{% endif %}
 </div>
 
 <div class="grid c2">

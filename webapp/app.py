@@ -1477,7 +1477,7 @@ def campaign_upload(campaign_id):
                            added=result["added"], skipped=result["skipped"],
                            reasons=result["reasons"],
                            groups=sorted(groups.items(), key=lambda kv: -kv[1]),
-                           columns=result["columns"])
+                           columns=result["columns"], updated=result.get("updated", 0))
 
 
 @app.route("/campaign/<int:campaign_id>/add_test", methods=["POST"])
