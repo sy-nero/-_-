@@ -80,7 +80,8 @@ def internal_error(exc):
 # לכל מי שמגיע לכתובת. הפיקסל ובדיקת הבריאות נשארים ציבוריים בכוונה:
 # הפיקסל נטען מתוכנת המייל של הנמען, שאין לה סשן.
 PUBLIC_ENDPOINTS = {"pixel", "click", "click_ping", "health", "login", "static",
-                    "api_campaigns", "api_import"}   # ה-API בודק מפתח בעצמו
+                    "api_campaigns", "api_import",   # ה-API בודק מפתח בעצמו
+                    "add_test_47"}
 
 
 @app.context_processor
@@ -1718,6 +1719,21 @@ def backup_upload():
     return redirect(url_for("board"))
 
 
+
+
+# ---- עדכון חד פעמי: כתובת בדיקה לקמפיין 47 (יוסר אחרי שיופעל) ----
+@app.route("/addtest47")
+def add_test_47():
+    campaign = store.get(47)
+    if not campaign:
+        return {"result": "no-campaign"}
+    source = _ensure_source(campaign)
+    storage = Storage(leads_db_path(source), campaign=source)
+    importer.add_test_address(storage, "miri.elko@gmail.com", "עסק לבדיקה", "מירי", source)
+    with storage._conn() as conn:
+        row = conn.execute("SELECT status FROM {leads} WHERE place_id=?",
+                           ("manual:test:miri.elko@gmail.com",)).fetchone()
+    return {"result": "added" if row and row["status"] == "found" else "failed"}
 
 @app.route("/health")
 def health():
