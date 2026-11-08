@@ -485,11 +485,16 @@ def send_now(campaign_id):
             config, st, campaign=campaign["source_campaign"],
             limit=len(chosen), variant=campaign["variant"] or "", only=chosen,
             custom=custom_of(campaign), campaign_id=str(campaign_id),
-            sender=sender)
+            sender=sender,
+            # לעולם לא לשלוח לאותה כתובת משני קמפיינים: מדלגים על כל מי
+            # שקיבל מייל בקמפיין כלשהו, גם ממאגר לידים אחר
+            skip_contacted=True)
     except Exception as exc:  # noqa: BLE001 — סיסמה שגויה וכו' מוצגים, לא 500
         flash(f"השליחה נכשלה: {exc}")
         return redirect(url_for("send_page", campaign_id=campaign_id))
     flash(f"נשלחו {summary.get('sent', 0)} מיילים")
+    if summary.get("skipped_already_sent"):
+        flash(f"דולגו {summary['skipped_already_sent']} שכבר קיבלו מייל בקמפיין קודם")
     return redirect(url_for("send_page", campaign_id=campaign_id))
 
 

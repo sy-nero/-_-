@@ -942,10 +942,11 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
     if campaign == "grant":
         small = [l for l in remaining if not looks_established(l["name"], l["email"])]
         remaining = [l for l in remaining if looks_established(l["name"], l["email"])]
-    skipped = [l for l in remaining if (l["email"] or "").lower() in sent_before]
     if only is not None:            # בחירה מפורשת — לפני חיתוך המכסה
         only = set(only)
         remaining = [l for l in remaining if l["place_id"] in only]
+    # נספר אחרי הבחירה המפורשת, כדי שההודעה תדבר רק על מי שנבחר לשליחה
+    skipped = [l for l in remaining if (l["email"] or "").lower() in sent_before]
     max_this_run = limit if limit else cfg.max_emails_per_run
     leads = [l for l in remaining
              if (l["email"] or "").lower() not in sent_before][:max_this_run]
