@@ -136,11 +136,14 @@ REAL_CLICK = ("((human_clicked_at IS NOT NULL AND human_clicked_at != '') OR "
 def _seconds_since(start: str, end: str) -> float:
     try:
         a = datetime.fromisoformat((start or "").replace("Z", "+00:00"))
-        b = datetime.fromisoformat(end)
+        b = datetime.fromisoformat((end or "").replace("Z", "+00:00"))
+        # זמן בלי אזור זמן נשמר ב-UTC; בלי זה השוואה בין שני הסוגים נופלת
         if a.tzinfo is None:
             a = a.replace(tzinfo=timezone.utc)
+        if b.tzinfo is None:
+            b = b.replace(tzinfo=timezone.utc)
         return (b - a).total_seconds()
-    except ValueError:
+    except (ValueError, TypeError):
         return 10 ** 9     # בלי זמן שליחה: לא חוסמים
 
 
