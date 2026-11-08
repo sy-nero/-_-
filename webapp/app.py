@@ -1615,13 +1615,28 @@ def recipients_csv(campaign_id):
              if _col(l, "primary_type") != "בדיקה פנימית"]
     buf = io.StringIO()
     writer = csv.writer(buf)
-    writer.writerow(["שם", "שם_פרטי", "מייל", "טלפון", "עיר", "איפה מצאנו", "group"])
+    results = state in ("emailed", "failed")
+    head = ["שם", "שם_פרטי", "מייל", "טלפון", "עיר", "איפה מצאנו", "group"]
+    if results:
+        # התוצאות של כל נמען, לניתוח הקמפיין מחוץ ללוח
+        head += ["נשלח", "נפתח", "לחץ (אדם)", "לחיצות", "השיב", "חזר", "נוסח", "שגיאה"]
+    writer.writerow(head)
+    from egud_bot.storage import _seconds_since, HUMAN_CLICK_SECONDS
     for lead in leads:
         first = _col(lead, "first_name") or ""
-        writer.writerow([_col(lead, "name") or "", "" if first == "-" else first,
-                         _col(lead, "email") or "", _col(lead, "phone") or "",
-                         _col(lead, "address") or "", _col(lead, "intro_how") or "",
-                         _col(lead, "primary_type") or ""])
+        row = [_col(lead, "name") or "", "" if first == "-" else first,
+               _col(lead, "email") or "", _col(lead, "phone") or "",
+               _col(lead, "address") or "", _col(lead, "intro_how") or "",
+               _col(lead, "primary_type") or ""]
+        if results:
+            sent_at, clicked_at = _col(lead, "emailed_at") or "", _col(lead, "clicked_at") or ""
+            human = bool(_col(lead, "human_clicked_at")) or bool(
+                clicked_at and sent_at and _seconds_since(sent_at, clicked_at) > HUMAN_CLICK_SECONDS)
+            yes = lambda v: "כן" if v else ""
+            row += [sent_at[:16].replace("T", " "), yes(_col(lead, "opened_at")), yes(human),
+                    _col(lead, "click_count") or "", yes(_col(lead, "replied_at")),
+                    yes(_col(lead, "bounced_at")), _col(lead, "ab") or "", _col(lead, "error") or ""]
+        writer.writerow(row)
     data = "\ufeff" + buf.getvalue()      # BOM כדי שאקסל יציג עברית נכון
     return Response(data, mimetype="text/csv", headers={
         "Content-Disposition": f'attachment; filename="campaign-{campaign_id}-{state}.csv"'})
