@@ -182,6 +182,16 @@ class Storage:
                             f"ALTER TABLE {self.leads} ADD COLUMN {column} TEXT")
                     except sqlite3.OperationalError:
                         pass  # העמודה כבר קיימת
+                # אינדקס על track_id: שירות המעקב מחפש לפיו בכל פתיחת מייל
+                # ובכל לחיצה. בלעדיו כל פתיחה סורקת את כל הטבלה, וב-D1 זה
+                # שורף את מכסת הקריאות היומית (5 מיליון שורות בתוכנית החינמית).
+                # אחרי המיגרציה, כדי שהעמודה כבר תהיה קיימת גם במאגר ישן.
+                try:
+                    conn.execute(
+                        f"CREATE INDEX IF NOT EXISTS idx_{self.leads}_track_id "
+                        f"ON {self.leads}(track_id)")
+                except sqlite3.OperationalError:
+                    pass  # האינדקס הוא שיפור ביצועים; תקלה בו לא עוצרת את העבודה
             _PREPARED.add(key)
 
     @contextmanager
