@@ -520,7 +520,7 @@ def import_rows(storage: Storage, rows, prefix: str = "up") -> dict:
             neighborhood=row.get("city") or row.get("עיר") or "", types=[],
             first_name=row.get("first_name") or row.get("שם_פרטי") or "",
             intro_how=(row.get("how") or row.get("מקור העסק")
-                       or row.get("מקור_העסק") or row.get("איפה מצאנו את העסק") or ""),
+                       or row.get("מקור_העסק") or row.get("איפה מצאנו את העסק") or row.get("איפה מצאנו") or ""),
             intro_fact=row.get("fact") or "",
             intro_why=row.get("why") or "")
         storage.upsert_lead(lead, email or None,
