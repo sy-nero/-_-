@@ -131,6 +131,7 @@
   <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
     <h2 style="margin:0;">נשלחו ({{ sent|length }})</h2>
     {% if sent %}
+    <a class="btn ghost small" href="{{ url_for('recipients_csv', campaign_id=campaign['id'], state='emailed') }}">הורדה לאקסל עם התוצאות</a>
     <form method="post" action="{{ url_for('check_replies', campaign_id=campaign['id']) }}">
       <button type="submit" class="ghost small">בדיקת תשובות בתיבה</button>
     </form>
