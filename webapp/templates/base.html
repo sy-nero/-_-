@@ -262,6 +262,7 @@
     {% if full_mode %}<a href="{{ url_for('jobs_page') }}">סריקה</a>{% endif %}
     <a href="{{ url_for('senders_page') }}">תיבות שליחה</a>
     <a href="{{ url_for('backup_page') }}">גיבוי</a>
+    <a href="{{ url_for('contacted_csv') }}">הורדת מי שכבר קיבל מייל</a>
     {% if session.get('ok') %}<a href="{{ url_for('logout') }}">יציאה</a>{% endif %}
   </nav>
 </header>

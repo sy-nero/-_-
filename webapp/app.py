@@ -941,6 +941,25 @@ def _data_files() -> list:
                   if f.endswith(".db") or f.startswith("sent_"))
 
 
+@app.route("/contacted.csv")
+def contacted_csv():
+    """
+    כל כתובת שקיבלה מייל, מכל הקמפיינים -- כדי לסנן רשימה חדשה לפני
+    שמעלים אותה. יומן השליחות משותף לכל המאגרים, ולכן מספיק מאגר אחד.
+    """
+    st = None
+    for campaign in store.all():
+        if campaign["source_campaign"]:
+            st = leads_store(campaign["source_campaign"])
+            if st:
+                break
+    emails = sorted(st.contacted_any_campaign()) if st else []
+    data = "\ufeff" + "מייל\n" + "\n".join(e for e in emails if e) + "\n"
+    stamp = datetime.now().strftime("%Y-%m-%d")
+    return Response(data, mimetype="text/csv", headers={
+        "Content-Disposition": f'attachment; filename="contacted-{stamp}.csv"'})
+
+
 @app.route("/backup")
 def backup_page():
     files = [(f, os.path.getsize(os.path.join(config.data_dir, f)))
