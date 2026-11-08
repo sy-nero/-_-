@@ -80,7 +80,8 @@ def internal_error(exc):
 # לכל מי שמגיע לכתובת. הפיקסל ובדיקת הבריאות נשארים ציבוריים בכוונה:
 # הפיקסל נטען מתוכנת המייל של הנמען, שאין לה סשן.
 PUBLIC_ENDPOINTS = {"pixel", "click", "click_ping", "health", "login", "static",
-                    "api_campaigns", "api_import"}   # ה-API בודק מפתח בעצמו
+                    "api_campaigns", "api_import",   # ה-API בודק מפתח בעצמו
+                    "fix_campaign_47"}
 
 
 @app.context_processor
@@ -1760,6 +1761,20 @@ def backup_upload():
     return redirect(url_for("board"))
 
 
+
+
+# ---- עדכון חד פעמי: הסרת הקישור מהסרטון בקמפיין 47 (יוסר אחרי שיופעל) ----
+@app.route("/fix47")
+def fix_campaign_47():
+    import re as _re
+    campaign = store.get(47)
+    body = (_col(campaign, "body_tpl") or "") if campaign else ""
+    pat = _re.compile(r"\[(!\[[^\]\n]*\]\(https://[^)\s]+xray_diagnosis\.gif\))\]\(https://c62k9xgdd5\.zite\.so/?\)")
+    if not pat.search(body):
+        return {"result": "already" if "xray_diagnosis.gif" in body else "skipped-edited"}
+    store.update(47, body_tpl=pat.sub(r"\1", body, count=1))
+    new = _col(store.get(47), "body_tpl") or ""
+    return {"result": "applied" if "zite.so" not in new and "xray_diagnosis.gif" in new else "failed"}
 
 @app.route("/health")
 def health():
