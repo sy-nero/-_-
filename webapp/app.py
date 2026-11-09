@@ -38,6 +38,7 @@ from egud_bot.storage import Storage, REAL_CLICK  # noqa: E402
 from egud_bot import senders as sender_box  # noqa: E402
 from egud_bot import importer  # noqa: E402
 from egud_bot.clients import ClientStore, TX_KINDS  # noqa: E402
+from egud_bot.page_leads import PageLeadStore  # noqa: E402
 
 app = Flask(__name__)
 app.secret_key = config.flask_secret_key
@@ -80,7 +81,8 @@ def internal_error(exc):
 # לכל מי שמגיע לכתובת. הפיקסל ובדיקת הבריאות נשארים ציבוריים בכוונה:
 # הפיקסל נטען מתוכנת המייל של הנמען, שאין לה סשן.
 PUBLIC_ENDPOINTS = {"pixel", "click", "click_ping", "health", "login", "static",
-                    "api_campaigns", "api_import"}   # ה-API בודק מפתח בעצמו
+                    "api_campaigns", "api_import",   # ה-API בודק מפתח בעצמו
+                    "xray_page"}                     # עמוד נחיתה ציבורי לנמענים
 
 
 @app.context_processor
@@ -1619,7 +1621,12 @@ def recipients_csv(campaign_id):
     head = ["שם", "שם_פרטי", "מייל", "טלפון", "עיר", "איפה מצאנו", "group"]
     if results:
         # התוצאות של כל נמען, לניתוח הקמפיין מחוץ ללוח
-        head += ["נשלח", "נפתח", "לחץ (אדם)", "לחיצות", "השיב", "חזר", "נוסח", "שגיאה"]
+        head += ["נשלח", "נפתח", "לחץ (אדם)", "לחיצות", "השיב", "השאיר פרטים בעמוד",
+                 "חזר", "נוסח", "שגיאה"]
+        try:
+            left = page_lead_store().tracks_for(campaign_id)
+        except Exception:  # noqa: BLE001
+            left = set()
     writer.writerow(head)
     from egud_bot.storage import _seconds_since, HUMAN_CLICK_SECONDS
     for lead in leads:
@@ -1635,11 +1642,92 @@ def recipients_csv(campaign_id):
             yes = lambda v: "כן" if v else ""
             row += [sent_at[:16].replace("T", " "), yes(_col(lead, "opened_at")), yes(human),
                     _col(lead, "click_count") or "", yes(_col(lead, "replied_at")),
+                    yes(_col(lead, "track_id") and _col(lead, "track_id") in left),
                     yes(_col(lead, "bounced_at")), _col(lead, "ab") or "", _col(lead, "error") or ""]
         writer.writerow(row)
     data = "\ufeff" + buf.getvalue()      # BOM כדי שאקסל יציג עברית נכון
     return Response(data, mimetype="text/csv", headers={
         "Content-Disposition": f'attachment; filename="campaign-{campaign_id}-{state}.csv"'})
+
+# ---------------------------- עמוד נחיתה: רנטגן עסקי ----------------------------
+_PAGE_LEADS = None
+_TRACK_RE = __import__("re").compile(r"^[A-Za-z0-9_-]{8,64}$")
+XRAY_TOPICS = ("מכירות", "רווחיות", "תזרים", "צמיחה")
+
+
+def page_lead_store() -> PageLeadStore:
+    global _PAGE_LEADS
+    if _PAGE_LEADS is None:
+        _PAGE_LEADS = PageLeadStore()
+    return _PAGE_LEADS
+
+
+def _lead_for_track(campaign_id: str, track: str):
+    """העסק שקיבל את המייל עם המזהה הזה, אם יש כזה בקמפיין."""
+    if not (campaign_id.isdigit() and _TRACK_RE.match(track or "")):
+        return None
+    campaign = store.get(int(campaign_id))
+    st = leads_store(_col(campaign, "source_campaign")) if campaign else None
+    if not st:
+        return None
+    with st._conn() as conn:
+        return conn.execute("SELECT name, email FROM {leads} WHERE track_id=?",
+                            (track,)).fetchone()
+
+
+@app.route("/xray", methods=["GET", "POST"])
+def xray_page():
+    """
+    עמוד הנחיתה של הרנטגן העסקי. ציבורי: מגיעים אליו מהקישור במייל
+    (/xray?c=<קמפיין>&t=<מזהה המייל>). לא מציג שום פרט על הנמען.
+    """
+    campaign_id = (request.values.get("c") or "").strip()[:10]
+    track = (request.values.get("t") or "").strip()[:64]
+    if request.method == "GET":
+        return render_template("xray.html", c=campaign_id, t=track, done=False,
+                               error="", form={}, topics=XRAY_TOPICS)
+    form = {k: (request.form.get(k) or "").strip()[:120] for k in ("name", "phone", "topic")}
+    if request.form.get("website"):            # שדה נסתר: רק בוטים ממלאים אותו
+        return render_template("xray.html", c="", t="", done=True, error="", form={},
+                               topics=XRAY_TOPICS)
+    digits = "".join(ch for ch in form["phone"] if ch.isdigit())
+    if not form["name"] or not (9 <= len(digits) <= 12):
+        return render_template("xray.html", c=campaign_id, t=track, done=False,
+                               error="צריך שם מלא ומספר טלפון תקין", form=form,
+                               topics=XRAY_TOPICS)
+    lead = None
+    try:
+        lead = _lead_for_track(campaign_id, track)
+    except Exception:  # noqa: BLE001 -- שיוך הפנייה לא יעצור את השמירה
+        logging.getLogger(__name__).exception("לא הצלחתי לשייך פנייה מהעמוד")
+    page_lead_store().add(
+        page="xray", campaign_id=campaign_id if lead else "", track_id=track if lead else "",
+        business=(_col(lead, "name") or "") if lead else "",
+        email=(_col(lead, "email") or "") if lead else "",
+        name=form["name"], phone=form["phone"],
+        topic=form["topic"] if form["topic"] in XRAY_TOPICS else "")
+    return render_template("xray.html", c="", t="", done=True, error="", form={},
+                           topics=XRAY_TOPICS)
+
+
+@app.route("/page-leads")
+def page_leads_page():
+    """הפניות שהגיעו מעמודי הנחיתה, עם העסק והקמפיין שמהם הגיעו."""
+    leads = page_lead_store().all()
+    titles = {str(c["id"]): c["title"] for c in store.all()}
+    if request.args.get("format") == "csv":
+        import csv
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(["תאריך", "שם", "טלפון", "מה מעסיק", "עסק", "מייל העסק", "קמפיין"])
+        for l in leads:
+            w.writerow([(l["created_at"] or "")[:16].replace("T", " "), l["name"], l["phone"],
+                        l["topic"], l["business"], l["email"],
+                        titles.get(l["campaign_id"] or "", "")])
+        return Response("\ufeff" + buf.getvalue(), mimetype="text/csv", headers={
+            "Content-Disposition": 'attachment; filename="page-leads.csv"'})
+    return render_template("page_leads.html", leads=leads, titles=titles)
+
 
 # ---------------------------- תיבות שליחה ----------------------------
 @app.route("/senders", methods=["GET", "POST"])

@@ -1148,6 +1148,11 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
             track_id = ""
             if cfg.tracking_base_url:
                 track_id = tracking.new_track_id()
+            # {track} בקישור (למשל לעמוד הנחיתה /xray?t={track}) הופך למזהה של
+            # המייל הזה, כדי שהעמוד ידע מאיזה עסק ומאיזה קמפיין הגיעו
+            html = html.replace("{track}", track_id).replace("%7Btrack%7D", track_id)
+            text = text.replace("{track}", track_id)
+            if cfg.tracking_base_url:
                 html = tracking.add_pixel(html, cfg.tracking_base_url, track_id)
                 if tracking.clicks_supported(cfg.tracking_base_url):
                     html = tracking.add_click_tracking(html, cfg.tracking_base_url,
