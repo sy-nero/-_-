@@ -1700,14 +1700,66 @@ def xray_page():
         lead = _lead_for_track(campaign_id, track)
     except Exception:  # noqa: BLE001 -- שיוך הפנייה לא יעצור את השמירה
         logging.getLogger(__name__).exception("לא הצלחתי לשייך פנייה מהעמוד")
-    page_lead_store().add(
+    entry = dict(
         page="xray", campaign_id=campaign_id if lead else "", track_id=track if lead else "",
         business=(_col(lead, "name") or "") if lead else "",
         email=(_col(lead, "email") or "") if lead else "",
         name=form["name"], phone=form["phone"],
         topic=form["topic"] if form["topic"] in XRAY_TOPICS else "")
+    page_lead_store().add(**entry)
+    try:
+        _notify_page_lead(entry)
+    except Exception:  # noqa: BLE001 -- הפנייה כבר נשמרה בלוח; מייל שנכשל לא יפיל את העמוד
+        logging.getLogger(__name__).exception("לא הצלחתי לשלוח מייל על פנייה מהעמוד")
     return render_template("xray.html", c="", t="", done=True, error="", form={},
                            topics=XRAY_TOPICS)
+
+
+# לאן נשלח מייל על כל פנייה חדשה מעמוד הנחיתה. אפשר לשנות עם משתנה סביבה.
+LEAD_NOTIFY_EMAIL = os.environ.get("LEAD_NOTIFY_EMAIL", "office@sy-nero.com")
+
+
+def _notify_sender():
+    """
+    התיבה שממנה נשלחת ההתראה: קודם תיבה שהכתובת שלה היא כתובת ההתראות
+    (office@sy-nero.com שולחת לעצמה), ואם אין כזו -- התיבה הראשונה עם סיסמה.
+    """
+    boxes = [sender_box.as_smtp(b) for b in sender_box.SenderStore().all()]
+    boxes = [b for b in boxes if b and not sender_box.missing(b)]
+    for b in boxes:
+        if b["from_email"].strip().lower() == LEAD_NOTIFY_EMAIL.lower():
+            return b
+    return boxes[0] if boxes else None
+
+
+def _notify_page_lead(entry: dict) -> None:
+    """שולח מייל קצר עם פרטי הפנייה ל-LEAD_NOTIFY_EMAIL."""
+    from html import escape
+    from egud_bot.mailer import Mailer
+    if not LEAD_NOTIFY_EMAIL:
+        return
+    sender = _notify_sender()
+    if not sender:
+        logging.getLogger(__name__).warning("אין תיבת שליחה עם סיסמה; לא נשלחה התראה על פנייה")
+        return
+    campaign = store.get(int(entry["campaign_id"])) if entry["campaign_id"].isdigit() else None
+    rows = [("שם", entry["name"]), ("טלפון", entry["phone"]),
+            ("מה הכי מעסיק", entry["topic"] or "לא נבחר"),
+            ("עסק", entry["business"] or "לא ידוע (נכנס לעמוד ישירות)"),
+            ("מייל העסק", entry["email"] or "-"),
+            ("קמפיין", campaign["title"] if campaign else "-")]
+    text = "פנייה חדשה מעמוד הרנטגן העסקי\n\n" + "\n".join(f"{k}: {v}" for k, v in rows)
+    html = ('<div dir="rtl" style="font-family:Arial,sans-serif;font-size:15px">'
+            "<p><b>פנייה חדשה מעמוד הרנטגן העסקי</b></p><table cellpadding=\"4\">"
+            + "".join(f"<tr><td><b>{escape(k)}</b></td><td>{escape(str(v))}</td></tr>"
+                      for k, v in rows)
+            + "</table></div>")
+    who = entry["business"] or entry["name"]
+    with Mailer(host=sender["smtp_host"], port=sender["smtp_port"],
+                user=sender["smtp_user"], password=sender["smtp_password"],
+                from_email=sender["from_email"], from_name="עמוד הרנטגן העסקי",
+                use_ssl=sender["use_ssl"]) as m:
+        m.send(LEAD_NOTIFY_EMAIL, f"ליד חדש לרנטגן עסקי: {who} {entry['phone']}", html, text)
 
 
 @app.route("/page-leads")
