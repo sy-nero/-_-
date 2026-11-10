@@ -1706,11 +1706,21 @@ def xray_page():
         email=(_col(lead, "email") or "") if lead else "",
         name=form["name"], phone=form["phone"],
         topic=form["topic"] if form["topic"] in XRAY_TOPICS else "")
-    page_lead_store().add(**entry)
+    log = logging.getLogger(__name__)
+    saved = mailed = False
+    try:
+        page_lead_store().add(**entry)
+        saved = True
+    except Exception:  # noqa: BLE001 -- מסד הנתונים לא זמין; עדיין שולחים מייל
+        log.exception("לא הצלחתי לשמור פנייה מהעמוד בלוח")
     try:
         _notify_page_lead(entry)
-    except Exception:  # noqa: BLE001 -- הפנייה כבר נשמרה בלוח; מייל שנכשל לא יפיל את העמוד
-        logging.getLogger(__name__).exception("לא הצלחתי לשלוח מייל על פנייה מהעמוד")
+        mailed = True
+    except Exception:  # noqa: BLE001 -- מייל שנכשל לא יפיל את העמוד
+        log.exception("לא הצלחתי לשלוח מייל על פנייה מהעמוד")
+    if not (saved or mailed):
+        # אחרון חביב: הפרטים נשארים ביומן השרת, כדי שאפשר יהיה לשחזר את הליד
+        log.error("פנייה מהעמוד לא נשמרה ולא נשלחה: %s", entry)
     return render_template("xray.html", c="", t="", done=True, error="", form={},
                            topics=XRAY_TOPICS)
 
@@ -1724,8 +1734,17 @@ def _notify_sender():
     התיבה שממנה נשלחת ההתראה: קודם תיבה שהכתובת שלה היא כתובת ההתראות
     (office@sy-nero.com שולחת לעצמה), ואם אין כזו -- התיבה הראשונה עם סיסמה.
     """
-    boxes = [sender_box.as_smtp(b) for b in sender_box.SenderStore().all()]
+    try:
+        boxes = [sender_box.as_smtp(b) for b in sender_box.SenderStore().all()]
+    except Exception:  # noqa: BLE001 -- מסד הנתונים לא זמין: נופלים להגדרות SMTP מהסביבה
+        logging.getLogger(__name__).exception("לא הצלחתי לקרוא את תיבות השליחה")
+        boxes = []
     boxes = [b for b in boxes if b and not sender_box.missing(b)]
+    if not boxes and config.smtp_user and config.smtp_password:
+        boxes = [{"from_email": config.smtp_user, "smtp_user": config.smtp_user,
+                  "smtp_password": config.smtp_password,
+                  "smtp_host": config.smtp_host or "smtp.gmail.com",
+                  "smtp_port": config.smtp_port, "use_ssl": config.smtp_use_ssl}]
     for b in boxes:
         if b["from_email"].strip().lower() == LEAD_NOTIFY_EMAIL.lower():
             return b
@@ -1742,7 +1761,10 @@ def _notify_page_lead(entry: dict) -> None:
     if not sender:
         logging.getLogger(__name__).warning("אין תיבת שליחה עם סיסמה; לא נשלחה התראה על פנייה")
         return
-    campaign = store.get(int(entry["campaign_id"])) if entry["campaign_id"].isdigit() else None
+    try:
+        campaign = store.get(int(entry["campaign_id"])) if entry["campaign_id"].isdigit() else None
+    except Exception:  # noqa: BLE001 -- שם הקמפיין לא הכרחי להתראה
+        campaign = None
     rows = [("שם", entry["name"]), ("טלפון", entry["phone"]),
             ("מה הכי מעסיק", entry["topic"] or "לא נבחר"),
             ("עסק", entry["business"] or "לא ידוע (נכנס לעמוד ישירות)"),
