@@ -7,6 +7,7 @@ import os
 import re
 import time
 import logging
+import smtplib
 
 from config import Config
 from data.neighborhoods import HAREDI_NEIGHBORHOODS, Neighborhood, neighborhoods_for
@@ -60,6 +61,29 @@ def _render(template_campaign: str, ctx: dict, custom=None):
         merged["profession_hint"] = merged.get("profession_hint") or hint
         return templates.render_custom(custom[0], custom[1], **merged)
     return templates.render(template_campaign, **ctx)
+
+
+def ab_arm(email: str) -> str:
+    """
+    לאיזה נוסח הנמען שייך בהשוואת נוסחים: A או B. נקבע לפי הכתובת עצמה,
+    כך שאותו נמען תמיד באותה קבוצה (גם בתצוגה המקדימה וגם בשליחה),
+    והחלוקה יוצאת בערך חצי-חצי.
+    """
+    import hashlib
+    return "B" if hashlib.md5((email or "").strip().lower().encode()).digest()[0] % 2 else "A"
+
+
+def pick_custom(custom, email: str):
+    """
+    (הנוסח שיישלח לנמען, A/B או ""). custom הוא (נושא, גוף, תחום, נושא ב', גוף ב').
+    נוסח ב' שהשאירו בו שדה ריק משתמש בשדה של נוסח א': כך אפשר לבדוק רק נושא.
+    """
+    if not custom or len(custom) < 5 or not (custom[3] or custom[4]):
+        return custom, ""
+    arm = ab_arm(email)
+    if arm == "A":
+        return custom[:3], "A"
+    return (custom[3] or custom[0], custom[4] or custom[1], custom[2]), "B"
 
 
 def _area_of(lead) -> str:
@@ -868,6 +892,65 @@ def enrich_missing_emails(cfg: Config, storage: Storage, limit: int = 50,
     return summary
 
 
+#: מיילים שיצאו אבל לא נרשמו במסד (D1 לא היה נגיש ברגע הרישום). נשמר
+#: מקומית כדי שהשליחה הבאה לא תשלח להם שוב, ונרשם במסד בהזדמנות הבאה.
+# ב-Vercel רק /tmp ניתן לכתיבה
+UNRECORDED_PATH = os.path.join(
+    os.getenv("DATA_DIR") or ("/tmp" if os.getenv("VERCEL") else "data"),
+    "sent_unrecorded.json")
+
+
+def _load_unrecorded() -> list:
+    try:
+        with open(UNRECORDED_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return []
+
+
+def _save_unrecorded(items: list) -> None:
+    os.makedirs(os.path.dirname(UNRECORDED_PATH) or ".", exist_ok=True)
+    with open(UNRECORDED_PATH, "w", encoding="utf-8") as f:
+        json.dump(items, f, ensure_ascii=False)
+
+
+def _record_success(storage, lead, track_id, campaign_id, variant) -> None:
+    if track_id:
+        storage.set_track_id(lead["place_id"], track_id)
+    storage.mark_emailed(lead["place_id"], success=True, campaign_id=campaign_id)
+    if variant:
+        storage.set_variant(lead["place_id"], variant)
+    storage.record_sent(lead["email"])   # יומן קבוע נגד שליחה כפולה
+
+
+def _flush_unrecorded(storage) -> set:
+    """רושם במסד מה שנשלח ולא נרשם. מחזיר את הכתובות שעדיין לא נרשמו."""
+    left = []
+    for item in _load_unrecorded():
+        if item.get("leads") != storage.leads:
+            left.append(item)
+            continue
+        try:
+            _record_success(storage, item["lead"], item.get("track_id", ""),
+                            item.get("campaign_id", ""), item.get("variant", ""))
+        except Exception:  # noqa: BLE001 — ננסה שוב בפעם הבאה
+            left.append(item)
+    _save_unrecorded(left)
+    return {(i["lead"].get("email") or "").lower() for i in left}
+
+
+def _broken_render(html: str) -> str:
+    """סיבה בעברית אם במייל נשאר תחביר של הנוסח במקום תמונה או קישור."""
+    from egud_bot.mailer import MEDIA_DIR
+    body = re.sub(r"<[^>]+>", " ", html)
+    if "![" in body or re.search(r"\]\((?:https?://|[\w.-]+\.(?:gif|png|jpe?g)\))", body):
+        return "תמונה או קישור נשארו כטקסט"
+    for name in re.findall(r'src="cid:([\w.-]+)"', html):
+        if name != "logo" and not os.path.isfile(os.path.join(MEDIA_DIR, name)):
+            return f"קובץ התמונה {name} חסר במחשב"
+    return ""
+
+
 def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
                 campaign: str = "funding", skip_contacted: bool = False,
                 limit: int | None = None, confirm=None, confirm_batch=None,
@@ -893,7 +976,10 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
     # נוסח ב' הוא תבנית נפרדת; ברירת המחדל (ובנוסח א') היא תבנית הקמפיין
     template_campaign = f"{campaign}_offer" if variant == "b" else campaign
     # סינון לפי יומן שליחות קבוע: לעולם לא לשלוח שוב למי שכבר קיבל (גם אחרי מחיקת DB)
-    sent_before = storage.already_sent_emails()
+    pending = _flush_unrecorded(storage) if not dry_run else set()
+    sent_before = storage.already_sent_emails() | pending
+    # מי שביקש להסיר אותו: לא שולחים לו שוב, מאף קמפיין
+    sent_before = sent_before | storage.unsubscribed_emails()
     if skip_contacted:
         sent_before = sent_before | storage.contacted_any_campaign()
     all_candidates = storage.leads_to_email(10 ** 9)
@@ -911,6 +997,24 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
     # כלומר כתובת אחת שגויה מזיקה גם לכל השאר
     invalid = [l for l in remaining if not is_valid_email(l["email"])]
     remaining = [l for l in remaining if is_valid_email(l["email"])]
+
+    # מייל שכנראה לא קיים: דומיין בלי שרת דואר, ספק ישן שהתיבות בו נסגרו,
+    # טעות הקלדה, או כתובת שכבר חזרה אלינו. כל החזרה פוגעת בתיבה כולה.
+    from egud_bot import emailcheck
+    try:
+        bounced_before = storage.bounced_any_campaign()
+    except Exception:  # noqa: BLE001 — מסד ישן בלי עמודת bounced_at
+        bounced_before = set()
+    undeliverable = []
+    keep = []
+    for l in remaining:
+        email = (l["email"] or "").strip().lower()
+        reason = ("טעות הקלדה בכתובת" if emailcheck.fix_typo(email) != email
+                  else emailcheck.check(email, bounced_before))
+        (undeliverable if reason else keep).append(l)
+        if reason:
+            logger.info("דילוג על %s: %s", email, reason)
+    remaining = keep
 
     # field: לשלוח רק לבעלי מקצוע מהתחום הזה. המאגר מצטבר ומכיל כמה
     # מקצועות, ונוסח שנכתב ליועצים עסקיים לא מתאים לעורכי דין.
@@ -955,6 +1059,7 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
                "skipped_already_sent": len(skipped),
                "skipped_blocked": len(blocked)}
     for label, group in (("דולגו: כתובת לא תקינה", invalid),
+                         ("דולגו: מייל שכנראה לא קיים", undeliverable),
                          ("דולגו: לא מהתחום", off_field),
                          ("דולגו: עיר אחרת", off_city)):
         if group:
@@ -1030,29 +1135,65 @@ def send_emails(cfg: Config, storage: Storage, dry_run: bool = False,
         logo_path="",                # מייל אישי, ללא לוגו
     ) as mailer:
         for lead in leads:
+            lead_custom, arm = pick_custom(custom, lead["email"])
             subject, html, text = _render(
                 template_campaign,
-                build_ctx(cfg, campaign, lead, field_hint=field, sender=sender), custom)
-            # פיקסל מעקב פתיחות (רק אם הוגדרה כתובת ציבורית)
+                build_ctx(cfg, campaign, lead, field_hint=field, sender=sender), lead_custom)
+            # נוסח שלא נבנה עד הסוף (תמונה או קישור שנשארו כטקסט, קובץ תמונה
+            # שחסר במחשב) לא יוצא: עדיף לעצור מאשר לשלוח מאות מיילים שבורים
+            broken = _broken_render(html)
+            if broken:
+                raise RuntimeError(f"הנוסח לא נבנה נכון ({broken}), ולא נשלח אף מייל "
+                                   "מהמנה הזו. כדאי לעדכן את האפליקציה ולנסות שוב.")
+            # מעקב פתיחות ולחיצות (רק אם הוגדרה כתובת ציבורית)
             track_id = ""
             if cfg.tracking_base_url:
                 track_id = tracking.new_track_id()
+            # {track} בקישור (למשל לעמוד הנחיתה /xray?t={track}) הופך למזהה של
+            # המייל הזה, כדי שהעמוד ידע מאיזה עסק ומאיזה קמפיין הגיעו
+            html = html.replace("{track}", track_id).replace("%7Btrack%7D", track_id)
+            text = text.replace("{track}", track_id)
+            if cfg.tracking_base_url:
                 html = tracking.add_pixel(html, cfg.tracking_base_url, track_id)
+                if tracking.clicks_supported(cfg.tracking_base_url):
+                    html = tracking.add_click_tracking(html, cfg.tracking_base_url,
+                                                       track_id, storage.link_id)
             try:
                 mailer.send(lead["email"], subject, html, text)
-                if track_id:
-                    storage.set_track_id(lead["place_id"], track_id)
-                storage.mark_emailed(lead["place_id"], success=True,
-                                     campaign_id=campaign_id)
-                if variant:
-                    storage.set_variant(lead["place_id"], variant)
-                storage.record_sent(lead["email"])   # יומן קבוע נגד שליחה כפולה
-                summary["sent"] += 1
+            except (smtplib.SMTPServerDisconnected, smtplib.SMTPConnectError,
+                    ConnectionError, TimeoutError) as exc:
+                # החיבור ל-Gmail נפל ולא חזר: זו לא בעיה של הנמען. עוצרים, ומי
+                # שלא קיבל נשאר ממתין. בלי זה כל השאר סומנו "נכשל" ונספרו
+                # כמיילים שחזרו (כך קרה ל-207 בקמפיין 22).
+                raise RuntimeError(
+                    f"נשלחו {summary['sent']} מיילים, ואז Gmail ניתק את החיבור ({exc}). "
+                    "מי שלא קיבל נשאר ממתין. כדאי לנסות שוב בעוד שעה: ניתוק כזה "
+                    "קורה בדרך כלל כששולחים הרבה בבת אחת.") from exc
             except Exception as exc:  # noqa: BLE001
                 logger.warning("שליחה אל %s נכשלה: %s", lead["email"], exc)
                 storage.mark_emailed(lead["place_id"], success=False,
                                      error=str(exc), campaign_id=campaign_id)
                 summary["failed"] += 1
+                time.sleep(cfg.request_delay_seconds)
+                continue
+            summary["sent"] += 1
+            try:
+                if arm:
+                    storage.set_ab(lead["place_id"], arm)
+                _record_success(storage, lead, track_id, campaign_id, variant)
+            except Exception as exc:  # noqa: BLE001
+                # המייל יצא, אבל המסד לא זמין. שומרים מקומית כדי לא לשלוח
+                # לו שוב, ועוצרים: בלי מסד אי אפשר לדעת למי כבר נשלח.
+                items = _load_unrecorded()
+                items.append({"leads": storage.leads, "lead": dict(lead),
+                              "track_id": track_id, "campaign_id": campaign_id,
+                              "variant": variant or ""})
+                _save_unrecorded(items)
+                raise RuntimeError(
+                    f"נשלחו {summary['sent']} מיילים, ואז מסד הנתונים הפסיק לענות "
+                    f"({exc}). השליחה נעצרה כדי לא לשלוח פעמיים. "
+                    "אפשר פשוט לנסות שוב בעוד כמה דקות: מי שכבר קיבל לא יקבל שוב."
+                ) from exc
             time.sleep(cfg.request_delay_seconds)
 
     logger.info("סיכום שליחה: %s", summary)

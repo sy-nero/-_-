@@ -10,6 +10,7 @@
 (רכישת הקורס + הרשמה לכנס במייל).
 """
 import re
+from html import escape as html_escape
 from urllib.parse import quote
 
 from egud_bot import recommendations
@@ -539,7 +540,8 @@ PLACEHOLDERS = {
     "אתר": "website",
     "מייל_שולח": "contact_email",
     "התמחות": "specialty",
-    "מקור_העסק": "found_at",
+    # איפה מצאנו את העסק, מהעמודה "איפה מצאנו" בקובץ הנמענים
+    "מקור": "found_where",
 }
 
 _PLACEHOLDER_RE = re.compile(r"\{\{?\s*([^{}]+?)\s*\}?\}")
@@ -547,8 +549,7 @@ _PLACEHOLDER_RE = re.compile(r"\{\{?\s*([^{}]+?)\s*\}?\}")
 
 def custom_values(business_name="", first_name="", field="", neighborhood="",
                   area="", rec=None, sender_name="", contact_email="",
-                  website="", profession_hint="", specialty="", intro_how="",
-                  **_) -> dict:
+                  website="", profession_hint="", specialty="", intro_how="", **_) -> dict:
     """
     הערכים שמוזרקים לנוסח מותאם, מנתוני הליד.
 
@@ -569,7 +570,8 @@ def custom_values(business_name="", first_name="", field="", neighborhood="",
         "profession": (AGENT_PROFESSIONS.get(field) or field
                        or profession_hint or "בעל מקצוע"),
         "area": area or city_of(neighborhood) or neighborhood,
-        "neighborhood": neighborhood,
+        # בלי שכונה ידועה: העיר. "ראיתי את העסק בבני ברק" עדיף על משפט ריק
+        "neighborhood": neighborhood or area or city_of(neighborhood),
         "review_count": str(rec.get("count") or ""),
         "rating": str(rec.get("rating") or ""),
         "sender_name": sender_name,
@@ -578,9 +580,7 @@ def custom_values(business_name="", first_name="", field="", neighborhood="",
         # מה שהעסק כותב על עצמו באתר. ריק כשלא נמצא משהו נקי -- ואז
         # _tidy מוחק את הרווח שנשאר, ולא נשלח משפט קטוע.
         "specialty": specialty,
-        # איפה ראינו את העסק (עמודת "מקור העסק" בקובץ שהועלה). בלי ערך
-        # נופלים לניסוח כללי שנכון לכל ליד, כדי שמשפט הפתיחה לא יימחק.
-        "found_at": intro_how.strip() or "מדריך העסקים",
+        "found_where": (intro_how or "").strip(),
     }
 
 
@@ -591,6 +591,8 @@ OPTIONAL_FIELDS = {"specialty", "review_count", "rating"}
 
 #: תו פנימי שמסמן "כאן היה מציין רשות שלא התמלא". לא מופיע בטקסט אמיתי.
 _DROP_MARK = "\uf8ff"
+#: תו פנימי למציין שהתמלא בערך ריק (לא רשות)
+_EMPTY_MARK = "\uf8fe"
 
 
 def fill_placeholders(text: str, values: dict) -> str:
@@ -609,8 +611,12 @@ def fill_placeholders(text: str, values: dict) -> str:
         value = values.get(field, "")
         if not value and field in OPTIONAL_FIELDS:
             return _DROP_MARK
-        return value
-    return _PLACEHOLDER_RE.sub(sub, text or "")
+        return value or _EMPTY_MARK
+    filled = _PLACEHOLDER_RE.sub(sub, text or "")
+    # מציין ריק שהיה צמוד לאות שימוש ("ב{{שכונה}}"): האות יורדת איתו,
+    # אחרת נשאר "ראיתי את העסק ב ורציתי"
+    filled = re.sub(r"(?<![\u0590-\u05FF])[בלמוהכש]" + _EMPTY_MARK, "", filled)
+    return filled.replace(_EMPTY_MARK, "")
 
 
 def _tidy(text: str) -> str:
@@ -638,21 +644,41 @@ _LINK_RE = re.compile(r"\[([^\]\n]+)\]\((https?://[^)\s]+)\)")
 #: תמונה מתוך assets/campaign_media שמוטמעת במייל: ![](שם_קובץ), ועם קישור
 #: סביבה [![](שם_קובץ)](https://...). קובץ GIF מונפש מתנגן בתוך המייל.
 _IMAGE_RE = re.compile(
-    r"(?:\[)?!\[\]\(([\w.-]+\.(?:gif|png|jpe?g))\)(?:\]\((https?://[^)\s]+)\))?")
+    r"(?:\[)?!\[([^\]\n]*)\]\(((?:https?://[^)\s]+|[\w.-]+)\.(?:gif|png|jpe?g))\)"
+    r"(?:\]\((https?://[^)\s]+)\))?")
 
 
 def _image_html(match) -> str:
-    img = (f'<img src="cid:{match.group(1)}" alt="" width="480" '
+    # הטקסט החלופי (![טקסט](קובץ)) מוצג כשתוכנת המייל חוסמת תמונות
+    alt = html_escape(match.group(1) or "", quote=True)
+    # כתובת באינטרנט נטענת משם; שם קובץ מוטמע במייל עצמו (cid)
+    src = match.group(2) if match.group(2).startswith("http") else f"cid:{match.group(2)}"
+    img = (f'<img src="{src}" alt="{alt}" width="480" '
            'style="display:block;width:100%;max-width:480px;height:auto;border:0;'
            'border-radius:8px;">')
-    if match.group(2):
-        return f'<a href="{match.group(2)}">{img}</a>'
+    if match.group(3):
+        return f'<a href="{match.group(3)}">{img}</a>'
     return img
 
 
 def _image_text(match) -> str:
     # בגרסת הטקסט אין תמונה, והקישור שלה מופיע ממילא בהמשך הנוסח
     return ""
+
+
+def _preheader_html(text: str) -> str:
+    """טקסט מוסתר שתוכנות המייל מציגות כתצוגה מקדימה, ואחריו ריפוד כדי
+    שלא יימשך לתצוגה המקדימה גם המשך המייל."""
+    if not text:
+        return ""
+    pad = "&#8204;&nbsp;" * 80
+    return ('    <div style="display:none;max-height:0;max-width:0;overflow:hidden;'
+            f'opacity:0;mso-hide:all;">{html_escape(text)}{pad}</div>\n')
+
+
+def render_subject(subject_tpl: str, **ctx) -> str:
+    """רק הנושא, כמו שהוא יוצא במייל (בלי לבנות את כל הגוף)."""
+    return _tidy(fill_placeholders(subject_tpl, custom_values(**ctx)))
 
 
 def render_custom(subject_tpl: str, body_tpl: str, **ctx):
@@ -665,6 +691,11 @@ def render_custom(subject_tpl: str, body_tpl: str, **ctx):
     body = _tidy(fill_placeholders(body_tpl, values))
 
     lines = [ln.strip() for ln in body.split("\n\n") if ln.strip()]
+    # "טקסט מקדים: ..." בתחילת הנוסח: השורה שתוכנת המייל מציגה ליד הנושא
+    # ברשימת המיילים. לא מופיע בגוף המייל עצמו.
+    preheader = ""
+    if lines and lines[0].startswith("טקסט מקדים:"):
+        preheader = lines.pop(0).split(":", 1)[1].strip()
     # [טקסט לחיץ](https://...) -> קישור עם טקסט ב-HTML, "טקסט: כתובת" בטקסט רגיל
     def plain(ln):
         ln = _IMAGE_RE.sub(_image_text, ln)
@@ -683,7 +714,7 @@ def render_custom(subject_tpl: str, body_tpl: str, **ctx):
   <div dir="rtl" style="direction:rtl;text-align:right;max-width:600px;margin:0 auto;
        padding:22px 20px;font-family:Arial,Helvetica,sans-serif;font-size:16px;
        line-height:1.75;color:#222222;">
-{html_lines}
+{_preheader_html(preheader)}{html_lines}
   </div>
 </body></html>"""
     return subject, html, text

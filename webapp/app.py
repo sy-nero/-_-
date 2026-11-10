@@ -34,8 +34,11 @@ logger = logging.getLogger(__name__)
 from webapp.jobs import runner  # noqa: E402
 from egud_bot.campaigns import (CampaignStore, TEXT_FIELDS, AUTO_FIELDS,  # noqa: E402
                                 MANUAL_FIELDS, ALL_FIELDS)
-from egud_bot.storage import Storage  # noqa: E402
+from egud_bot.storage import Storage, REAL_CLICK  # noqa: E402
 from egud_bot import senders as sender_box  # noqa: E402
+from egud_bot import importer  # noqa: E402
+from egud_bot.clients import ClientStore, TX_KINDS  # noqa: E402
+from egud_bot.page_leads import PageLeadStore  # noqa: E402
 
 app = Flask(__name__)
 app.secret_key = config.flask_secret_key
@@ -77,7 +80,9 @@ def internal_error(exc):
 # האפליקציה מציגה לידים ושולחת מיילים בשם החברה, ולכן היא לא נשארת פתוחה
 # לכל מי שמגיע לכתובת. הפיקסל ובדיקת הבריאות נשארים ציבוריים בכוונה:
 # הפיקסל נטען מתוכנת המייל של הנמען, שאין לה סשן.
-PUBLIC_ENDPOINTS = {"pixel", "health", "login", "static"}
+PUBLIC_ENDPOINTS = {"pixel", "click", "click_ping", "health", "login", "static",
+                    "api_campaigns", "api_import",   # ה-API בודק מפתח בעצמו
+                    "xray_page"}                     # עמוד נחיתה ציבורי לנמענים
 
 
 @app.context_processor
@@ -87,7 +92,8 @@ def _inject_mode():
     הבלוקים שלהם מוסתרים -- הם רק מוסיפים רעש למי שממלאת את הטבלה ביד.
     המסלולים עצמם נשארים, כדי ש-APP_MODE=full יחזיר הכול בלי שינוי קוד.
     """
-    return {"full_mode": config.app_mode == "full"}
+    return {"full_mode": config.app_mode == "full",
+            "auth_ok": (not config.app_password) or bool(session.get("ok"))}
 
 
 def login_required(view):
@@ -170,9 +176,146 @@ def leads_store(source_campaign: str):
     return leads_store_or_error(source_campaign)[0]
 
 
+# ---------- פילוח: מי נפתח, מי ענה ומי חזר, לפי תחום / עיר / ספק / קמפיין ----------
+_KNOWN_CITIES = ("בני ברק", "ירושלים", "בית שמש", "ביתר עילית", "מודיעין עילית", "אלעד",
+                 "אשדוד", "רכסים", "עמנואל", "קרית יערים", "צפת", "נתיבות", "טבריה",
+                 "פתח תקווה", "רמת גן", "נתניה", "רחובות", "אשקלון", "חיפה", "תל אביב",
+                 "חולון", "גבעתיים", "באר שבע", "כוכב יעקב", "קרית גת", "יבנה", "לוד")
+_ISP_OLD = {"netvision.net.il", "inter.net.il", "barak.net.il", "013.net", "013net.net",
+            "013.net.il", "017.net.il", "012.net.il", "zahav.net.il", "actcom.co.il",
+            "smile.net.il", "014.net", "bezeqint.net"}
+
+
+#: אותו תחום שנכתב בשמות שונים ברשימות שונות
+_FIELD_ALIASES = {"אדריכלות ועיצוב פנים": "אדריכלים", "ייעוץ מס": "יועצי מס",
+                  "יועצי ביטוח": "סוכני ביטוח", "תשמישי קדושה ויודאיקה": "יודאיקה",
+                  "תשמישי קדושה": "יודאיקה", "מהנדסים אזרחיים": "מהנדסי בניין",
+                  "הפקות דפוס": "בתי דפוס", "פרוייקטים - ניהול תיאום ופיקוח": "פיקוח בנייה",
+                  "ביקורת בניה": "פיקוח בנייה"}
+
+
+def _city_of(address: str) -> str:
+    address = address or ""
+    for city in _KNOWN_CITIES:
+        if city in address:
+            return city
+    tail = address.rsplit(",", 1)[-1].strip()
+    return tail if tail and not any(ch.isdigit() for ch in tail) and len(tail) < 20 else "לא ידוע"
+
+
+def _provider_of(email: str) -> str:
+    domain = (email or "").rsplit("@", 1)[-1].lower()
+    if domain == "gmail.com":
+        return "Gmail"
+    if domain.startswith("walla."):
+        return "וואלה"
+    if domain in _ISP_OLD:
+        return "ספק אינטרנט ותיק (בזק, נטוויז'ן, 012...)"
+    if domain.split(".")[0] in ("hotmail", "outlook", "yahoo", "icloud", "live", "aol"):
+        return "Hotmail / Yahoo / iCloud"
+    return "דומיין של העסק"
+
+
+def segment_rows(campaigns) -> list:
+    """שורה לכל נמען שקיבל מייל: התחום, העיר, הספק, ומה קרה איתו."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    def one(campaign):
+        st = leads_store(campaign["source_campaign"]) if campaign["source_campaign"] else None
+        if not st:
+            return []
+        with st._conn() as conn:
+            rows = conn.execute(
+                f"""SELECT email, primary_type, address, opened_at, replied_at, bounced_at,
+                          CASE WHEN {REAL_CLICK} THEN 1 ELSE 0 END AS real_click,
+                          status, error FROM {{leads}}
+                   WHERE status IN ('emailed','failed') AND campaign_id=?""",
+                (str(campaign["id"]),)).fetchall()
+        return [{"campaign": campaign["title"], "field": _FIELD_ALIASES.get((r["primary_type"] or "").strip(),
+                                            (r["primary_type"] or "").strip()) or "לא ידוע",
+                 "city": _city_of(r["address"]), "provider": _provider_of(r["email"]),
+                 "opened": bool(r["opened_at"]), "replied": bool(r["replied_at"]),
+                 "clicked": bool(r["real_click"]),
+                 "bounced": bool(r["bounced_at"]) or (
+                     r["status"] == "failed" and "connect" not in (r["error"] or "").lower())}
+                for r in rows]
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        return [row for rows in pool.map(one, campaigns) for row in rows]
+
+
+def segment_table(rows, key: str, min_sent: int = 1) -> list:
+    groups = {}
+    for r in rows:
+        g = groups.setdefault(r[key], {"name": r[key], "sent": 0, "opened": 0,
+                                       "clicked": 0, "replied": 0, "bounced": 0})
+        g["sent"] += 1
+        g["opened"] += r["opened"]
+        g["replied"] += r["replied"]
+        g["clicked"] += r["clicked"]
+        g["bounced"] += r["bounced"]
+    out = []
+    for g in groups.values():
+        if g["sent"] < min_sent:
+            continue
+        delivered = max(g["sent"] - g["bounced"], 1)
+        g["open_rate"] = round(100 * g["opened"] / delivered)
+        g["reply_rate"] = round(100 * g["replied"] / delivered, 1)
+        g["click_rate"] = round(100 * g["clicked"] / delivered, 1)
+        g["bounce_rate"] = round(100 * g["bounced"] / g["sent"])
+        out.append(g)
+    return sorted(out, key=lambda g: (-g["reply_rate"], -g["sent"]))
+
+
+@app.route("/segments")
+def segments_page():
+    client = request.args.get("client", "")
+    campaigns = [c for c in store.all() if c["source_campaign"]
+                 and _client_of(c) == (int(client) if client.isdigit() else None)]
+    chosen = request.args.get("campaign", "")
+    if chosen:
+        campaigns = [c for c in campaigns if str(c["id"]) == chosen]
+    rows = segment_rows(campaigns)
+    min_sent = int(request.args.get("min", "5") or 5)
+    tables = [("תחום", segment_table(rows, "field", min_sent)),
+              ("עיר", segment_table(rows, "city", min_sent)),
+              ("ספק מייל", segment_table(rows, "provider", 1))]
+    if not chosen:
+        tables.append(("קמפיין", segment_table(rows, "campaign", 1)))
+    return render_template("segments.html", tables=tables, total=segment_table(rows, "provider", 0),
+                           sent=len(rows), campaigns=store.all(), chosen=chosen, min_sent=min_sent)
+
+
+def _app_version() -> str:
+    """הגרסה שרצה: מזהה הקומיט, כדי לדעת אם המחשב עודכן."""
+    if os.getenv("VERCEL_GIT_COMMIT_SHA"):     # בענן אין git ואין .app_version
+        return os.environ["VERCEL_GIT_COMMIT_SHA"][:7]
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    try:
+        with open(os.path.join(root, ".app_version"), encoding="utf-8") as f:
+            return f.read().strip()[:7]
+    except OSError:
+        pass
+    try:
+        import subprocess
+        return subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=root,
+                              capture_output=True, text=True, timeout=5).stdout.strip()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+APP_VERSION = _app_version()
+
+
+@app.context_processor
+def _inject_version():
+    return {"app_version": APP_VERSION}
+
+
 def auto_metrics(campaign) -> dict:
     """נשלחו / נפתחו / השיבו — נמדדים מ-DB הלידים, לא מוזנים ביד."""
-    empty = {"sent": 0, "opened": 0, "replied": 0, "bounced": 0}
+    empty = {"sent": 0, "opened": 0, "replied": 0, "clicked": 0, "bounced": 0,
+             "last_sent": ""}
     st = leads_store(campaign["source_campaign"])
     if not st:
         return empty
@@ -212,7 +355,9 @@ def custom_of(campaign):
     body = _col(campaign, "body_tpl")
     if not (subject or body):
         return None
-    return (subject, body, campaign_profession(campaign))
+    # נוסח ב' להשוואה: אם מולא, השליחה מחלקת את הנמענים חצי-חצי
+    return (subject, body, campaign_profession(campaign),
+            _col(campaign, "subject_b"), _col(campaign, "body_b"))
 
 
 def _col(row, name: str) -> str:
@@ -278,14 +423,22 @@ def derived_fields(campaign) -> dict:
         out["קהל יעד"] = " · ".join(parsed["terms"])
     if city:
         out["מקום חיפוש"] = f"גוגל מפות — {city}"
-    reviews = parsed["min_reviews"]
-    rating = parsed["min_rating"]
-    out["מאפיין"] = (f"לפחות {reviews if reviews is not None else config.agent_min_reviews} "
-                     f"ביקורות, דירוג "
-                     f"{rating if rating is not None else config.agent_min_rating:g} ומעלה")
+    if _col(campaign, "search_query"):
+        reviews = parsed["min_reviews"]
+        rating = parsed["min_rating"]
+        out["מאפיין"] = (f"לפחות {reviews if reviews is not None else config.agent_min_reviews} "
+                         f"ביקורות, דירוג "
+                         f"{rating if rating is not None else config.agent_min_rating:g} ומעלה")
     subject = _col(campaign, "subject_tpl")
     if subject:
         out["נוסח"] = subject
+        out["נושא המייל"] = subject
+    try:
+        box = sender_box.SenderStore().get(_col(campaign, "sender_id"))
+    except Exception:  # noqa: BLE001
+        box = None
+    if box:
+        out["תיבת שליחה"] = f"{box['from_email']} (בשם {box['from_name'] or box['from_email']})"
     elif _col(campaign, "variant"):
         out["נוסח"] = f"נוסח {_col(campaign, 'variant').upper()}"
     return out
@@ -313,6 +466,7 @@ def campaign_view(campaign) -> dict:
             fields[name]["value"] = str(measured[key])
     open_pct = (metrics["opened"] * 100 // metrics["sent"]) if metrics["sent"] else 0
     reply_pct = (metrics["replied"] * 100 // metrics["sent"]) if metrics["sent"] else 0
+    click_pct = (metrics.get("clicked", 0) * 100 // metrics["sent"]) if metrics["sent"] else 0
 
     st = leads_store(campaign["source_campaign"])
     try:
@@ -324,19 +478,383 @@ def campaign_view(campaign) -> dict:
             "derived": derived_fields(campaign),
             "open_rate": f"{open_pct}%" if metrics["sent"] else "—",
             "reply_rate": f"{reply_pct}%" if metrics["sent"] else "—",
+            "click_rate": f"{click_pct}%" if metrics["sent"] else "—",
             "bounce_rate": (f"{metrics.get('bounced', 0) * 100 // metrics['sent']}%"
                             if metrics["sent"] else "—"),
-            "open_pct": open_pct, "reply_pct": reply_pct, "pending": pending}
+            "open_pct": open_pct, "reply_pct": reply_pct, "click_pct": click_pct,
+            "bounce_pct": (metrics.get("bounced", 0) * 100 // metrics["sent"]) if metrics["sent"] else 0,
+            "reply_exact": round(100 * metrics["replied"] / metrics["sent"], 1) if metrics["sent"] else 0,
+            "pending": pending, "status": _status(metrics["sent"], pending)}
+
+
+def ab_summary(campaign):
+    """
+    תוצאות השוואת הנוסחים של הקמפיין, ומי מוביל. None כשאין נוסח B.
+    "מוביל" לפי אחוז תשובות, ואם שווה, לפי אחוז לחיצות. מבחן z לשני
+    אחוזים אומר אם ההבדל כבר מספיק גדול כדי לסמוך עליו.
+    """
+    import math
+    if not (_col(campaign, "subject_b") or _col(campaign, "body_b")):
+        return None
+    st = leads_store(_col(campaign, "source_campaign"))
+    try:
+        data = st.ab_metrics(campaign["id"]) if st else {}
+    except Exception:  # noqa: BLE001
+        data = {}
+    subjects = {"A": _col(campaign, "subject_tpl"),
+                "B": _col(campaign, "subject_b") or _col(campaign, "subject_tpl")}
+    arms = []
+    for name in ("A", "B"):
+        d = data.get(name, {"sent": 0, "opened": 0, "clicked": 0, "replied": 0, "bounced": 0})
+        n = max(d["sent"] - d["bounced"], 0)
+
+        def rate(k, n=n, d=d):
+            return round(100 * d[k] / n, 1) if n else 0
+        arms.append({"name": name, "subject": subjects[name], **d, "delivered": n,
+                     "open_rate": rate("opened"), "click_rate": rate("clicked"),
+                     "reply_rate": rate("replied")})
+    a, b = arms
+    if not (a["delivered"] and b["delivered"]):
+        return {"arms": arms, "winner": "", "verdict": "עוד לא נשלח לשני הנוסחים"}
+
+    def z(key):
+        p1, p2 = a[key] / a["delivered"], b[key] / b["delivered"]
+        p = (a[key] + b[key]) / (a["delivered"] + b["delivered"])
+        se = math.sqrt(p * (1 - p) * (1 / a["delivered"] + 1 / b["delivered"])) if 0 < p < 1 else 0
+        return (p1 - p2) / se if se else 0.0
+    key = "replied" if a["replied"] != b["replied"] else "clicked"
+    if a[key] == b[key]:
+        return {"arms": arms, "winner": "", "verdict": "עוד אין הבדל בין הנוסחים"}
+    winner = "A" if a[key] / a["delivered"] > b[key] / b["delivered"] else "B"
+    sure = abs(z(key)) >= 1.96
+    label = "תשובות" if key == "replied" else "לחיצות"
+    verdict = (f"נוסח {winner} מוביל ב{label}, וההבדל מובהק: אפשר לסמוך עליו"
+               if sure else f"נוסח {winner} מוביל ב{label}, אבל עוד מוקדם לקבוע. כדאי לשלוח לעוד נמענים")
+    return {"arms": arms, "winner": winner, "verdict": verdict}
+
+
+def _status(sent: int, pending: int) -> tuple[str, str]:
+    """(מחלקה, תווית) למצב הקמפיין בלוח."""
+    if sent and pending:
+        return "sending", "בשליחה"
+    if pending:
+        return "ready", "מוכן לשליחה"
+    if sent:
+        return "done", "הסתיים"
+    return "empty", "בלי נמענים"
 
 
 # ---------------------------- הלוח ----------------------------
 @app.route("/")
 def board():
-    columns = [campaign_view(c) for c in store.all()]
-    return render_template("board.html", columns=columns,
+    data = _dashboard([c for c in store.all() if not _client_of(c)])
+    return render_template("board.html", **data,
                            text_fields=TEXT_FIELDS, auto_fields=AUTO_FIELDS,
                            manual_fields=MANUAL_FIELDS,
                            tracking_on=bool(config.tracking_base_url))
+
+
+def _client_of(campaign):
+    """מספר הלקוח של הקמפיין, או None לקמפיין שלנו."""
+    value = str(_col(campaign, "client_id") or "").strip()
+    return int(value) if value.isdigit() else None
+
+
+def _dashboard(campaigns) -> dict:
+    """הנתונים של לוח בקרה: עמודות, סיכומים, הקמפיין המוביל ומה ממתין."""
+    # כל קמפיין דורש כמה שאילתות ל-D1, וכל שאילתה היא קריאת רשת. במקביל
+    # הלוח נטען בזמן של הקמפיין האיטי ביותר, ולא בסכום של כולם.
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        columns = list(pool.map(campaign_view, campaigns))
+    try:
+        boxes = {str(b["id"]): (b["from_name"] or b["from_email"] or "")
+                 for b in sender_box.SenderStore().all()}
+    except Exception:  # noqa: BLE001
+        boxes = {}
+    for col in columns:
+        col["sender"] = boxes.get(sender_box.norm_id(_col(col["campaign"], "sender_id")), "")
+    mail = [c for c in columns if c["campaign"]["kind"] == "email"]
+    sent = sum(c["metrics"]["sent"] for c in mail)
+
+    def pct(key):
+        return round(100 * sum(c["metrics"].get(key, 0) or 0 for c in mail) / sent, 1) if sent else 0
+    totals = {"sent": sent, "pending": sum(c["pending"] for c in mail),
+              "replied": sum(c["metrics"]["replied"] for c in mail),
+              "clicked": sum(c["metrics"].get("clicked", 0) or 0 for c in mail),
+              "bounced": sum(c["metrics"].get("bounced", 0) or 0 for c in mail),
+              "open": pct("opened"), "click": pct("clicked"), "reply": pct("replied"),
+              "bounce": pct("bounced"),
+              "active": sum(1 for c in columns if c["status"][0] in ("sending", "ready"))}
+    # הקמפיין עם אחוז התשובות הגבוה ביותר (מתוך מי שנשלחו לו לפחות 30)
+    ranked = [c for c in mail if c["metrics"]["sent"] >= 30]
+    best = max(ranked, key=lambda c: c["reply_exact"]) if ranked else None
+    todo = sorted([c for c in columns if c["pending"]], key=lambda c: -c["pending"])
+    return {"columns": columns, "totals": totals, "todo": todo,
+            "best_id": best["campaign"]["id"] if best else None}
+
+
+# ---------------------------- לקוחות וארנק ----------------------------
+_CLIENTS = None
+
+
+def client_store() -> ClientStore:
+    """נוצר פעם אחת: כל יצירה מכינה את הטבלאות, וב-D1 זו קריאת רשת."""
+    global _CLIENTS
+    if _CLIENTS is None:
+        _CLIENTS = ClientStore()
+    return _CLIENTS
+
+
+def wallet(client_id, campaigns=None) -> dict:
+    """
+    יתרת הארנק של לקוח, במיילים. מייל שחזר לא נגבה, ולכן הוא חוזר לארנק.
+    campaigns: קמפיינים שכבר נטענו (חוסך שאילתות). None = נשלפים מהמאגר.
+    """
+    if campaigns is None:
+        campaigns = [c for c in store.all(include_archived=True) if _client_of(c) == int(client_id)]
+    sent = bounced = 0
+    for c in campaigns:
+        m = auto_metrics(c)
+        sent += m.get("sent", 0) or 0
+        bounced += m.get("bounced", 0) or 0
+    bought = client_store().purchased(client_id)
+    charged = max(sent - bounced, 0)
+    return {"bought": bought["emails"], "paid": bought["paid"], "sent": sent,
+            "bounced": bounced, "charged": charged,
+            "balance": bought["emails"] - charged}
+
+
+def _scope(campaign):
+    """
+    בתוך מה בודקים כפילויות כשמעלים רשימה לקמפיין: הקמפיינים של אותו לקוח
+    בלבד (או רק שלנו, לקמפיין שלנו). מחזיר (מאגרים, שמות ביומן השליחות).
+    """
+    client = _client_of(campaign)
+    keys, names = set(), set()
+    for c in store.all(include_archived=True):
+        src = _col(c, "source_campaign")
+        if src and _client_of(c) == client:
+            keys.add(importer.key_for(src, leads_db_path(src)))
+            names.add(src)
+    return keys, names
+
+
+@app.route("/clients", methods=["GET", "POST"])
+def clients_page():
+    cs = client_store()
+    if request.method == "POST":
+        name = (request.form.get("name") or "").strip()
+        if not name:
+            flash("צריך שם ללקוח")
+            return redirect(url_for("clients_page"))
+        cid = cs.create(name, contact=(request.form.get("contact") or "").strip(),
+                        email=(request.form.get("email") or "").strip(),
+                        phone=(request.form.get("phone") or "").strip())
+        flash(f"נפתחה תיקייה ללקוח {name}")
+        return redirect(url_for("client_page", client_id=cid))
+    every = store.all(include_archived=True)
+    rows = []
+    for cl in cs.all():
+        mine = [c for c in every if _client_of(c) == cl["id"]]
+        rows.append({"client": cl, "wallet": wallet(cl["id"], mine),
+                     "campaigns": len([c for c in mine if not c["archived"]])})
+    return render_template("clients.html", rows=rows)
+
+
+@app.route("/client/<int:client_id>", methods=["GET", "POST"])
+def client_page(client_id):
+    cs = client_store()
+    client = cs.get(client_id)
+    if not client:
+        return redirect(url_for("clients_page"))
+    if request.method == "POST":
+        cs.update(client_id, **{k: (request.form.get(k) or "").strip()
+                                for k in ("name", "contact", "email", "phone", "notes")
+                                if k in request.form})
+        flash("פרטי הלקוח נשמרו")
+        return redirect(url_for("client_page", client_id=client_id))
+    every = store.all(include_archived=True)
+    mine = [c for c in every if _client_of(c) == client_id]
+    data = _dashboard([c for c in mine if not c["archived"]])
+    return render_template("client.html", client=client, **data,
+                           wallet=wallet(client_id, mine), tx=cs.transactions(client_id),
+                           kinds=TX_KINDS, packages=cs.packages(),
+                           boxes=sender_box.SenderStore().for_client(client_id),
+                           per_email=cs.per_email_price())
+
+
+@app.route("/client/<int:client_id>/delete", methods=["POST"])
+def client_delete(client_id):
+    """
+    מחיקת לקוח: התיקייה, הקמפיינים שלו, הארנק והתיבות שלו (כולל הסיסמאות).
+    רשימות הנמענים עצמן נשארות במאגר, כדי שאם ייפתח שוב לא יישלח פעמיים.
+    """
+    cs = client_store()
+    client = cs.get(client_id)
+    if not client:
+        return redirect(url_for("clients_page"))
+    if (request.form.get("confirm") or "").strip() != client["name"].strip():
+        flash("כדי למחוק צריך להקליד את שם הלקוח בדיוק")
+        return redirect(url_for("client_page", client_id=client_id))
+    removed = 0
+    for c in store.all(include_archived=True):
+        if _client_of(c) == client_id:
+            store.delete(c["id"])
+            removed += 1
+    boxes = sender_box.SenderStore()
+    for b in boxes.for_client(client_id):
+        boxes.delete(b["id"])
+    cs.delete(client_id)
+    flash(f"הלקוח {client['name']} נמחק, עם {removed} קמפיינים, הארנק ותיבות השליחה שלו.")
+    return redirect(url_for("clients_page"))
+
+
+@app.route("/client/<int:client_id>/wallet", methods=["POST"])
+def client_wallet_add(client_id):
+    """רכישת חבילה, רכישה לפי מספר מיילים, או תיקון ידני."""
+    cs = client_store()
+    kind = request.form.get("kind", "package")
+    try:
+        if kind == "package":
+            emails, amount = request.form.get("package", "0:0").split(":")
+            emails, amount = int(emails), float(amount)
+        else:
+            emails = int(request.form.get("emails") or 0)
+            amount = float(request.form.get("amount") or 0)
+    except ValueError:
+        flash("המספרים לא תקינים")
+        return redirect(url_for("client_page", client_id=client_id))
+    if kind == "refund":
+        emails, amount = -abs(emails), -abs(amount)
+    if not emails and not amount:
+        flash("לא הוזן מספר מיילים או סכום")
+        return redirect(url_for("client_page", client_id=client_id))
+    cs.add_tx(client_id, kind, emails, amount, request.form.get("note", ""))
+    flash(f"נרשם בארנק: {emails:+,} מיילים, {amount:,.0f} ש\"ח")
+    return redirect(url_for("client_page", client_id=client_id))
+
+
+@app.route("/client/<int:client_id>/wallet/<int:tx_id>/delete", methods=["POST"])
+def client_wallet_delete(client_id, tx_id):
+    client_store().delete_tx(tx_id)
+    flash("התנועה נמחקה מהארנק")
+    return redirect(url_for("client_page", client_id=client_id))
+
+
+@app.route("/pricing", methods=["GET", "POST"])
+def pricing_page():
+    cs = client_store()
+    if request.method == "POST":
+        packages = []
+        for e, p in zip(request.form.getlist("emails"), request.form.getlist("price")):
+            try:
+                if e.strip() and p.strip():
+                    packages.append((int(e), float(p)))
+            except ValueError:
+                continue
+        if packages:
+            cs.set_packages(packages)
+        try:
+            cs.set_setting("per_email_price", str(float(request.form.get("per_email") or 0)))
+        except ValueError:
+            pass
+        flash("המחירון נשמר")
+        return redirect(url_for("pricing_page"))
+    return render_template("pricing.html", packages=cs.packages(), per_email=cs.per_email_price())
+
+
+# ---------------------------- חיבור לשיחת החיפוש ----------------------------
+@app.route("/guide")
+def guide_page():
+    return render_template("guide.html")
+
+
+@app.route("/connect", methods=["GET", "POST"])
+def connect_page():
+    """המפתח והכתובת שאיתם שיחת החיפוש שולחת רשימות ישר לקמפיין."""
+    cs = client_store()
+    if request.method == "POST":
+        cs.new_api_token()
+        flash("נוצר מפתח חדש. הישן כבר לא עובד: צריך להעביר את החדש לשיחת החיפוש.")
+        return redirect(url_for("connect_page"))
+    base = (os.getenv("PUBLIC_URL") or request.url_root).rstrip("/")
+    campaigns = [c for c in store.all() if c["kind"] == "email"]
+    clients = {cl["id"]: cl["name"] for cl in cs.all(include_archived=True)}
+    return render_template("connect.html", token=cs.api_token(), base=base,
+                           campaigns=campaigns, clients=clients,
+                           client_of=_client_of)
+
+
+def _api_authorized() -> bool:
+    import hmac
+    header = request.headers.get("Authorization", "")
+    given = header[7:].strip() if header.lower().startswith("bearer ") else \
+        (request.headers.get("X-Api-Key") or request.args.get("token") or "")
+    token = client_store().api_token(create=False)
+    return bool(token and given and hmac.compare_digest(given, token))
+
+
+@app.route("/api/campaigns")
+def api_campaigns():
+    if not _api_authorized():
+        return jsonify({"error": "מפתח חסר או שגוי"}), 401
+    names = {cl["id"]: cl["name"] for cl in client_store().all(include_archived=True)}
+    return jsonify([{"id": c["id"], "title": c["title"],
+                     "client": names.get(_client_of(c), "") if _client_of(c) else ""}
+                    for c in store.all() if c["kind"] == "email"])
+
+
+@app.route("/api/import", methods=["POST"])
+def api_import():
+    """
+    שיחת החיפוש שולחת לכאן רשימה, והיא עוברת את אותן בדיקות כמו העלאת קובץ.
+    גוף הבקשה (JSON): {"campaign_id": 40, "group": "...", "rows": [{"name": ..,
+    "email": .., "phone": .., "city": .., "group": .., "first_name": ..}]}
+    או {"campaign_id": 40, "csv": "טקסט CSV"}.
+    """
+    if not _api_authorized():
+        return jsonify({"error": "מפתח חסר או שגוי"}), 401
+    body = request.get_json(silent=True) or {}
+    campaign = store.get(int(body.get("campaign_id") or 0)) if str(body.get("campaign_id") or "").isdigit() else None
+    if not campaign:
+        return jsonify({"error": "campaign_id חסר או לא קיים. רשימת הקמפיינים: /api/campaigns"}), 400
+    if body.get("csv"):
+        rows = importer.read_table("api.csv", str(body["csv"]).encode("utf-8"))
+    else:
+        rows = [r for r in (body.get("rows") or []) if isinstance(r, dict)]
+    if not rows or "email" not in importer.map_columns(list(rows[0].keys())):
+        return jsonify({"error": "אין שורות, או שאין בהן שדה email"}), 400
+    result = _run_import(campaign, rows, (body.get("group") or "").strip(), "api")
+    return jsonify({"campaign": campaign["title"], "received": len(rows),
+                    "added": len(result["added"]), "skipped": len(result["skipped"]),
+                    "reasons": dict(result["reasons"]),
+                    "skipped_list": result["skipped"][:200]})
+
+
+def _run_import(campaign, rows, group: str, prefix: str) -> dict:
+    """ייבוא משותף לקובץ מהדפדפן ולשיחת החיפוש."""
+    source = _ensure_source(campaign)
+    storage = Storage(leads_db_path(source), campaign=source)
+    keys, names = _scope(store.get(campaign["id"]))
+    known = importer.known_addresses(config.data_dir, own=importer.own_key(storage),
+                                     scope=keys, sent_keys=names)
+    result = importer.import_contacts(storage, rows, prefix=f"{prefix}{campaign['id']}",
+                                      known=known, default_group=group)
+    titles = importer.campaign_titles(store)
+    reasons = {}
+    for item in result["skipped"]:
+        if item["reason"].startswith("pending:"):
+            item["reason"] = "ממתין בקמפיין " + titles.get(item["reason"][8:], "אחר")
+        key = item["reason"] if not item["reason"].startswith("ממתין בקמפיין") \
+            else "ממתין בקמפיין אחר"
+        if "ספק ישן" in key:
+            key = "ספק מייל ישן"
+        elif key.startswith("הדומיין"):
+            key = "הדומיין לא מקבל מיילים"
+        reasons[key] = reasons.get(key, 0) + 1
+    result["reasons"] = sorted(reasons.items(), key=lambda kv: -kv[1])
+    return result
 
 
 @app.route("/campaign/new", methods=["POST"])
@@ -349,6 +867,9 @@ def campaign_new():
                        kind=request.form.get("kind", "email"),
                        source_campaign=(request.form.get("source_campaign") or "").strip(),
                        variant=(request.form.get("variant") or "").strip())
+    client_id = (request.form.get("client_id") or "").strip()
+    if client_id.isdigit():
+        store.update(cid, client_id=client_id, source_campaign=f"c{cid}")
     return redirect(url_for("campaign_edit", campaign_id=cid))
 
 
@@ -363,7 +884,8 @@ def campaign_edit(campaign_id):
         # ובלי הבדיקה הזאת כל שמירה מחקה את נושא המייל וגוף המייל של הקמפיין.
         posted = {k: (request.form.get(k) or "").strip()
                   for k in ("title", "started_on", "source_campaign", "variant",
-                            "search_query", "subject_tpl", "body_tpl")
+                            "search_query", "subject_tpl", "body_tpl",
+                            "subject_b", "body_b")
                   if k in request.form}
         if "kind" in request.form:
             posted["kind"] = request.form.get("kind", "email")
@@ -390,7 +912,9 @@ def campaign_edit(campaign_id):
     view = campaign_view(campaign)
     pool = pool_of(campaign)
     run = store.run_of(campaign_id)
-    return render_template("campaign.html", **view, text_fields=TEXT_FIELDS,
+    client = client_store().get(_client_of(campaign)) if _client_of(campaign) else None
+    return render_template("campaign.html", **view, text_fields=TEXT_FIELDS, client=client,
+                           ab=ab_summary(campaign),
                            ready=ready_to_send(campaign, run),
                            auto_fields=AUTO_FIELDS, manual_fields=MANUAL_FIELDS,
                            cities=CITIES, pool=pool[0], pool_error=pool[1],
@@ -426,30 +950,41 @@ def send_page(campaign_id):
     run_id = "" if all_pool or not run else str(run["id"])
     pending = st.leads_to_email(limit, run_id=run_id)
     boxes = sender_box.SenderStore()
-    chosen = boxes.get(_col(campaign, "sender_id"))
+    own_boxes = boxes.for_client(_client_of(campaign))
+    sender_id = sender_box.norm_id(_col(campaign, "sender_id"))
+    if sender_id not in {str(b["id"]) for b in own_boxes}:
+        # תיבה של תיקייה אחרת לא נבחרת. ללקוח עם תיבה אחת, היא נבחרת לבד.
+        sender_id = str(own_boxes[0]["id"]) if _client_of(campaign) and len(own_boxes) == 1 else ""
+    chosen = boxes.get(sender_id)
     sender = sender_box.as_smtp(chosen)
     previews = []
     for lead in pending:
         template_campaign = (f"{campaign['source_campaign']}_offer"
                              if campaign["variant"] == "b"
                              else campaign["source_campaign"])
+        lead_custom, arm = pipeline.pick_custom(custom_of(campaign), lead["email"])
         subject, _html, text = pipeline._render(
             template_campaign,
             pipeline.build_ctx(config, campaign["source_campaign"], lead,
                                sender=sender),
-            custom_of(campaign))
-        previews.append({"lead": lead, "subject": subject, "text": text})
+            lead_custom)
+        previews.append({"lead": lead, "subject": subject, "text": text, "arm": arm})
     env_from, env_name, _, _ = config.sender_for(campaign["source_campaign"])
 
+    # ב-Vercel כל לחיצה שולחת עד SEND_BATCH, אז מסמנים מראש מנה כזו
+    first_n = int(os.getenv("SEND_BATCH", "50")) if os.getenv("VERCEL") else 150
     return render_template("send.html", campaign=campaign, previews=previews,
+                           first_n=first_n,
                            scan_only=bool(run_id), has_run=bool(run),
                            pool_total=st.pending_count_for(),
                            sample=previews[0] if previews else None,
                            sent=st.sent_leads(campaign["variant"] or "", 200,
                                          campaign_id=str(campaign_id)),
                            tracking_on=bool(config.tracking_base_url),
-                           senders=boxes.all(), sender_id=_col(campaign, "sender_id"),
-                           env_sender=f"{env_name} <{env_from}>" if env_from else "")
+                           senders=own_boxes, sender_id=sender_id,
+                           env_sender=f"{env_name} <{env_from}>" if env_from else "",
+                           client=client_store().get(_client_of(campaign)) if _client_of(campaign) else None,
+                           wallet=wallet(_client_of(campaign)) if _client_of(campaign) else None)
 
 
 @app.route("/campaign/<int:campaign_id>/send", methods=["POST"])
@@ -464,8 +999,27 @@ def send_now(campaign_id):
         flash("לא נבחר אף נמען")
         return redirect(url_for("send_page", campaign_id=campaign_id))
 
+    # קמפיין של לקוח: שולחים רק כמה שיש בארנק
+    if _client_of(campaign):
+        balance = wallet(_client_of(campaign))["balance"]
+        if balance <= 0:
+            flash("אין יתרה בארנק של הלקוח. אפשר להוסיף חבילה בעמוד הלקוח.")
+            return redirect(url_for("send_page", campaign_id=campaign_id))
+        if len(chosen) > balance:
+            keep = [p for p in request.form.getlist("place_id") if p in chosen][:balance]
+            flash(f"ביתרה של הלקוח יש {balance} מיילים, ולכן נשלחים רק {balance} מתוך "
+                  f"{len(chosen)} שסימנת.")
+            chosen = set(keep)
+
     # מאיזו תיבה לשלוח: נבחרת בעמוד השליחה ונזכרת לקמפיין לפעם הבאה
     sender_id = (request.form.get("sender_id") or "").strip()
+    owner = str(_client_of(campaign) or "")
+    if sender_id and sender_box.owner_of(sender_box.SenderStore().get(sender_id)) != owner:
+        flash("התיבה שנבחרה לא שייכת לתיקייה של הקמפיין הזה")
+        return redirect(url_for("send_page", campaign_id=campaign_id))
+    if owner and not sender_id:
+        flash("ללקוח צריך תיבת שליחה משלו. מוסיפים אותה בעמוד הלקוח, תחת 'תיבות שליחה'.")
+        return redirect(url_for("send_page", campaign_id=campaign_id))
     store.update(campaign_id, sender_id=sender_id)
     sender = sender_box.as_smtp(sender_box.SenderStore().get(sender_id))
     if sender:
@@ -480,22 +1034,42 @@ def send_now(campaign_id):
             flash("חסרות הגדרות שליחה: " + ", ".join(errors))
             return redirect(url_for("send_page", campaign_id=campaign_id))
 
-    try:
-        summary = pipeline.send_emails(
+    if os.getenv("VERCEL"):
+        # ב-Vercel אין עבודה ברקע: התהליך נעצר כשהתשובה נשלחת, וכל בקשה
+        # מוגבלת ל-300 שניות. לכן שולחים מנה שנכנסת בזמן הזה, ומי שנשאר
+        # נשאר מסומן בעמוד, ולחיצה נוספת שולחת את המנה הבאה.
+        batch = int(os.getenv("SEND_BATCH", "50"))
+        ordered = [p for p in request.form.getlist("place_id") if p in chosen]
+        now, rest = ordered[:batch], ordered[batch:]
+        try:
+            summary = pipeline.send_emails(
+                config, st, campaign=campaign["source_campaign"],
+                limit=len(now), variant=campaign["variant"] or "", only=set(now),
+                custom=custom_of(campaign), campaign_id=str(campaign_id),
+                sender=sender)
+        except Exception as exc:  # noqa: BLE001 — סיסמה שגויה וכו' מוצגים, לא 500
+            flash(f"השליחה נכשלה: {exc}")
+            return redirect(url_for("send_page", campaign_id=campaign_id))
+        msg = f"נשלחו {summary.get('sent', 0)} מיילים."
+        if rest:
+            msg += (f" נשארו {len(rest)} מאלה שסימנת: מסמנים שוב ולוחצים "
+                    f"שליחה, ויוצאת המנה הבאה (עד {batch} בכל לחיצה).")
+        flash(msg)
+        return redirect(url_for("send_page", campaign_id=campaign_id))
+
+    # השליחה רצה ברקע: 150 מיילים עם השהיה ביניהם לוקחים כמה דקות, יותר
+    # ממה שבקשת דפדפן (ו-gunicorn בענן) מחכים. עמוד ההרצות מציג התקדמות.
+    def work(job):
+        return pipeline.send_emails(
             config, st, campaign=campaign["source_campaign"],
             limit=len(chosen), variant=campaign["variant"] or "", only=chosen,
             custom=custom_of(campaign), campaign_id=str(campaign_id),
-            sender=sender,
-            # לעולם לא לשלוח לאותה כתובת משני קמפיינים: מדלגים על כל מי
-            # שקיבל מייל בקמפיין כלשהו, גם ממאגר לידים אחר
-            skip_contacted=True)
-    except Exception as exc:  # noqa: BLE001 — סיסמה שגויה וכו' מוצגים, לא 500
-        flash(f"השליחה נכשלה: {exc}")
-        return redirect(url_for("send_page", campaign_id=campaign_id))
-    flash(f"נשלחו {summary.get('sent', 0)} מיילים")
-    if summary.get("skipped_already_sent"):
-        flash(f"דולגו {summary['skipped_already_sent']} שכבר קיבלו מייל בקמפיין קודם")
-    return redirect(url_for("send_page", campaign_id=campaign_id))
+            sender=sender)
+
+    ok, msg = runner.start("send", f"שליחה: {campaign['title']} ({len(chosen)} נמענים)", work)
+    flash(msg if not ok else f"השליחה התחילה ל-{len(chosen)} נמענים. "
+          "אפשר לעקוב כאן, ובסוף יופיע כמה נשלחו.")
+    return redirect(url_for("jobs_page"))
 
 
 def _campaign_sender(campaign) -> dict:
@@ -507,6 +1081,44 @@ def _campaign_sender(campaign) -> dict:
     host, _, _ = config.smtp_server_for(campaign["source_campaign"])
     return {"from_email": from_email, "smtp_user": user,
             "smtp_password": password, "smtp_host": host}
+
+
+#: סימון של כתובת בדיקה פנימית (המייל של מירי שנוסף לקמפיין לבדיקה)
+INTERNAL_TEST = "בדיקה פנימית"
+
+
+def _is_internal_test(lead) -> bool:
+    return (lead["primary_type"] or "") == INTERNAL_TEST
+
+
+def _sent_subjects(items) -> dict:
+    """
+    {נושא שנשלח לנמען (מנורמל): הנמען}, כדי לזהות תשובה שהגיעה מכתובת אחרת.
+    נושא שנשלח ליותר מנמען אחד (נושא בלי שם העסק) לא נכנס: אי אפשר לדעת
+    למי מהם התשובה שייכת.
+    """
+    from egud_bot import replies
+    seen, out = set(), {}
+    for st, sent in items:
+        campaign = next((c for c in store.all()
+                         if c["source_campaign"] == st.campaign and c["subject_tpl"]), None)
+        if not campaign:
+            continue
+        for lead in sent:
+            if _is_internal_test(lead):
+                continue
+            subject = mail_templates.render_subject(
+                campaign["subject_tpl"], business_name=lead["name"] or "",
+                first_name=lead["first_name"] or "")
+            norm, _ = replies.normalize_subject(subject)
+            if not norm:
+                continue
+            if norm in out or norm in seen:
+                out.pop(norm, None)
+                seen.add(norm)
+                continue
+            out[norm] = (lead["email"] or "").lower()
+    return out
 
 
 def _check_campaigns(campaigns) -> list[str]:
@@ -532,16 +1144,20 @@ def _check_campaigns(campaigns) -> list[str]:
     for key, box in by_box.items():
         emails = [l["email"] for _, sent in box["items"] for l in sent]
         try:
-            result = replies.find_replies(box["sender"], emails)
+            result = replies.find_replies(box["sender"], emails,
+                                          subjects=_sent_subjects(box["items"]))
         except Exception as exc:  # noqa: BLE001
             lines.append(f"לא הצלחתי להיכנס לתיבה {key}: {exc}")
             continue
         found, bounces = result["replies"], result["bounces"]
+        removals = result.get("unsubscribes") or set()
         # נמען שקיבל כמה קמפיינים: התשובה שייכת לשליחה האחרונה שקדמה לה,
         # ולא לכל הקמפיינים שהוא היה בהם
         sends = {}
         for st, sent in box["items"]:
             for lead in sent:
+                if _is_internal_test(lead):
+                    continue   # כתובת בדיקה שלנו: מה שמגיע ממנה אינו תשובה של עסק
                 sends.setdefault((lead["email"] or "").lower(), []).append((st, lead))
         new = 0
         for addr, items in sends.items():
@@ -550,13 +1166,19 @@ def _check_campaigns(campaigns) -> list[str]:
                 when = hit[0] or "9999"
                 before = [it for it in items if (it[1]["emailed_at"] or "") <= when]
                 st, lead = max(before or items, key=lambda it: it[1]["emailed_at"] or "")
-                if not lead["replied_at"]:
+                if addr in removals:
+                    # לא נספר כ"ענה": בקשת הסרה היא לא עניין במענק
+                    st.unsubscribe(addr, f"ביקש להסיר: {hit[1]}"[:200])
+                elif not lead["replied_at"]:
                     st.mark_replied(lead["email"], f"ענה: {hit[1]}"[:200])
                     new += 1
             if addr in bounces:
                 for st, lead in items:
                     st.mark_bounced(lead["email"], f"המייל חזר: {bounces[addr]}"[:200])
-        lines.append(f"{key}: {len(found)} ענו ({new} חדשים), {len(bounces)} מיילים חזרו")
+        answered = sum(1 for addr in sends if addr in found)
+        removed = sum(1 for addr in sends if addr in removals)
+        lines.append(f"{key}: {answered} ענו ({new} חדשים), {len(bounces)} מיילים חזרו"
+                     + (f", {removed} ביקשו להסיר" if removed else ""))
     return lines or ["אין עדיין קמפיינים שנשלחו מהם מיילים"]
 
 
@@ -603,6 +1225,23 @@ def pixel(track_id):
     return Response(tracking.TRANSPARENT_GIF, mimetype="image/gif",
                     headers={"Cache-Control": "no-store, no-cache, must-revalidate",
                              "Pragma": "no-cache"})
+
+
+@app.route("/c/ping")
+def click_ping():
+    return Response("clicks-ok", mimetype="text/plain")
+
+
+@app.route("/c/<track_id>/<int:link_id>")
+def click(track_id, link_id):
+    """לחיצה על קישור במייל: רושמים ומפנים ליעד. משמש כשאין Worker בענן."""
+    for campaign in {c["source_campaign"] for c in store.all()
+                     if c["source_campaign"]}:
+        st = leads_store(campaign)
+        url = st.link_url(link_id) if st else ""
+        if url and st.mark_clicked(track_id):
+            return redirect(url)
+    return Response("הקישור לא נמצא", status=404)
 
 
 # ---------------------------- סריקה והעשרה ----------------------------
@@ -781,31 +1420,101 @@ def scan_stop(campaign_id):
     return redirect(url_for("campaign_edit", campaign_id=campaign_id))
 
 
+def _ensure_source(campaign) -> str:
+    """מאגר הלידים של הקמפיין. לקמפיין חדש בלי מאגר נפתח אחד משלו."""
+    source = _col(campaign, "source_campaign")
+    if not source:
+        source = f"c{campaign['id']}"
+        store.update(campaign["id"], source_campaign=source)
+        _STORES.pop(source, None)
+    return source
+
+
+@app.route("/campaign/<int:campaign_id>/add")
+def add_recipients_page(campaign_id):
+    """עמוד הוספת נמענים: העלאת קובץ מהדפדפן, וכתובת בדיקה."""
+    campaign = store.get(campaign_id)
+    if not campaign:
+        return redirect(url_for("board"))
+    st = leads_store(_col(campaign, "source_campaign"))
+    try:
+        counts = st.state_counts() if st else {}
+    except Exception:  # noqa: BLE001
+        counts = {}
+    return render_template("add_recipients.html", campaign=campaign, counts=counts,
+                           columns=importer.COLUMNS)
+
+
 @app.route("/campaign/<int:campaign_id>/upload", methods=["POST"])
 def campaign_upload(campaign_id):
     """
-    העלאת קובץ אנשי קשר (CSV) לקמפיין. עמודות מזוהות: name/שם,
-    email/מייל, phone/טלפון, first_name, city/עיר.
+    העלאת קובץ נמענים (CSV או Excel). כל כתובת עוברת את הבדיקות של
+    egud_bot.importer לפני שהיא נכנסת, ומה שלא נכנס מוצג עם הסיבה.
     """
-    import csv
-    from egud_bot.jobscan import import_rows
-
     campaign = store.get(campaign_id)
-    source = _col(campaign, "source_campaign") or "agent"
+    if not campaign:
+        return redirect(url_for("board"))
     upload = request.files.get("contacts")
     if not upload or not upload.filename:
         flash("צריך לבחור קובץ")
-        return redirect(url_for("campaign_edit", campaign_id=campaign_id))
-    if not upload.filename.lower().endswith(".csv"):
-        flash("כרגע נתמך CSV בלבד. באקסל: קובץ → שמירה בשם → CSV UTF-8")
-        return redirect(url_for("campaign_edit", campaign_id=campaign_id))
+        return redirect(url_for("add_recipients_page", campaign_id=campaign_id))
+    try:
+        rows = importer.read_table(upload.filename, upload.stream.read())
+    except ValueError as exc:
+        flash(str(exc))
+        return redirect(url_for("add_recipients_page", campaign_id=campaign_id))
+    if not rows:
+        flash("לא מצאתי שורות בקובץ")
+        return redirect(url_for("add_recipients_page", campaign_id=campaign_id))
+    if "email" not in importer.map_columns(list(rows[0].keys())):
+        flash("לא מצאתי עמודת מייל בקובץ. צריכה להיות עמודה בשם 'מייל' או 'email'.")
+        return redirect(url_for("add_recipients_page", campaign_id=campaign_id))
 
-    text = upload.stream.read().decode("utf-8-sig", errors="replace")
-    rows = list(csv.DictReader(io.StringIO(text)))
+    result = _run_import(campaign, rows, (request.form.get("group") or "").strip(), "upload")
+    groups = {}
+    for item in result["added"]:
+        groups[item["group"] or "ללא קבוצה"] = groups.get(item["group"] or "ללא קבוצה", 0) + 1
+    return render_template("import_result.html", campaign=store.get(campaign_id),
+                           filename=upload.filename, total=len(rows),
+                           added=result["added"], skipped=result["skipped"],
+                           reasons=result["reasons"],
+                           groups=sorted(groups.items(), key=lambda kv: -kv[1]),
+                           columns=result["columns"], updated=result.get("updated", 0))
+
+
+@app.route("/campaign/<int:campaign_id>/add_test", methods=["POST"])
+def add_test_recipient(campaign_id):
+    """כתובת בדיקה: נכנסת תמיד, ולא נספרת בתוצאות."""
+    campaign = store.get(campaign_id)
+    email = (request.form.get("email") or "").strip()
+    if not campaign or "@" not in email:
+        flash("צריך כתובת מייל תקינה")
+        return redirect(url_for("add_recipients_page", campaign_id=campaign_id))
+    source = _ensure_source(campaign)
     storage = Storage(leads_db_path(source), campaign=source)
-    summary = import_rows(storage, rows, prefix=f"c{campaign_id}")
-    flash("ייבוא: " + " · ".join(f"{k} {v}" for k, v in summary.items()))
-    return redirect(url_for("campaign_edit", campaign_id=campaign_id))
+    importer.add_test_address(storage, email,
+                              (request.form.get("business") or "").strip(),
+                              (request.form.get("first_name") or "").strip(), source)
+    flash(f"נוספה כתובת בדיקה: {email}")
+    return redirect(url_for("add_recipients_page", campaign_id=campaign_id))
+
+
+@app.route("/campaign/<int:campaign_id>/duplicate", methods=["POST"])
+def campaign_duplicate(campaign_id):
+    """קמפיין חדש עם אותו נוסח, נושא ותיבת שליחה, ובלי נמענים."""
+    src = store.get(campaign_id)
+    if not src:
+        return redirect(url_for("board"))
+    title = (request.form.get("title") or "").strip() or f"{src['title']} (עותק)"
+    cid = store.create(title, kind=_col(src, "kind") or "email")
+    store.update(cid, source_campaign=f"c{cid}",
+                 subject_tpl=_col(src, "subject_tpl"), body_tpl=_col(src, "body_tpl"),
+                 sender_id=_col(src, "sender_id"), client_id=_col(src, "client_id") or "")
+    for name, f in store.fields(campaign_id).items():
+        if name in ("נוסח", "כאב", "הנעה לפעולה", "תיבת שליחה", "נושא המייל") and f["value"]:
+            store.set_field(cid, name, value=f["value"])
+    flash("הקמפיין שוכפל. עכשיו מוסיפים לו נמענים.")
+    return redirect(url_for("add_recipients_page", campaign_id=cid))
 
 
 @app.route("/campaign/<int:campaign_id>/recipients")
@@ -892,35 +1601,183 @@ def phones_csv(campaign_id):
         "Content-Disposition": f'attachment; filename="phones-{campaign_id}.csv"'})
 
 
+
+@app.route("/campaign/<int:campaign_id>/recipients.csv")
+def recipients_csv(campaign_id):
+    """הנמענים במצב מסוים (ברירת מחדל: מי שעוד לא קיבל), כקובץ שנפתח באקסל."""
+    import csv
+    campaign = store.get(campaign_id)
+    st = leads_store(_col(campaign, "source_campaign")) if campaign else None
+    if not st:
+        return redirect(url_for("board"))
+    state = request.args.get("state", "pending")
+    if state not in Storage.STATES:
+        state = "pending"
+    leads = [l for l in st.leads_by_state(state, 100000)
+             if _col(l, "primary_type") != "בדיקה פנימית"]
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    results = state in ("emailed", "failed")
+    head = ["שם", "שם_פרטי", "מייל", "טלפון", "עיר", "איפה מצאנו", "group"]
+    if results:
+        # התוצאות של כל נמען, לניתוח הקמפיין מחוץ ללוח
+        head += ["נשלח", "נפתח", "לחץ (אדם)", "לחיצות", "השיב", "השאיר פרטים בעמוד",
+                 "חזר", "נוסח", "שגיאה"]
+        try:
+            left = page_lead_store().tracks_for(campaign_id)
+        except Exception:  # noqa: BLE001
+            left = set()
+    writer.writerow(head)
+    from egud_bot.storage import _seconds_since, HUMAN_CLICK_SECONDS
+    for lead in leads:
+        first = _col(lead, "first_name") or ""
+        row = [_col(lead, "name") or "", "" if first == "-" else first,
+               _col(lead, "email") or "", _col(lead, "phone") or "",
+               _col(lead, "address") or "", _col(lead, "intro_how") or "",
+               _col(lead, "primary_type") or ""]
+        if results:
+            sent_at, clicked_at = _col(lead, "emailed_at") or "", _col(lead, "clicked_at") or ""
+            human = bool(_col(lead, "human_clicked_at")) or bool(
+                clicked_at and sent_at and _seconds_since(sent_at, clicked_at) > HUMAN_CLICK_SECONDS)
+            yes = lambda v: "כן" if v else ""
+            row += [sent_at[:16].replace("T", " "), yes(_col(lead, "opened_at")), yes(human),
+                    _col(lead, "click_count") or "", yes(_col(lead, "replied_at")),
+                    yes(_col(lead, "track_id") and _col(lead, "track_id") in left),
+                    yes(_col(lead, "bounced_at")), _col(lead, "ab") or "", _col(lead, "error") or ""]
+        writer.writerow(row)
+    data = "\ufeff" + buf.getvalue()      # BOM כדי שאקסל יציג עברית נכון
+    return Response(data, mimetype="text/csv", headers={
+        "Content-Disposition": f'attachment; filename="campaign-{campaign_id}-{state}.csv"'})
+
+# ---------------------------- עמוד נחיתה: רנטגן עסקי ----------------------------
+_PAGE_LEADS = None
+_TRACK_RE = __import__("re").compile(r"^[A-Za-z0-9_-]{8,64}$")
+XRAY_TOPICS = ("מכירות", "רווחיות", "תזרים", "צמיחה")
+
+
+def page_lead_store() -> PageLeadStore:
+    global _PAGE_LEADS
+    if _PAGE_LEADS is None:
+        _PAGE_LEADS = PageLeadStore()
+    return _PAGE_LEADS
+
+
+def _lead_for_track(campaign_id: str, track: str):
+    """העסק שקיבל את המייל עם המזהה הזה, אם יש כזה בקמפיין."""
+    if not (campaign_id.isdigit() and _TRACK_RE.match(track or "")):
+        return None
+    campaign = store.get(int(campaign_id))
+    st = leads_store(_col(campaign, "source_campaign")) if campaign else None
+    if not st:
+        return None
+    with st._conn() as conn:
+        return conn.execute("SELECT name, email FROM {leads} WHERE track_id=?",
+                            (track,)).fetchone()
+
+
+@app.route("/xray", methods=["GET", "POST"])
+def xray_page():
+    """
+    עמוד הנחיתה של הרנטגן העסקי. ציבורי: מגיעים אליו מהקישור במייל
+    (/xray?c=<קמפיין>&t=<מזהה המייל>). לא מציג שום פרט על הנמען.
+    """
+    campaign_id = (request.values.get("c") or "").strip()[:10]
+    track = (request.values.get("t") or "").strip()[:64]
+    if request.method == "GET":
+        return render_template("xray.html", c=campaign_id, t=track, done=False,
+                               error="", form={}, topics=XRAY_TOPICS)
+    form = {k: (request.form.get(k) or "").strip()[:120] for k in ("name", "phone", "topic")}
+    if request.form.get("website"):            # שדה נסתר: רק בוטים ממלאים אותו
+        return render_template("xray.html", c="", t="", done=True, error="", form={},
+                               topics=XRAY_TOPICS)
+    digits = "".join(ch for ch in form["phone"] if ch.isdigit())
+    if not form["name"] or not (9 <= len(digits) <= 12):
+        return render_template("xray.html", c=campaign_id, t=track, done=False,
+                               error="צריך שם מלא ומספר טלפון תקין", form=form,
+                               topics=XRAY_TOPICS)
+    lead = None
+    try:
+        lead = _lead_for_track(campaign_id, track)
+    except Exception:  # noqa: BLE001 -- שיוך הפנייה לא יעצור את השמירה
+        logging.getLogger(__name__).exception("לא הצלחתי לשייך פנייה מהעמוד")
+    page_lead_store().add(
+        page="xray", campaign_id=campaign_id if lead else "", track_id=track if lead else "",
+        business=(_col(lead, "name") or "") if lead else "",
+        email=(_col(lead, "email") or "") if lead else "",
+        name=form["name"], phone=form["phone"],
+        topic=form["topic"] if form["topic"] in XRAY_TOPICS else "")
+    return render_template("xray.html", c="", t="", done=True, error="", form={},
+                           topics=XRAY_TOPICS)
+
+
+@app.route("/page-leads")
+def page_leads_page():
+    """הפניות שהגיעו מעמודי הנחיתה, עם העסק והקמפיין שמהם הגיעו."""
+    leads = page_lead_store().all()
+    titles = {str(c["id"]): c["title"] for c in store.all()}
+    if request.args.get("format") == "csv":
+        import csv
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(["תאריך", "שם", "טלפון", "מה מעסיק", "עסק", "מייל העסק", "קמפיין"])
+        for l in leads:
+            w.writerow([(l["created_at"] or "")[:16].replace("T", " "), l["name"], l["phone"],
+                        l["topic"], l["business"], l["email"],
+                        titles.get(l["campaign_id"] or "", "")])
+        return Response("\ufeff" + buf.getvalue(), mimetype="text/csv", headers={
+            "Content-Disposition": 'attachment; filename="page-leads.csv"'})
+    return render_template("page_leads.html", leads=leads, titles=titles)
+
+
 # ---------------------------- תיבות שליחה ----------------------------
 @app.route("/senders", methods=["GET", "POST"])
 def senders_page():
+    """תיבות השליחה שלנו, או של לקוח (?client=)."""
     boxes = sender_box.SenderStore()
+    client_id = (request.values.get("client") or "").strip()
+    client = client_store().get(client_id) if client_id.isdigit() else None
+    back = url_for("senders_page", client=client["id"]) if client else url_for("senders_page")
     if request.method == "POST":
         if not (request.form.get("from_email") or "").strip():
             flash("חסרה כתובת מייל")
-            return redirect(url_for("senders_page"))
-        boxes.save(request.form.get("id") or None, **request.form.to_dict())
+            return redirect(back)
+        existing = boxes.get(request.form.get("id"))
+        if existing and sender_box.owner_of(existing) != (str(client["id"]) if client else ""):
+            flash("התיבה הזו שייכת לתיקייה אחרת")
+            return redirect(back)
+        data = request.form.to_dict()
+        data["client_id"] = str(client["id"]) if client else ""
+        boxes.save(request.form.get("id") or None, **data)
         flash("התיבה נשמרה")
-        return redirect(url_for("senders_page"))
+        return redirect(back)
     edit = boxes.get(request.args.get("edit"))
-    return render_template("senders.html", senders=boxes.all(), edit=edit)
+    if edit and sender_box.owner_of(edit) != (str(client["id"]) if client else ""):
+        edit = None
+    return render_template("senders.html", senders=boxes.for_client(client["id"] if client else None),
+                           edit=edit, client=client)
+
+
+def _box_back(sender_id):
+    owner = sender_box.owner_of(sender_box.SenderStore().get(sender_id))
+    return url_for("senders_page", client=owner) if owner else url_for("senders_page")
 
 
 @app.route("/senders/<int:sender_id>/delete", methods=["POST"])
 def sender_delete(sender_id):
+    back = _box_back(sender_id)
     sender_box.SenderStore().delete(sender_id)
     flash("התיבה נמחקה")
-    return redirect(url_for("senders_page"))
+    return redirect(back)
 
 
 @app.route("/senders/<int:sender_id>/test", methods=["POST"])
 def sender_test(sender_id):
     """בודק שאפשר להתחבר לתיבה, בלי לשלוח כלום."""
     from egud_bot.mailer import Mailer
+    back = _box_back(sender_id)
     sender = sender_box.as_smtp(sender_box.SenderStore().get(sender_id))
     if not sender:
-        return redirect(url_for("senders_page"))
+        return redirect(back)
     try:
         with Mailer(host=sender["smtp_host"], port=sender["smtp_port"],
                     user=sender["smtp_user"], password=sender["smtp_password"],
@@ -929,7 +1786,7 @@ def sender_test(sender_id):
         flash(f"החיבור ל-{sender['from_email']} עובד")
     except Exception as exc:  # noqa: BLE001
         flash(f"החיבור ל-{sender['from_email']} נכשל: {exc}")
-    return redirect(url_for("senders_page"))
+    return redirect(back)
 
 
 # ---------------------------- גיבוי ושחזור ----------------------------
@@ -939,25 +1796,6 @@ def _data_files() -> list:
         return []
     return sorted(f for f in os.listdir(config.data_dir)
                   if f.endswith(".db") or f.startswith("sent_"))
-
-
-@app.route("/contacted.csv")
-def contacted_csv():
-    """
-    כל כתובת שקיבלה מייל, מכל הקמפיינים -- כדי לסנן רשימה חדשה לפני
-    שמעלים אותה. יומן השליחות משותף לכל המאגרים, ולכן מספיק מאגר אחד.
-    """
-    st = None
-    for campaign in store.all():
-        if campaign["source_campaign"]:
-            st = leads_store(campaign["source_campaign"])
-            if st:
-                break
-    emails = sorted(st.contacted_any_campaign()) if st else []
-    data = "\ufeff" + "מייל\n" + "\n".join(e for e in emails if e) + "\n"
-    stamp = datetime.now().strftime("%Y-%m-%d")
-    return Response(data, mimetype="text/csv", headers={
-        "Content-Disposition": f'attachment; filename="contacted-{stamp}.csv"'})
 
 
 @app.route("/backup")
@@ -1010,6 +1848,7 @@ def backup_upload():
     return redirect(url_for("board"))
 
 
+
 @app.route("/health")
 def health():
     """
@@ -1022,7 +1861,7 @@ def health():
     """
     return {"status": "ok", "tracking": bool(config.tracking_base_url),
             "storage": "d1" if db.d1_configured() else "local",
-            "password": bool(config.app_password)}
+            "password": bool(config.app_password), "version": APP_VERSION}
 
 
 @app.route("/status")

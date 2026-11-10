@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 {% block title %}שליחה — {{ campaign['title'] }}{% endblock %}
 {% block body %}
+{% if wallet %}
+<div class="{{ 'warn' if wallet.balance < 50 else 'saved' }}">
+  קמפיין של <a href="{{ url_for('client_page', client_id=client['id']) }}">{{ client['name'] }}</a>:
+  ביתרה <b>{{ wallet.balance }}</b> מיילים. אי אפשר לשלוח יותר מזה{% if wallet.balance <= 0 %}, ולכן צריך קודם להוסיף חבילה בארנק{% endif %}.
+</div>
+{% endif %}
 
 <div class="card">
   <h2>{{ campaign['title'] }} — שליחה</h2>
@@ -45,7 +51,9 @@
 
 <form method="post">
 <div class="card">
-  <h2>ממתינים לשליחה ({{ previews|length }})</h2>
+  <h2>ממתינים לשליחה ({{ previews|length }})
+    {% if previews %}<a class="btn ghost small" style="margin-inline-start:12px;"
+       href="{{ url_for('recipients_csv', campaign_id=campaign['id'], state='pending') }}">הורדה לאקסל</a>{% endif %}</h2>
   {% if not previews %}
     <p class="muted">אין נמענים ממתינים במאגר. אפשר להריץ <code>scan</code> או
       <code>enrich</code> בטרמינל כדי להוסיף.</p>
@@ -65,9 +73,9 @@
         <td><input class="pick" type="checkbox" name="place_id"
                    value="{{ p.lead['place_id'] }}" onclick="count()"
                    style="width:17px;height:17px;accent-color:#16324f;"></td>
-        <td><b>{{ p.lead['name'] }}</b></td>
+        <td><b>{{ p.lead['name'] }}</b>{% if p.arm %} <span class="chip" title="השוואת נוסחים">נוסח {{ p.arm }}</span>{% endif %}</td>
         <td class="remail">{{ p.lead['email'] }}</td>
-        <td>{{ p.lead['neighborhood'] }}</td>
+        <td>{{ p.lead['neighborhood'] or p.lead['address'] or '—' }}</td>
         <td class="num">{{ p.lead['review_count'] }}</td>
         <td class="num">{{ p.lead['rating'] or '—' }}</td>
         <td><button type="button" class="ghost small"
@@ -88,18 +96,29 @@
     <label style="display:flex; gap:8px; align-items:center;">
       <b>שליחה מ:</b>
       <select name="sender_id" style="min-width:260px;">
+        {% if not client %}
         <option value="" {{ 'selected' if not sender_id }}>
           {{ env_sender or 'ברירת המחדל מ-.env' }} (ברירת מחדל)</option>
+        {% elif not senders %}
+        <option value="">ללקוח עוד אין תיבת שליחה</option>
+        {% endif %}
         {% for b in senders %}
         <option value="{{ b['id'] }}" {{ 'selected' if (b['id']|string) == (sender_id|string) }}>
           {{ b['label'] or b['from_name'] }} &lt;{{ b['from_email'] }}&gt;
           {% if not b['smtp_password'] %}(חסרה סיסמה){% endif %}</option>
         {% endfor %}
       </select>
-      <a class="muted" href="{{ url_for('senders_page') }}">ניהול תיבות</a>
+      <a class="muted" href="{{ url_for('senders_page', client=client['id']) if client else url_for('senders_page') }}">
+        {{ 'התיבות של ' ~ client['name'] if client else 'ניהול תיבות' }}</a>
     </label>
   </div>
   <div class="actionbar">
+    <label class="muted" style="display:inline-flex;align-items:center;gap:6px;">
+      סימון
+      <input type="number" id="firstN" value="{{ first_n }}" min="1" style="width:70px;">
+      הראשונים
+      <button type="button" class="ghost small" onclick="pickFirst()">סמני</button>
+    </label>
     <button type="submit">שליחה לנמענים שסומנו</button>
     <span id="chosen" class="muted">לא נבחר אף נמען</span>
     <span class="muted" style="margin-inline-start:auto;">אחרי הלחיצה המיילים יוצאים מיד.</span>
@@ -112,6 +131,7 @@
   <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
     <h2 style="margin:0;">נשלחו ({{ sent|length }})</h2>
     {% if sent %}
+    <a class="btn ghost small" href="{{ url_for('recipients_csv', campaign_id=campaign['id'], state='emailed') }}">הורדה לאקסל עם התוצאות</a>
     <form method="post" action="{{ url_for('check_replies', campaign_id=campaign['id']) }}">
       <button type="submit" class="ghost small">בדיקת תשובות בתיבה</button>
     </form>
@@ -150,6 +170,13 @@
 </div>
 
 <script>
+  // מנה יומית: מסמן רק את N הראשונים, כדי לא לשלוח מאות מיילים בבת אחת
+  function pickFirst() {
+    var n = parseInt(document.getElementById('firstN').value, 10) || 0;
+    document.querySelectorAll('.pick').forEach(function (c, i) { c.checked = i < n; });
+    document.getElementById('all').checked = false;
+    count();
+  }
   function count() {
     var n = document.querySelectorAll('.pick:checked').length;
     document.getElementById('chosen').textContent =

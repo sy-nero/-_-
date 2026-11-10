@@ -69,6 +69,22 @@ CREATE TABLE IF NOT EXISTS {sent_log} (
     sent_at    TEXT,
     PRIMARY KEY (email, campaign)
 );
+
+-- הקישורים שבמיילים. הקישור במייל מצביע על /c/<מזהה מייל>/<מזהה קישור>, ושירות
+-- המעקב מפנה לכתובת שכאן. כתובת היעד לא נמצאת בקישור עצמו, ולכן אי אפשר
+-- להשתמש בשירות כדי להפנות לאתר אחר (open redirect).
+-- מי שביקש להסיר אותו מהדיוור ("הסר", "לא מעוניין"). משותף לכל הקמפיינים:
+-- כתובת שנכנסה לכאן לא מקבלת מאיתנו מייל יותר, באף קמפיין.
+CREATE TABLE IF NOT EXISTS unsubscribed (
+    email  TEXT PRIMARY KEY,
+    at     TEXT,
+    note   TEXT
+);
+
+CREATE TABLE IF NOT EXISTS tracked_links (
+    id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    url  TEXT UNIQUE
+);
 """
 
 
@@ -104,6 +120,32 @@ class _TableNames:
 #: מיגרציה חדשה עדיין רצה -- רק לא שוב ושוב באותה ריצה.
 _PREPARED: set = set()
 
+#: כתובת יעד -> מספר הקישור שלה, כדי לא לשאול את המסד על כל מייל מחדש
+_LINK_IDS: dict = {}
+
+#: לחיצה בדקה הראשונה אחרי השליחה = סורק אבטחה, לא אדם
+HUMAN_CLICK_SECONDS = 60
+
+#: לחיצה של אדם: נרשמה ככזו, או (בנתונים מלפני השינוי) הלחיצה הראשונה
+#: הייתה יותר מדקה אחרי השליחה
+REAL_CLICK = ("((human_clicked_at IS NOT NULL AND human_clicked_at != '') OR "
+              "(clicked_at IS NOT NULL AND clicked_at != '' AND emailed_at IS NOT NULL AND "
+              f"(julianday(clicked_at) - julianday(emailed_at)) * 86400 > {HUMAN_CLICK_SECONDS}))")
+
+
+def _seconds_since(start: str, end: str) -> float:
+    try:
+        a = datetime.fromisoformat((start or "").replace("Z", "+00:00"))
+        b = datetime.fromisoformat((end or "").replace("Z", "+00:00"))
+        # זמן בלי אזור זמן נשמר ב-UTC; בלי זה השוואה בין שני הסוגים נופלת
+        if a.tzinfo is None:
+            a = a.replace(tzinfo=timezone.utc)
+        if b.tzinfo is None:
+            b = b.replace(tzinfo=timezone.utc)
+        return (b - a).total_seconds()
+    except (ValueError, TypeError):
+        return 10 ** 9     # בלי זמן שליחה: לא חוסמים
+
 
 def _safe(name: str) -> str:
     """שם קמפיין -> סיומת חוקית לשם טבלה."""
@@ -133,12 +175,23 @@ class Storage:
                                "intro_why", "rec_json", "variant", "replied_at",
                                "reply_note", "track_id", "opened_at", "open_count",
                                "run_id", "specialty", "campaign_id", "source",
-                               "bounced_at"):
+                               "bounced_at", "clicked_at", "click_count",
+                               "human_clicked_at", "ab"):
                     try:
                         conn.execute(
                             f"ALTER TABLE {self.leads} ADD COLUMN {column} TEXT")
                     except sqlite3.OperationalError:
                         pass  # העמודה כבר קיימת
+                # אינדקס על track_id: שירות המעקב מחפש לפיו בכל פתיחת מייל
+                # ובכל לחיצה. בלעדיו כל פתיחה סורקת את כל הטבלה, וב-D1 זה
+                # שורף את מכסת הקריאות היומית (5 מיליון שורות בתוכנית החינמית).
+                # אחרי המיגרציה, כדי שהעמודה כבר תהיה קיימת גם במאגר ישן.
+                try:
+                    conn.execute(
+                        f"CREATE INDEX IF NOT EXISTS idx_{self.leads}_track_id "
+                        f"ON {self.leads}(track_id)")
+                except sqlite3.OperationalError:
+                    pass  # האינדקס הוא שיפור ביצועים; תקלה בו לא עוצרת את העבודה
             _PREPARED.add(key)
 
     @contextmanager
@@ -401,6 +454,70 @@ class Storage:
                 (_now(), track_id))
             return first
 
+    def link_id(self, url: str) -> int:
+        """מספר קבוע לכתובת יעד, לקישור המעקב. אותה כתובת תמיד מקבלת אותו מספר."""
+        if url in _LINK_IDS:
+            return _LINK_IDS[url]
+        with self._conn() as conn:
+            conn.execute("INSERT OR IGNORE INTO tracked_links (url) VALUES (?)", (url,))
+            row = conn.execute("SELECT id FROM tracked_links WHERE url=?", (url,)).fetchone()
+        _LINK_IDS[url] = int(row["id"])
+        return _LINK_IDS[url]
+
+    def link_url(self, link_id: int) -> str:
+        with self._conn() as conn:
+            row = conn.execute("SELECT url FROM tracked_links WHERE id=?",
+                               (int(link_id),)).fetchone()
+        return row["url"] if row else ""
+
+    def mark_clicked(self, track_id: str) -> bool:
+        """
+        רושם לחיצה על קישור. מי שלחץ גם פתח את המייל, גם אם הפיקסל לא נטען
+        אצלו (תמונות חסומות), ולכן גם הפתיחה נרשמת.
+
+        לחיצה בדקה הראשונה אחרי השליחה היא כמעט תמיד סורק אבטחה של שרת
+        המייל, לא אדם. היא נרשמת ב-clicked_at, אבל רק לחיצה אחרי הדקה
+        הראשונה נרשמת ב-human_clicked_at, ורק היא נספרת בתוצאות.
+        """
+        with self._conn() as conn:
+            row = conn.execute("SELECT place_id, emailed_at FROM {leads} WHERE track_id=?",
+                               (track_id,)).fetchone()
+            if not row:
+                return False
+            now = _now()
+            human = _seconds_since(row["emailed_at"], now) > HUMAN_CLICK_SECONDS
+            conn.execute(
+                """UPDATE {leads} SET clicked_at=COALESCE(NULLIF(clicked_at,''), ?),
+                   click_count=COALESCE(click_count,0)+1,
+                   human_clicked_at=CASE WHEN ? THEN COALESCE(NULLIF(human_clicked_at,''), ?)
+                                         ELSE human_clicked_at END,
+                   opened_at=COALESCE(NULLIF(opened_at,''), ?) WHERE track_id=?""",
+                (now, 1 if human else 0, now, now, track_id))
+            return True
+
+    def set_ab(self, place_id: str, arm: str) -> None:
+        """איזה נוסח (A או B) קיבל הנמען, בהשוואת נוסחים."""
+        with self._conn() as conn:
+            conn.execute("UPDATE {leads} SET ab=? WHERE place_id=?", (arm, place_id))
+
+    def ab_metrics(self, campaign_id: str) -> dict:
+        """{"A": {...}, "B": {...}}: נשלחו, נפתחו, לחצו, ענו, חזרו לכל נוסח."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                f"""SELECT ab, COUNT(DISTINCT lower(email)) AS sent,
+                       COUNT(DISTINCT CASE WHEN opened_at IS NOT NULL AND opened_at != ''
+                             THEN lower(email) END) AS opened,
+                       COUNT(DISTINCT CASE WHEN {REAL_CLICK} THEN lower(email) END) AS clicked,
+                       COUNT(DISTINCT CASE WHEN replied_at IS NOT NULL AND replied_at != ''
+                             THEN lower(email) END) AS replied,
+                       COUNT(DISTINCT CASE WHEN bounced_at IS NOT NULL AND bounced_at != ''
+                             THEN lower(email) END) AS bounced
+                    FROM {{leads}} WHERE status='emailed' AND campaign_id=?
+                      AND ab IN ('A','B')
+                      AND coalesce(primary_type,'') != 'בדיקה פנימית'
+                    GROUP BY ab""", (str(campaign_id),)).fetchall()
+        return {r["ab"]: dict(r) for r in rows}
+
     def has_attributed_sends(self, campaign_id: str) -> bool:
         """האם נרשמו שליחות על שם הקמפיין הזה."""
         with self._conn() as conn:
@@ -435,7 +552,8 @@ class Storage:
         --variant לא נספרה כלל: חמישה מיילים שנשלחו הוצגו בלוח כאחד.
         שיוך לנוסח גם אינו אומר שנשלח — הוא נרשם לפני השליחה.
         """
-        where = "status = 'emailed'"
+        # כתובות בדיקה (המייל של מירי) לא נספרות: לא בתוצאות ולא בארנק של לקוח
+        where = "status = 'emailed' AND coalesce(primary_type,'') != 'בדיקה פנימית'"
         params: tuple = ()
         if campaign_id and self.has_attributed_sends(campaign_id):
             # שליחות שנרשם עליהן הקמפיין: זו המדידה המדויקת
@@ -451,8 +569,10 @@ class Storage:
                              THEN lower(email) END) AS opened,
                        COUNT(DISTINCT CASE WHEN replied_at IS NOT NULL AND replied_at != ''
                              THEN lower(email) END) AS replied,
+                       COUNT(DISTINCT CASE WHEN {REAL_CLICK} THEN lower(email) END) AS clicked,
                        COUNT(DISTINCT CASE WHEN bounced_at IS NOT NULL AND bounced_at != ''
-                             THEN lower(email) END) AS bounced
+                             THEN lower(email) END) AS bounced,
+                       MAX(emailed_at) AS last_sent
                     FROM {self.leads} WHERE {where}""", params).fetchone()
             # מיילים שהשרת סירב לשלוח בכלל (status='failed') גם הם "לא טובים"
             fwhere = where.replace("status = 'emailed'", "status = 'failed'")
@@ -460,7 +580,8 @@ class Storage:
                 f"SELECT COUNT(DISTINCT lower(email)) FROM {self.leads} WHERE {fwhere}",
                 params).fetchone()[0]
             return {"sent": row["sent"], "opened": row["opened"],
-                    "replied": row["replied"],
+                    "replied": row["replied"], "clicked": row["clicked"],
+                    "last_sent": (row["last_sent"] or "")[:10],
                     "bounced": (row["bounced"] or 0) + (failed or 0)}
 
     def lead_by_email(self, email: str):
@@ -577,6 +698,20 @@ class Storage:
                 (_now(), reason, (email or "").strip()))
             return cur.rowcount
 
+    def unsubscribe(self, email: str, note: str = "") -> None:
+        """מוסיף לרשימת ההסרה. לא שולחים לכתובת הזו יותר, מאף קמפיין."""
+        email = (email or "").strip().lower()
+        if not email:
+            return
+        with self._conn() as conn:
+            conn.execute("INSERT OR IGNORE INTO unsubscribed (email, at, note) VALUES (?, ?, ?)",
+                         (email, _now(), note))
+
+    def unsubscribed_emails(self) -> set:
+        with self._conn() as conn:
+            rows = conn.execute("SELECT email FROM unsubscribed").fetchall()
+        return {(r["email"] or "").lower() for r in rows}
+
     def mark_replied(self, email: str, note: str = "") -> int:
         """רושם שהסוכן השיב (וטלפון/הערה אם יש). מחזיר כמה שורות עודכנו."""
         with self._conn() as conn:
@@ -673,6 +808,23 @@ class Storage:
         for path in glob.glob(os.path.join(base, "sent_*.txt")):
             emails |= self._read_log_file(path)
         return emails
+
+    def bounced_any_campaign(self) -> set:
+        """כל כתובת שחזרה אלינו (bounce) באיזשהו קמפיין: לא שולחים אליה שוב."""
+        with self._conn() as conn:
+            if db.d1_configured():
+                tables = [r["name"] for r in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'leads_%'"
+                ).fetchall()]
+            else:
+                tables = [self.leads]
+            out = set()
+            # שאילתה לכל טבלה: D1 לא מקבל UNION של עשרים טבלאות
+            for t in tables:
+                out |= {r["e"] for r in conn.execute(
+                    f"SELECT lower(email) AS e FROM {t} WHERE bounced_at IS NOT NULL"
+                ).fetchall() if r["e"]}
+        return out
 
     def record_sent(self, email: str) -> None:
         """רושם שכתובת קיבלה מייל, כדי שלא תקבל שוב לעולם."""

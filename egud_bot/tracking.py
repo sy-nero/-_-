@@ -13,6 +13,7 @@
   * הכתובת חייבת להיות נגישה מהאינטרנט — פיקסל שמצביע ל-localhost לא ייטען
     אצל אף נמען, ואז לא תירשם אף פתיחה.
 """
+import html as _html
 import re
 import secrets
 
@@ -41,6 +42,58 @@ def add_pixel(html: str, base_url: str, track_id: str) -> str:
     if "</body>" in html:
         return html.replace("</body>", f"{img}</body>", 1)
     return html + img
+
+
+def click_url(base_url: str, track_id: str, link_id: int) -> str:
+    return f"{(base_url or '').rstrip('/')}/c/{track_id}/{link_id}"
+
+
+_CLICKS_OK: dict = {}
+
+
+def clicks_supported(base_url: str) -> bool:
+    """
+    האם שירות המעקב כבר יודע להפנות לחיצות. גרסה ישנה של ה-Worker מחזירה
+    פיקסל לכל כתובת, ואז קישור שעובר דרכו נפתח כדף ריק אצל הנמען. לכן
+    בודקים פעם אחת לפני שליחה, ובלי תשובה ברורה הקישורים יוצאים כמו שהם.
+    """
+    base = (base_url or "").rstrip("/")
+    if not base:
+        return False
+    if base not in _CLICKS_OK:
+        try:
+            import requests
+            resp = requests.get(f"{base}/c/ping", timeout=10)
+            _CLICKS_OK[base] = resp.status_code == 200 and resp.text.strip() == "clicks-ok"
+        except Exception:  # noqa: BLE001
+            return False      # לא שומרים: אולי זו תקלת רשת רגעית
+    return _CLICKS_OK[base]
+
+
+_HREF_RE = re.compile(r'(<a\b[^>]*?\bhref=")(https?://[^"]+)(")', re.I)
+
+
+def add_click_tracking(html: str, base_url: str, track_id: str, link_id) -> str:
+    """
+    מעביר כל קישור במייל דרך שירות המעקב, כדי לספור מי לחץ. השירות רושם את
+    הלחיצה ומפנה מיד לכתובת המקורית, כך שהנמען לא מרגיש בהבדל.
+
+    link_id: פונקציה שמחזירה מספר קבוע לכל כתובת יעד (Storage.link_id).
+    בלי base_url, או אם רישום הקישור נכשל, הקישור נשאר כמו שהוא: עדיף
+    קישור שעובד בלי מדידה מאשר קישור שבור.
+    """
+    if not (base_url and track_id and html):
+        return html
+
+    def sub(match):
+        url = _html.unescape(match.group(2))
+        try:
+            lid = link_id(url)
+        except Exception:  # noqa: BLE001
+            return match.group(0)
+        return match.group(1) + click_url(base_url, track_id, lid) + match.group(3)
+
+    return _HREF_RE.sub(sub, html)
 
 
 def has_pixel(html: str) -> bool:

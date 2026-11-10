@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}מחירון{% endblock %}
+{% block body %}
+<div class="page-head">
+  <div><div class="crumb"><a href="{{ url_for('clients_page') }}">לקוחות</a></div><h1>מחירון</h1></div>
+</div>
+
+<form method="post">
+<div class="card">
+  <div class="card-head"><h2>חבילות</h2>
+    <span class="muted spacer">מופיעות בחלון "הוספה לארנק" של כל לקוח. שורה ריקה נמחקת.</span></div>
+  <table style="max-width:560px;">
+    <thead><tr><th>מיילים בחבילה</th><th>מחיר (₪)</th><th>מחיר למייל</th></tr></thead>
+    <tbody>
+      {% for e, p in packages %}
+      <tr><td><input type="number" name="emails" value="{{ e }}" min="1"></td>
+          <td><input type="number" name="price" value="{{ '%g'|format(p) }}" min="0" step="0.01"></td>
+          <td class="muted">₪{{ '%.2f'|format(p / e) }}</td></tr>
+      {% endfor %}
+      {% for i in range(2) %}
+      <tr><td><input type="number" name="emails" min="1" placeholder="חבילה נוספת"></td>
+          <td><input type="number" name="price" min="0" step="0.01"></td><td></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div class="card">
+  <h2>מחיר למייל בודד</h2>
+  <p class="sub">משמש כשמוסיפים לארנק כמות שאינה חבילה.</p>
+  <label class="field" style="max-width:220px;"><span>₪ למייל</span>
+    <input type="number" name="per_email" value="{{ '%g'|format(per_email) }}" min="0" step="0.01"></label>
+</div>
+<button type="submit">שמירת המחירון</button>
+</form>
+<p class="muted" style="margin-top:16px;">המחירים שמופיעים כאן כברירת מחדל הם דוגמה בלבד. כדאי לעדכן אותם למחירים האמיתיים.</p>
+{% endblock %}

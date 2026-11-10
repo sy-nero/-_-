@@ -2,11 +2,19 @@
 {% block title %}תיבות שליחה{% endblock %}
 {% block body %}
 
+<div class="page-head">
+  <div>
+    <div class="crumb">{% if client %}<a href="{{ url_for('clients_page') }}">לקוחות</a> ·
+      <a href="{{ url_for('client_page', client_id=client['id']) }}">{{ client['name'] }}</a>{% else %}סינרו · ניהול קמפיינים{% endif %}</div>
+    <h1>{{ 'תיבות השליחה של ' ~ client['name'] if client else 'תיבות שליחה' }}</h1>
+  </div>
+</div>
+
 <div class="card">
-  <h2>תיבות שליחה</h2>
+  <h2>{{ 'התיבות של הלקוח' if client else 'התיבות שלנו' }}</h2>
   <p class="sub">
-    כל תיבה שמוגדרת כאן מופיעה בעמוד השליחה של כל קמפיין, ושם בוחרים ממנה
-    שולחים. הסיסמה היא <b>סיסמת אפליקציה</b> של Google, לא הסיסמה הרגילה
+    {% if client %}התיבות כאן מופיעות רק בקמפיינים של {{ client['name'] }}, והקמפיינים שלו יכולים
+    לשלוח רק מהן.{% else %}התיבות כאן מופיעות בקמפיינים שלנו. לכל לקוח יש תיבות משלו, בעמוד הלקוח.{% endif %} הסיסמה היא <b>סיסמת אפליקציה</b> של Google, לא הסיסמה הרגילה
     של התיבה. יוצרים אותה כשמחוברים לתיבה, בכתובת
     <a href="https://myaccount.google.com/apppasswords" target="_blank">myaccount.google.com/apppasswords</a>.
   </p>
@@ -24,7 +32,7 @@
       <td class="remail">{{ b['from_email'] }}</td>
       <td>{% if b['smtp_password'] %}<span class="ok">שמורה</span>{% else %}<span class="dash">חסרה</span>{% endif %}</td>
       <td style="display:flex; gap:6px; flex-wrap:wrap;">
-        <a class="btn ghost small" href="{{ url_for('senders_page', edit=b['id']) }}">עריכה</a>
+        <a class="btn ghost small" href="{{ url_for('senders_page', edit=b['id'], client=client['id'] if client else None) }}">עריכה</a>
         <form method="post" action="{{ url_for('sender_test', sender_id=b['id']) }}">
           <button type="submit" class="ghost small">בדיקת חיבור</button></form>
         <form method="post" action="{{ url_for('sender_delete', sender_id=b['id']) }}"
@@ -41,10 +49,10 @@
 
 <div class="card">
   <h2>{{ 'עריכת תיבה' if edit else 'הוספת תיבה' }}</h2>
-  <form method="post" action="{{ url_for('senders_page') }}">
+  <form method="post" action="{{ url_for('senders_page', client=client['id'] if client else None) }}">
     {% if edit %}<input type="hidden" name="id" value="{{ edit['id'] }}">{% endif %}
     <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px;">
-      <label>שם ברשימה<br><input type="text" name="label" placeholder="למשל: משרד האיגוד"
+      <label>שם ברשימה<br><input type="text" name="label" placeholder="{{ 'למשל: ' ~ client['name'] if client else 'למשל: משרד האיגוד' }}"
              value="{{ edit['label'] if edit else '' }}"></label>
       <label>שם השולח (מה שהנמען רואה)<br><input type="text" name="from_name" placeholder="ברכה וייס"
              value="{{ edit['from_name'] if edit else '' }}"></label>
@@ -69,7 +77,7 @@
     </details>
     <div style="margin-top:14px; display:flex; gap:10px;">
       <button type="submit">שמירה</button>
-      {% if edit %}<a class="btn ghost" href="{{ url_for('senders_page') }}">ביטול</a>{% endif %}
+      {% if edit %}<a class="btn ghost" href="{{ url_for('senders_page', client=client['id'] if client else None) }}">ביטול</a>{% endif %}
     </div>
   </form>
 </div>

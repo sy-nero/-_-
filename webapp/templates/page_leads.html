@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}פניות מהעמוד{% endblock %}
+{% block body %}
+<div class="page-head">
+  <div><div class="crumb">סינרו · ניהול קמפיינים</div><h1>פניות מעמוד הנחיתה</h1></div>
+  {% if leads %}<div class="actions">
+    <a class="btn ghost" href="{{ url_for('page_leads_page', format='csv') }}">הורדה לאקסל</a>
+  </div>{% endif %}
+</div>
+
+<div class="card">
+  <p class="sub">מי שהשאיר פרטים בעמוד הרנטגן העסקי
+    (<a href="{{ url_for('xray_page') }}" target="_blank">צפייה בעמוד</a>).
+    כשהפנייה הגיעה מהקישור במייל, מופיעים גם העסק והקמפיין שממנו הגיעה.</p>
+  {% if not leads %}
+    <p class="muted">עוד אין פניות.</p>
+  {% else %}
+  <div class="scroll">
+  <table>
+    <thead><tr><th>תאריך</th><th>שם</th><th>טלפון</th><th>מה מעסיק</th><th>עסק</th><th>קמפיין</th></tr></thead>
+    <tbody>{% for l in leads %}
+      <tr>
+        <td class="muted">{{ (l['created_at'] or '')[:16]|replace('T',' ') }}</td>
+        <td><b>{{ l['name'] }}</b></td>
+        <td dir="ltr" style="text-align:right;">{{ l['phone'] }}</td>
+        <td>{{ l['topic'] or '—' }}</td>
+        <td>{{ l['business'] or '—' }}{% if l['email'] %}<div class="muted">{{ l['email'] }}</div>{% endif %}</td>
+        <td class="muted">{{ titles.get(l['campaign_id'] or '', '—') }}</td>
+      </tr>{% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
