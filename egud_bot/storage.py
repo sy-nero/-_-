@@ -192,6 +192,17 @@ class Storage:
                         f"ON {self.leads}(track_id)")
                 except sqlite3.OperationalError:
                     pass  # האינדקס הוא שיפור ביצועים; תקלה בו לא עוצרת את העבודה
+                # אינדקס על lower(email): כל בדיקה "האם הכתובת הזו כבר קיבלה
+                # מייל / ענתה / חזרה" מחפשת lower(email)=lower(?). בלי אינדקס
+                # כל בדיקה כזו סורקת את כל הטבלה, ובדיקת רשימה מול 39 טבלאות
+                # קראה מיליוני שורות ומיצתה את מכסת D1 היומית.
+                for table in (self.leads, self.sent_log):
+                    try:
+                        conn.execute(
+                            f"CREATE INDEX IF NOT EXISTS idx_{table}_lower_email "
+                            f"ON {table}(lower(email))")
+                    except sqlite3.OperationalError:
+                        pass
             _PREPARED.add(key)
 
     @contextmanager
