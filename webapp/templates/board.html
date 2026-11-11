@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+{% block title %}לוח בקרה{% endblock %}
+{% block body %}
+
+<div class="page-head">
+  <div>
+    <div class="crumb">סינרו · ניהול קמפיינים</div>
+    <h1>לוח בקרה</h1>
+  </div>
+  <div class="actions">
+    <button type="button" class="quiet" onclick="startTour()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01"/></svg>
+      סיור מודרך</button>
+    <form method="post" action="{{ url_for('check_all_replies') }}" data-tour="replies">
+      <button type="submit" class="ghost">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/></svg>
+        בדיקת תשובות</button>
+    </form>
+    <button type="button" onclick="document.getElementById('newCampaign').showModal()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+      קמפיין חדש</button>
+  </div>
+</div>
+
+{% if not tracking_on %}
+<div class="warn"><b>מעקב הפתיחות כבוי.</b> כדי למדוד פתיחות ולחיצות צריך להגדיר
+  <code>TRACKING_BASE_URL</code> בהגדרות.</div>
+{% endif %}
+
+{# ---------- מספרים ראשיים ---------- #}
+<div class="stats" data-tour="stats">
+  <div class="stat"><div class="label">נשלחו</div>
+    <div class="value">{{ '{:,}'.format(totals.sent) }}</div>
+    <div class="note">בכל קמפייני המייל</div></div>
+  <div class="stat"><div class="label">ממתינים לשליחה</div>
+    <div class="value">{{ '{:,}'.format(totals.pending) }}</div>
+    <div class="note">ב-{{ totals.active }} קמפיינים פעילים</div></div>
+  <div class="stat hi"><div class="label">השיבו</div>
+    <div class="value">{{ totals.replied }}</div>
+    <div class="note">{{ totals.reply }}% מהנשלחים</div></div>
+  <div class="stat"><div class="label">לחצו על הקישור</div>
+    <div class="value">{{ totals.clicked }}</div>
+    <div class="note">{{ totals.click }}% מהנשלחים</div></div>
+  <div class="stat"><div class="label">נפתחו</div>
+    <div class="value">{{ totals.open }}%</div>
+    <div class="note">הערכה, לפי פיקסל</div></div>
+  <div class="stat"><div class="label">חזרו</div>
+    <div class="value">{{ totals.bounce }}%</div>
+    <div class="note">{% if totals.bounce > 5 %}גבוה, כדאי לנקות רשימות{% else %}תקין{% endif %}</div></div>
+</div>
+
+{# ---------- מה מחכה לשליחה ---------- #}
+{% if todo %}
+<div class="card" data-tour="todo">
+  <div class="card-head"><h2>ממתינים לשליחה</h2>
+    <span class="muted">מאותה תיבה כדאי לשלוח עד כ-80 ביום</span></div>
+  <div style="display:flex; flex-direction:column; gap:8px;">
+    {% for col in todo[:6] %}
+    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+      <span class="pill is-{{ col.status[0] }}">{{ col.status[1] }}</span>
+      <a href="{{ url_for('campaign_edit', campaign_id=col.campaign['id']) }}"
+         style="color:var(--ink); font-weight:600; text-decoration:none;">{{ col.campaign['title'] }}</a>
+      <span class="muted">{{ col.pending }} ממתינים{% if col.sender %} · {{ col.sender }}{% endif %}</span>
+      <a class="btn small" style="margin-inline-start:auto;"
+         href="{{ url_for('send_page', campaign_id=col.campaign['id']) }}">שליחה</a>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{# ---------- כל הקמפיינים ---------- #}
+<div class="card flush" data-tour="table">
+  <div class="toolbar">
+    <h2 style="margin:0;">קמפיינים</h2>
+    <div class="seg" id="filters">
+      <button type="button" class="on" data-f="all">הכל</button>
+      <button type="button" data-f="active">פעילים</button>
+      <button type="button" data-f="done">הסתיימו</button>
+    </div>
+    <input type="search" id="q" placeholder="חיפוש לפי שם" style="margin-inline-start:auto;">
+  </div>
+  {% if not columns %}
+    <div class="empty-state"><b>עוד אין קמפיינים</b>
+      לחצי על "קמפיין חדש" כדי להתחיל.</div>
+  {% else %}
+  <div class="scroll">
+  <table id="campaigns">
+    <thead><tr>
+      <th data-sort="text">קמפיין</th>
+      <th data-sort="text">מצב</th>
+      <th class="num" data-sort="num">נשלחו</th>
+      <th class="num" data-sort="num">ממתינים</th>
+      <th class="num" data-sort="num">נפתחו</th>
+      <th class="num" data-sort="num">לחצו</th>
+      <th class="num" data-sort="num">השיבו</th>
+      <th class="num" data-sort="num">חזרו</th>
+      <th data-sort="text">שליחה אחרונה</th>
+      <th></th>
+    </tr></thead>
+    <tbody>
+    {% for col in columns|reverse %}
+      {% set c = col.campaign %}{% set m = col.metrics %}
+      <tr data-status="{{ col.status[0] }}" class="{{ 'best' if c['id'] == best_id }}">
+        <td class="title" data-v="{{ c['title'] }}">
+          <a href="{{ url_for('campaign_edit', campaign_id=c['id']) }}">{{ c['title'] }}</a>
+          <div class="meta">#{{ c['id'] }}
+            {% if c['kind'] != 'email' %} · <span class="chip phone">טלפון</span>{% endif %}
+            {% if col.sender %} · {{ col.sender }}{% endif %}
+            {% if c['id'] == best_id %} · <b style="color:var(--accent);">הכי הרבה תשובות</b>{% endif %}</div>
+        </td>
+        <td data-v="{{ col.status[1] }}"><span class="pill is-{{ col.status[0] }}">{{ col.status[1] }}</span></td>
+        <td class="num" data-v="{{ m.sent }}">{{ m.sent }}</td>
+        <td class="num" data-v="{{ col.pending }}">{{ col.pending or '' }}</td>
+        <td class="num" data-v="{{ col.open_pct }}">{{ col.open_rate }}</td>
+        <td class="num" data-v="{{ col.click_pct }}">{% if m.sent %}{{ m.clicked or 0 }} <span class="muted">({{ col.click_rate }})</span>{% else %}—{% endif %}</td>
+        <td class="num" data-v="{{ col.reply_exact }}">
+          {% if m.sent %}<div class="rate"><b>{{ m.replied }}</b>
+            <span class="muted">{{ col.reply_exact }}%</span>
+            <span class="track"><i style="width:{{ [col.reply_exact * 8, 100]|min }}%"></i></span></div>
+          {% else %}—{% endif %}</td>
+        <td class="num" data-v="{{ col.bounce_pct }}">
+          {% if m.sent %}<span style="{{ 'color:var(--bad); font-weight:600;' if col.bounce_pct >= 8 }}">{{ col.bounce_rate }}</span>{% else %}—{% endif %}</td>
+        <td data-v="{{ m.last_sent }}" class="muted">{{ m.last_sent or '—' }}</td>
+        <td><div class="rowactions">
+          {% if c['source_campaign'] or c['kind'] == 'email' %}
+          <a class="btn quiet small" href="{{ url_for('add_recipients_page', campaign_id=c['id']) }}">נמענים</a>
+          {% endif %}
+          {% if col.pending %}<a class="btn small" href="{{ url_for('send_page', campaign_id=c['id']) }}">שליחה</a>{% endif %}
+        </div></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</div>
+
+{# ---------- טבלת ההשוואה המלאה (הגיליון הישן) ---------- #}
+{% if columns %}
+<details class="card">
+  <summary>השוואה מפורטת בין קמפיינים: נוסח, קהל, כאב, תובנות</summary>
+  <p class="sub" style="margin-top:10px;">השורות בירוק נמדדות אוטומטית. שאר השורות נערכות בעמוד הקמפיין.</p>
+  <div class="scroll">
+  <table class="sheet">
+    <colgroup><col class="label">{% for col in columns %}<col class="cell"><col class="cell"><col class="cell">{% endfor %}</colgroup>
+    <thead>
+      <tr><th class="rowhead">קמפיין</th>
+        {% for col in columns %}<th colspan="3"><a href="{{ url_for('campaign_edit', campaign_id=col.campaign['id']) }}">{{ col.campaign['title'] }}</a></th>{% endfor %}</tr>
+      <tr class="subhead"><th class="rowhead"></th>
+        {% for col in columns %}<th>פרטים</th><th>הערות</th><th>המלצות לשיפור</th>{% endfor %}</tr>
+    </thead>
+    <tbody>
+      <tr><td class="rowhead">תאריך</td>
+        {% for col in columns %}<td>{{ col.campaign['started_on'] or '' }}</td><td></td><td></td>{% endfor %}</tr>
+      {% for field in text_fields %}
+      <tr><td class="rowhead">{{ field }}</td>
+        {% for col in columns %}
+          <td>{% if col.fields[field].value %}{{ col.fields[field].value }}{% else %}<span class="muted">{{ col.derived.get(field, '') }}</span>{% endif %}</td>
+          <td>{{ col.fields[field].note }}</td><td>{{ col.fields[field].improve }}</td>
+        {% endfor %}</tr>
+      {% endfor %}
+      {% for field in auto_fields %}
+      <tr><td class="rowhead">{{ field }}</td>
+        {% for col in columns %}<td class="num auto"><b>{{ col.fields[field].value }}</b></td>
+          <td>{{ col.fields[field].note }}</td><td>{{ col.fields[field].improve }}</td>{% endfor %}</tr>
+      {% endfor %}
+      {% for field in manual_fields %}
+      <tr><td class="rowhead">{{ field }}</td>
+        {% for col in columns %}<td class="num">{{ col.fields[field].value }}</td>
+          <td>{{ col.fields[field].note }}</td><td>{{ col.fields[field].improve }}</td>{% endfor %}</tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</details>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+window.TOUR = [
+  {title: 'ברוכים הבאים ללוח הקמפיינים', text: 'סיור קצר של דקה על מה יש כאן ואיך עובדים. אפשר לעצור בכל רגע עם "דילוג" או Esc, ולחזור אליו מהכפתור "סיור מודרך".'},
+  {el: '[data-tour=stats]', title: 'המספרים החשובים', text: 'כמה מיילים יצאו, כמה מחכים, וכמה ענו, לחצו, פתחו וחזרו, בכל הקמפיינים שלנו יחד. הכי חשוב: <b>השיבו</b>. פתיחות הן רק הערכה.'},
+  {el: '[data-tour=todo]', title: 'מה מחכה לשליחה', text: 'קמפיינים שיש בהם נמענים שעוד לא קיבלו מייל. כפתור "שליחה" לוקח ישר לבחירת הנמענים. מאותה תיבה כדאי לשלוח עד כ-80 ביום.'},
+  {el: '[data-tour=table]', title: 'כל הקמפיינים', text: 'לחיצה על כותרת עמודה ממיינת (למשל לפי "השיבו"). אפשר לחפש לפי שם ולסנן פעילים או כאלה שהסתיימו. הקמפיין עם הכי הרבה תשובות מסומן.'},
+  {el: '[data-tour=replies]', title: 'בדיקת תשובות', text: 'נכנס לתיבות המייל ובודק מי ענה, מי ביקש הסרה ולאן המייל לא הגיע. כדאי ללחוץ פעם ביום.'},
+  {el: '[data-tour=new]', title: 'קמפיין חדש', text: 'פותח קמפיין ריק. כדי להתחיל מנוסח שכבר עבד, נכנסים לקמפיין הקיים ולוחצים "שכפול".'},
+  {el: '[data-tour=clients]', title: 'לקוחות', text: 'תיקייה לכל לקוח: קמפיינים משלו, תיבת שליחה משלו וארנק. שולחים רק כמה שיש לו בארנק, ומייל שחזר לא נגבה.'},
+  {el: '[data-tour=segments]', title: 'פילוח ותוצאות', text: 'מי מגיב יותר: לפי תחום, עיר, ספק מייל וקמפיין. כאן מחליטים לאן לשלוח בפעם הבאה.'},
+  {el: '[data-tour=senders]', title: 'תיבות שליחה', text: 'התיבות שמהן יוצאים המיילים. מוסיפים כתובת Gmail וסיסמת אפליקציה, ובוחרים אותה בעמוד השליחה.'},
+  {el: '[data-tour=connect]', title: 'חיבור לשיחת החיפוש', text: 'מפתח והנחיה להעתקה, כדי ששיחת החיפוש ב-Claude תשלח רשימות עסקים ישר לקמפיין.'},
+  {el: '[data-tour=guide]', title: 'המדריך המלא', text: 'כל מה שצריך לדעת, צעד אחרי צעד: כתיבת נוסח, העלאת רשימה, שליחה, השוואת נוסחים, לקוחות וארנק. אפשר לחזור אליו בכל זמן.'}
+];
+try { if (!localStorage.getItem('tourDone')) setTimeout(() => window.startTour(), 600); } catch (e) {}
+(function () {
+  const table = document.getElementById('campaigns');
+  if (!table) return;
+  const rows = () => Array.from(table.tBodies[0].rows);
+  let filter = 'all';
+  const q = document.getElementById('q');
+  function apply() {
+    const term = (q.value || '').trim();
+    rows().forEach(r => {
+      const st = r.dataset.status;
+      const okF = filter === 'all' || (filter === 'active' ? (st === 'sending' || st === 'ready') : st === 'done');
+      const okQ = !term || r.cells[0].innerText.includes(term);
+      r.style.display = okF && okQ ? '' : 'none';
+    });
+  }
+  document.querySelectorAll('#filters button').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('#filters button').forEach(x => x.classList.remove('on'));
+    b.classList.add('on'); filter = b.dataset.f; apply();
+  }));
+  q.addEventListener('input', apply);
+  table.querySelectorAll('th[data-sort]').forEach((th, idx) => th.addEventListener('click', () => {
+    const num = th.dataset.sort === 'num';
+    const dir = th.classList.contains('desc') ? 1 : -1;
+    table.querySelectorAll('th').forEach(x => x.classList.remove('asc', 'desc'));
+    th.classList.add(dir === 1 ? 'asc' : 'desc');
+    const body = table.tBodies[0];
+    rows().sort((a, b) => {
+      const va = a.cells[idx].dataset.v || '', vb = b.cells[idx].dataset.v || '';
+      return (num ? (parseFloat(va) || 0) - (parseFloat(vb) || 0) : va.localeCompare(vb, 'he')) * dir;
+    }).forEach(r => body.appendChild(r));
+  }));
+})();
+</script>
+{% endblock %}

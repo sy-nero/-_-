@@ -14,9 +14,9 @@ python3 --version
 ## שלב 2 — הורדת הקוד
 
 ```bash
-git clone https://github.com/egudgpt-ai/-_-.git egud-bot
+git clone https://github.com/sy-nero/-_-.git egud-bot
 cd egud-bot
-git checkout claude/new-bot-s467j3
+git checkout claude/agent-profile-recruitment-bykccn
 ```
 
 ## שלב 3 — התקנת תלויות
@@ -26,6 +26,10 @@ python3 -m venv .venv
 source .venv/bin/activate        # ב-Windows:  .venv\Scripts\activate
 pip install -r requirements.txt
 ```
+
+ההתקנה הזאת קלה ומהירה. `playwright` (הורדה של מאות מגה-בייט) הוצא לקובץ
+נפרד ונדרש **רק** לקמפיין הדרושים (`hr`):
+`pip install -r requirements-hr.txt`
 
 ## שלב 4 — יצירת קובץ .env
 
@@ -54,6 +58,42 @@ python main.py run
 python main.py stats             # כמה לידים נאספו ומה הסטטוס
 python main.py export leads.csv  # ייצוא כל הלידים (כולל בלי מייל) ל-CSV
 ```
+
+## קמפיין גיוס סוכנים (agent) — שליחה עם אישור
+
+```bash
+python main.py check  --campaign agent
+python main.py scan   --campaign agent --city jerusalem --target 50
+python main.py export --campaign agent agents.csv
+python main.py send   --campaign agent --limit 50 --confirm --variant a
+python main.py send   --campaign agent --limit 50 --confirm --variant b
+python main.py report --campaign agent
+```
+
+0. `check` — מראה מה מוגדר ומה חסר ב-.env (בלי להדפיס סיסמאות).
+1. `scan` — מוצא משרדים ותיקים, מאתר מייל, ומחפש המלצה אמיתית על כל אחד.
+2. `stats` / `export` — מה נאסף, ולבדוק את ההמלצות בעיניים לפני שליחה.
+3. `--variant a` — 50 נמענים מקבלים את נוסח הפנייה הראשונה.
+4. `--variant b` — 50 **נמענים אחרים** מקבלים את נוסח ההצעה. אין חפיפה.
+5. `report` — כמה נשלחו בכל נוסח וכמה השיבו, עם אחוזי תגובה.
+   לרישום תשובה: `python main.py replied --campaign agent <מייל> --note "טלפון"`
+
+> שימו לב: אל תדביקו לטרמינל שורות הערה שיש בהן מרכאה בודדת (למשל `רו"ח`) —
+> ב-zsh המרכאה פותחת מחרוזת והטרמינל נתקע ב-`dquote>`. הבלוקים כאן נקיים
+> ממרכאות בכוונה, כדי שאפשר יהיה להדביק אותם כמו שהם.
+
+בשלב 3 לכל מייל: `y` לשלוח, `n` לדלג, `q` לעצור הכול. מי שדולג נשאר ב-DB
+וניתן לשלוח אליו בהרצה אחרת. לפני הכול אפשר תמיד `--dry-run` בלי לשלוח דבר.
+
+## אפליקציית הקמפיינים
+
+```bash
+python webapp/app.py
+```
+
+ואז לפתוח http://localhost:5001 — לוח הקמפיינים, שליחה מתוכו, ומדידה
+אוטומטית של פניות, פתיחות ותשובות. למעקב פתיחות צריך למלא
+`TRACKING_BASE_URL` ב-.env בכתובת שנגישה מהאינטרנט.
 
 ## כמה טיפים חשובים
 

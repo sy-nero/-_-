@@ -1,0 +1,350 @@
+{% extends "base.html" %}
+{% block title %}{{ campaign['title'] }}{% endblock %}
+{% block body %}
+
+<div class="page-head">
+  <div>
+    <div class="crumb">{% if client %}<a href="{{ url_for('client_page', client_id=client['id']) }}">{{ client['name'] }}</a>{% else %}<a href="{{ url_for('board') }}">לוח בקרה</a>{% endif %} · קמפיין #{{ campaign['id'] }}
+      {% if campaign['started_on'] %} · {{ campaign['started_on'] }}{% endif %}</div>
+    <h1>{{ campaign['title'] }}</h1>
+    <div style="margin-top:6px; display:flex; gap:6px; align-items:center;">
+      <span class="pill is-{{ status[0] }}">{{ status[1] }}</span>
+      {% if campaign['kind'] != 'email' %}<span class="chip phone">שיחות טלפון</span>{% endif %}
+      {% if pending %}<span class="muted">{{ pending }} ממתינים לשליחה</span>{% endif %}
+    </div>
+  </div>
+  <div class="actions">
+    <button type="button" class="quiet" onclick="startTour()">סיור בעמוד</button>
+    <button type="button" class="ghost" data-tour="dup" onclick="document.getElementById('dupDialog').showModal()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>
+      שכפול</button>
+    {% if metrics.sent %}
+    <form method="post" action="{{ url_for('check_replies', campaign_id=campaign['id']) }}">
+      <button type="submit" class="ghost">בדיקת תשובות</button></form>
+    <a class="btn ghost" href="{{ url_for('segments_page', campaign=campaign['id'], min=1) }}">פילוח</a>
+    {% endif %}
+    <a class="btn ghost" data-tour="add" href="{{ url_for('add_recipients_page', campaign_id=campaign['id']) }}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+      הוספת נמענים</a>
+    <a class="btn" data-tour="send" href="{{ url_for('send_page', campaign_id=campaign['id']) }}">שליחה</a>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="label">נשלחו</div><div class="value">{{ metrics.sent }}</div>
+    <div class="note">{% if metrics.last_sent %}אחרון: {{ metrics.last_sent }}{% else %}&nbsp;{% endif %}</div></div>
+  <div class="stat"><div class="label">ממתינים</div><div class="value">{{ pending }}</div><div class="note">&nbsp;</div></div>
+  <div class="stat"><div class="label">נפתחו</div><div class="value">{{ metrics.opened }}</div><div class="note">{{ open_rate }}</div></div>
+  <div class="stat"><div class="label">לחצו</div><div class="value">{{ metrics.clicked or 0 }}</div><div class="note">{{ click_rate }}</div></div>
+  <div class="stat hi"><div class="label">השיבו</div><div class="value">{{ metrics.replied }}</div><div class="note">{{ reply_rate }}</div></div>
+  <div class="stat"><div class="label">חזרו</div><div class="value">{{ metrics.bounced or 0 }}</div><div class="note">{{ bounce_rate }}</div></div>
+</div>
+
+{% if ab %}
+<div class="card">
+  <div class="card-head"><h2>השוואת נוסחים</h2>
+    <span class="muted">{{ ab.verdict }}</span></div>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>נוסח</th><th>נושא</th><th class="num">נשלחו</th><th class="num">נפתחו</th>
+      <th class="num">לחצו</th><th class="num">השיבו</th><th class="num">חזרו</th></tr></thead>
+    <tbody>{% for arm in ab.arms %}
+      <tr class="{{ 'best' if arm.name == ab.winner }}">
+        <td><b>{{ arm.name }}</b>{% if arm.name == ab.winner %} <span class="pill is-done">מוביל</span>{% endif %}</td>
+        <td>{{ arm.subject }}</td>
+        <td class="num">{{ arm.sent }}</td>
+        <td class="num">{{ arm.opened }} <span class="muted">({{ arm.open_rate }}%)</span></td>
+        <td class="num">{{ arm.clicked }} <span class="muted">({{ arm.click_rate }}%)</span></td>
+        <td class="num"><b>{{ arm.replied }}</b> <span class="muted">({{ arm.reply_rate }}%)</span></td>
+        <td class="num">{{ arm.bounced }}</td>
+      </tr>{% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="muted" style="margin:10px 0 0;">המוביל נקבע לפי תשובות, ואם אין הבדל, לפי לחיצות.
+    לחיצות שנרשמו בדקה הראשונה אחרי השליחה (סורקי אבטחה) לא נספרות.</p>
+</div>
+{% endif %}
+
+<dialog id="dupDialog">
+  <form method="post" action="{{ url_for('campaign_duplicate', campaign_id=campaign['id']) }}">
+    <div class="d-head"><h2>שכפול הקמפיין</h2></div>
+    <div class="d-body">
+      <p class="muted" style="margin:0;">הקמפיין החדש יקבל את אותו נושא, נוסח, סרטון ותיבת שליחה, בלי נמענים.
+        מיד אחרי זה אפשר להעלות אליו קובץ.</p>
+      <label class="field"><span>שם הקמפיין החדש</span>
+        <input type="text" name="title" value="{{ campaign['title'] }} (עותק)" required></label>
+    </div>
+    <div class="d-foot"><button type="submit">שכפול</button>
+      <button type="button" class="ghost" onclick="this.closest('dialog').close()">ביטול</button></div>
+  </form>
+</dialog>
+
+<form method="post">
+<div class="card">
+  <h2>הגדרות</h2>
+  <p class="sub">מאיזה מאגר נשלחים המיילים ובאיזה נוסח.</p>
+  <div class="grid c3">
+    <label class="field"><span>שם הקמפיין</span>
+      <input type="text" name="title" value="{{ campaign['title'] }}"></label>
+    <label class="field"><span>תאריך</span>
+      <input type="text" name="started_on" value="{{ campaign['started_on'] or '' }}"></label>
+    <label class="field"><span>סוג</span>
+      <select name="kind">
+        <option value="email" {{ 'selected' if campaign['kind']=='email' }}>מיילים</option>
+        <option value="phone" {{ 'selected' if campaign['kind']=='phone' }}>שיחות טלפון</option>
+      </select></label>
+    <label class="field"><span>מאגר הלידים</span>
+      <input type="text" name="source_campaign" value="{{ campaign['source_campaign'] or '' }}"></label>
+    <label class="field"><span>נוסח</span>
+      <select name="variant">
+        <option value="" {{ 'selected' if not campaign['variant'] }}>כל הנוסחים</option>
+        <option value="a" {{ 'selected' if campaign['variant']=='a' }}>נוסח א׳ — פנייה ראשונה</option>
+        <option value="b" {{ 'selected' if campaign['variant']=='b' }}>נוסח ב׳ — ההצעה ישירות</option>
+      </select></label>
+  </div>
+</div>
+
+<div class="card" id="what">
+  {% if full_mode %}
+  <h2>מה לחפש ומה לשלוח</h2>
+  <p class="sub">
+    את החיפוש כותבים כמשפט אחד, בשפה רגילה. אפשר לציין תחום, עיר, כמות
+    ותנאי סף — ומה שלא נכתב יישאר בברירת המחדל (ירושלים, 50 נמענים,
+    לפחות 2 ביקורות ודירוג 4.0).
+  </p>
+  <label class="field"><span>מה לחפש</span>
+    <textarea name="search_query" id="search_query" style="min-height:70px;"
+      placeholder="תחפש עורכי דין מסחריים בירושלים עם לפחות 3 ביקורות, תביאי 30">{{ campaign['search_query'] or '' }}</textarea></label>
+  <p class="muted" style="margin:6px 0 16px;">
+    דוגמאות: <code>רואי חשבון בבני ברק</code> ·
+    <code>יועצים עסקיים באזור בית שמש, 20 נמענים, דירוג 4.5 ומעלה</code> ·
+    <code>תביא לי 15 סוכני ביטוח באלעד שיש להם לפחות 5 תגובות</code>
+  </p>
+  {% else %}
+  <h2>הנוסח</h2>
+  <p class="sub">הנושא והגוף שיוצאים לנמענים. אחרי שינוי לוחצים "שמירה" בתחתית העמוד.</p>
+  {% endif %}
+  <div class="grid c2" data-tour="copy">
+    <label class="field"><span>נושא המייל</span>
+      <input type="text" name="subject_tpl" placeholder="{{ '{{שם}}' }}, בקשר לשיתוף פעולה"
+             value="{{ campaign['subject_tpl'] or '' }}"></label>
+  </div>
+  <label class="field" style="margin-top:12px;"><span>גוף המייל</span>
+    <textarea name="body_tpl" style="min-height:170px;"
+      placeholder="היי {{ '{{שם_פרטי}}' }},&#10;&#10;מירי לודמיר, מנהלת סינרו טק - נעים להכיר.&#10;&#10;חיפשתי {{ '{{תחום}}' }} באזור {{ '{{עיר}}' }} ונתקלתי בך.&#10;&#10;תכתבו לי כאן את הטלפון שלכם ואחזור אליכם.">{{ campaign['body_tpl'] or '' }}</textarea></label>
+  <p class="muted" style="margin-top:8px;">
+    מציני מקום זמינים:
+    {% for key in placeholders %}<code>{{ '{{' }}{{ key }}{{ '}}' }}</code>{{ " · " if not loop.last }}{% endfor %}
+    — שורה ריקה בין פסקאות מפרידה פסקה במייל.
+  </p>
+  <details class="subsec" id="ab" data-tour="ab" {{ 'open' if campaign['subject_b'] or campaign['body_b'] }}>
+    <summary style="cursor:pointer; font-weight:700;">השוואת נוסחים (A/B)</summary>
+    <p class="muted" style="margin:8px 0 12px;">ממלאים כאן נוסח ב'. בשליחה הנמענים מתחלקים לבד חצי-חצי:
+      חצי מקבלים את הנוסח למעלה (A) וחצי את הנוסח כאן (B). שדה שנשאר ריק לוקח את הנוסח של A,
+      כך שאפשר לבדוק רק נושא, או רק גוף. התוצאות מופיעות בראש העמוד.</p>
+    <label class="field"><span>נושא המייל, נוסח B</span>
+      <input type="text" name="subject_b" value="{{ campaign['subject_b'] or '' }}"
+             placeholder="ריק = כמו נוסח A"></label>
+    <label class="field" style="margin-top:12px;"><span>גוף המייל, נוסח B</span>
+      <textarea name="body_b" style="min-height:140px;" placeholder="ריק = כמו נוסח A">{{ campaign['body_b'] or '' }}</textarea></label>
+  </details>
+</div>
+
+<div class="card">
+  <h2>פרטי הקמפיין</h2>
+  <p class="sub">
+    השורות בירוק מתמלאות לבד מהמיילים שנשלחו. אפשר להקליד בהן ערך ידני —
+    למשל לסבב שנשלח לפני שהאפליקציה הייתה, או לקמפיין טלפוני — והוא יגבר
+    על המדידה. למחיקת הערך הידני מרוקנים את השדה.
+  </p>
+  <div class="scroll">
+  <table class="sheet edit">
+    <colgroup><col class="label"><col><col><col></colgroup>
+    <thead><tr>
+      <th class="rowhead"></th>
+      <th>פרטים</th><th>הערות</th><th>המלצות לשיפור</th>
+    </tr></thead>
+    <tbody>
+    {% for field in text_fields %}
+    <tr>
+      <td class="rowhead">{{ field }}</td>
+      <td><textarea name="value::{{ field }}"
+            placeholder="{{ derived.get(field, '') }}">{{ fields[field].value }}</textarea></td>
+      <td><textarea name="note::{{ field }}">{{ fields[field].note }}</textarea></td>
+      <td><textarea name="improve::{{ field }}">{{ fields[field].improve }}</textarea></td>
+    </tr>
+    {% endfor %}
+    {% for field in auto_fields %}
+    <tr>
+      <td class="rowhead">{{ field }}</td>
+      <td class="auto">
+        <input type="text" name="value::{{ field }}" value="{{ fields[field].value }}"
+               style="text-align:center;">
+        <div class="muted" style="text-align:center; font-size:11.5px;">
+          {% if fields[field].manual %}ידני · נמדד {{ fields[field].measured }}
+          {% else %}נמדד אוטומטית{% endif %}</div></td>
+      <td><textarea name="note::{{ field }}">{{ fields[field].note }}</textarea></td>
+      <td><textarea name="improve::{{ field }}">{{ fields[field].improve }}</textarea></td>
+    </tr>
+    {% endfor %}
+    {% for field in manual_fields %}
+    <tr>
+      <td class="rowhead">{{ field }}</td>
+      <td><input type="text" name="value::{{ field }}" value="{{ fields[field].value }}"></td>
+      <td><textarea name="note::{{ field }}">{{ fields[field].note }}</textarea></td>
+      <td><textarea name="improve::{{ field }}">{{ fields[field].improve }}</textarea></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="actionbar">
+    <button type="submit">שמירה</button>
+    <span class="muted">השינויים נשמרים לכל השורות יחד.</span>
+  </div>
+</div>
+</form>
+
+{% if full_mode %}
+<div class="card" id="scan">
+  <h2>מה עושים עכשיו</h2>
+  {% if just_saved %}
+  <div class="saved">ההגדרות נשמרו. הצעד הבא: סריקה לפי התחום שכתבת.</div>
+  {% else %}
+  <p class="sub">שמרי קודם את ההגדרות למעלה, ואז בחרי פעולה.</p>
+  {% endif %}
+
+  <h3 class="step">1. חיפוש נמענים בגוגל</h3>
+  {% if parsed.terms %}
+  <form method="post" action="{{ url_for('campaign_scan', campaign_id=campaign['id']) }}">
+    <div class="prompt-read">
+      <span class="muted">הבנתי:</span>
+      {% for t in parsed.terms %}<span class="tag">{{ t }}</span>{% endfor %}
+      <span class="sep">·</span> {{ describe(parsed).split(' · ')[parsed.terms|length:]|join(' · ') }}
+    </div>
+    <div class="actionbar" style="border:0; padding-top:0; margin-top:12px;">
+      <button type="submit" {{ 'disabled' if busy }}>התחלת חיפוש</button>
+      <a href="#what" class="editlink" onclick="return editQuery()">שינוי מה שכתוב</a>
+      {% if run and run['status'] == 'running' %}
+      <span class="muted"><b>יש חיפוש שלא הסתיים</b> —
+        <a href="{{ url_for('scan_progress', campaign_id=campaign['id']) }}">להמשיך אותו</a>
+        ({{ run['progress'] or 0 }}%).</span>
+      {% endif %}
+    </div>
+  </form>
+  {% else %}
+  <div class="warn">
+    עוד לא כתבת מה לחפש.
+    <a href="#what" onclick="return editQuery()">לכתוב עכשיו</a> — ואחרי שמירה
+    יופיע כאן כפתור חיפוש.
+  </div>
+  {% endif %}
+
+  {% if pool_error %}
+  <div class="warn">
+    <b>מאגר הלידים לא נגיש, ולכן אי אפשר לדעת כמה מוכנים לשליחה.</b><br>
+    <code style="unicode-bidi:plaintext;">{{ pool_error }}</code>
+  </div>
+  {% endif %}
+
+  {% if run and run['status'] == 'running' %}
+  <div class="ready">
+    <div><b>…</b><span>החיפוש רץ עכשיו</span></div>
+    <a class="btn" href="{{ url_for('scan_progress', campaign_id=campaign['id']) }}">
+      לצפייה בהתקדמות</a>
+  </div>
+
+  {% elif run and ready %}
+  <div class="ready">
+    <div>
+      <b>{{ ready }}</b>
+      <span>{{ "נמענים מוכנים לשליחה" if ready != 1 else "נמען מוכן לשליחה" }}</span>
+    </div>
+    <a class="btn" href="{{ url_for('send_page', campaign_id=campaign['id']) }}">
+      לשליחה</a>
+  </div>
+  <p class="muted" style="margin:8px 0 0;">
+    אלה מי שיצאו מהחיפוש האחרון, יש להם מייל, ועדיין לא נשלח אליהם.
+    {% if pool %}
+    <details style="display:inline;">
+      <summary style="display:inline; cursor:pointer;">מספרים נוספים</summary>
+      <span>
+        {% for name, count in pool.items() %}{{ name }}: <b>{{ count }}</b>{{ " · " if not loop.last }}{% endfor %}
+        &middot;
+        <a href="{{ url_for('recipients_page', campaign_id=campaign['id']) }}">מי בדיוק</a>
+      </span>
+    </details>
+    {% endif %}
+  </p>
+
+  {% elif run %}
+  <p class="sub" style="margin-top:14px;">
+    החיפוש האחרון לא הוסיף נמענים חדשים עם כתובת מייל.
+    {% if pool and pool['ממתינים לשליחה'] %}
+    במאגר יש {{ pool['ממתינים לשליחה'] }} ממתינים מחיפושים קודמים —
+    <a href="{{ url_for('send_page', campaign_id=campaign['id'], all=1) }}">להציג אותם</a>.
+    {% endif %}
+  </p>
+
+  {% else %}
+  <p class="sub" style="margin-top:14px;">
+    עוד לא הרצת חיפוש בקמפיין הזה. אחרי החיפוש יופיע כאן כמה נמענים
+    יצאו ממנו, וכפתור לשליחה.
+    {% if pool and pool['ממתינים לשליחה'] %}
+    <br><span class="muted">(במאגר יש {{ pool['ממתינים לשליחה'] }} ממתינים מחיפושים
+    קודמים —
+    <a href="{{ url_for('send_page', campaign_id=campaign['id'], all=1) }}">להציג אותם</a>)</span>
+    {% endif %}
+  </p>
+  {% endif %}
+
+  <h3 class="step">2. או העלאת רשימה משלך</h3>
+  <p><a class="btn ghost" href="{{ url_for('add_recipients_page', campaign_id=campaign['id']) }}">העלאת קובץ נמענים</a>
+    <span class="muted">CSV או Excel, עם בדיקת כפילויות וכתובות</span></p>
+
+  <h3 class="step">3. ומה לעשות עם הרשימה</h3>
+  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+    <a class="btn" href="{{ url_for('send_page', campaign_id=campaign['id']) }}">
+      שליחת מיילים{% if ready %} ({{ ready }}){% endif %}</a>
+    <a class="btn ghost" href="{{ url_for('phones_page', campaign_id=campaign['id']) }}">
+      רשימת טלפונים</a>
+  </div>
+</div>
+
+{% endif %}
+
+<div class="card tight">
+  <form method="post" action="{{ url_for('campaign_delete', campaign_id=campaign['id']) }}"
+        onsubmit="return confirm('למחוק את הקמפיין? הנתונים שנמדדו יישארו במאגר הלידים.');">
+    <button type="submit" class="danger small">מחיקת הקמפיין</button>
+  </form>
+</div>
+
+<script>
+  // "שינוי התחום" — גלילה לשדה, מיקוד והדגשה קצרה, כדי שלא צריך לחפש אותו למעלה.
+  // מחזיר false כדי שניווט העוגן של הדפדפן לא יבטל את המיקוד.
+  function editQuery() {
+    var el = document.getElementById('search_query');
+    if (!el) return true;
+    var card = document.getElementById('what') || el;
+    card.scrollIntoView({behavior: 'smooth', block: 'center'});
+    el.focus({preventScroll: true});
+    el.select();
+    el.classList.add('flashfield');
+    setTimeout(function () { el.classList.remove('flashfield'); }, 1600);
+    return false;
+  }
+</script>
+{% endblock %}
+{% block scripts %}
+<script>
+window.TOUR = [
+  {el: '[data-tour=copy]', title: 'הנוסח', text: 'נושא וגוף המייל. מציני מקום כמו {{ '{{' }}שם_העסק{{ '}}' }} מתחלפים לכל נמען. שורה ריקה מפרידה בין פסקאות. בסוף לוחצים "שמירה" בתחתית הטבלה.'},
+  {el: '[data-tour=ab]', title: 'השוואת נוסחים', text: 'ממלאים כאן נוסח ב\', והשליחה מחלקת את הנמענים חצי-חצי לבד. התוצאות, ומי מוביל, מופיעות בראש העמוד.'},
+  {el: '[data-tour=add]', title: 'הוספת נמענים', text: 'גוררים קובץ CSV או Excel. הלוח בודק כפילויות, מי שכבר קיבל, ספקים ישנים ועוד, ומראה דוח של מה נכנס ולמה השאר לא.'},
+  {el: '[data-tour=send]', title: 'שליחה', text: 'בוחרים תיבה, מסמנים נמענים ושולחים. אפשר לפתוח כל שורה ולראות בדיוק את המייל שיצא. כדאי לשלוח קודם לכתובת בדיקה.'},
+  {el: '[data-tour=dup]', title: 'שכפול', text: 'קמפיין חדש עם אותו נוסח, סרטון ותיבה, בלי נמענים. הדרך המהירה להריץ שוב נוסח שעבד, לקהל חדש.'}
+];
+</script>
+{% endblock %}

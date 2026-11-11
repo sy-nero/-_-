@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+{% block title %}{{ client['name'] }}{% endblock %}
+{% block head %}
+<style>
+  .pkgs { display:grid; gap:10px; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); }
+  .pkg { border:1px solid var(--line-strong); border-radius:var(--radius-sm); padding:12px;
+         text-align:center; cursor:pointer; background:#fff; }
+  .pkg input { display:none; }
+  .pkg b { display:block; font-size:20px; }
+  .pkg span { font-size:12.5px; color:var(--muted); }
+  .pkg:has(input:checked) { border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent);
+                            background:var(--accent-soft); }
+  .stat.low .value { color:var(--bad); }
+</style>
+{% endblock %}
+{% block body %}
+<div class="page-head">
+  <div>
+    <div class="crumb"><a href="{{ url_for('clients_page') }}">לקוחות</a></div>
+    <h1>{{ client['name'] }}</h1>
+    {% if client['contact'] or client['email'] or client['phone'] %}
+    <div class="muted">{{ client['contact'] or '' }} {{ client['email'] or '' }} {{ client['phone'] or '' }}</div>
+    {% endif %}
+  </div>
+  <div class="actions">
+    <button type="button" class="danger" onclick="document.getElementById('delClient').showModal()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+      מחיקת לקוח</button>
+    <a class="btn ghost" href="{{ url_for('segments_page', client=client['id'], min=1) }}">פילוח</a>
+    <button type="button" class="ghost" onclick="document.getElementById('buy').showModal()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="13" rx="2"/><path d="M16 12.5h2M2 10h20"/></svg>
+      הוספה לארנק</button>
+    <button type="button" onclick="document.getElementById('newForClient').showModal()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+      קמפיין חדש</button>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat hi {{ 'low' if wallet.balance <= 0 }}"><div class="label">יתרה בארנק</div>
+    <div class="value">{{ '{:,}'.format(wallet.balance) }}</div><div class="note">מיילים שאפשר לשלוח</div></div>
+  <div class="stat"><div class="label">שולם</div><div class="value">₪{{ '{:,.0f}'.format(wallet.paid) }}</div>
+    <div class="note">{{ '{:,}'.format(wallet.bought) }} מיילים נרכשו</div></div>
+  <div class="stat"><div class="label">נשלחו</div><div class="value">{{ '{:,}'.format(wallet.sent) }}</div>
+    <div class="note">נגבו {{ '{:,}'.format(wallet.charged) }}</div></div>
+  <div class="stat"><div class="label">חזרו</div><div class="value">{{ wallet.bounced }}</div>
+    <div class="note">לא נגבו, חזרו לארנק</div></div>
+  <div class="stat"><div class="label">השיבו</div><div class="value">{{ totals.replied }}</div>
+    <div class="note">{{ totals.reply }}% מהנשלחים</div></div>
+  <div class="stat"><div class="label">לחצו</div><div class="value">{{ totals.clicked }}</div>
+    <div class="note">{{ totals.click }}% מהנשלחים</div></div>
+</div>
+
+<div class="card flush">
+  <div class="card-head"><h2>הקמפיינים של {{ client['name'] }}</h2>
+    <span class="muted spacer">בדיקת כפילויות נעשית רק מול הקמפיינים בתיקייה הזו</span></div>
+  {% if not columns %}
+    <div class="empty-state"><b>עוד אין קמפיינים</b>"קמפיין חדש" למעלה, או "שכפול" של קמפיין קיים.</div>
+  {% else %}
+  <div class="scroll" style="margin-top:12px;">
+  <table>
+    <thead><tr><th>קמפיין</th><th>מצב</th><th class="num">נשלחו</th><th class="num">ממתינים</th>
+      <th class="num">לחצו</th><th class="num">השיבו</th><th class="num">חזרו</th><th>שליחה אחרונה</th><th></th></tr></thead>
+    <tbody>
+    {% for col in columns|reverse %}{% set c = col.campaign %}{% set m = col.metrics %}
+      <tr>
+        <td class="title"><a href="{{ url_for('campaign_edit', campaign_id=c['id']) }}">{{ c['title'] }}</a>
+          <div class="meta">#{{ c['id'] }}{% if col.sender %} · {{ col.sender }}{% endif %}</div></td>
+        <td><span class="pill is-{{ col.status[0] }}">{{ col.status[1] }}</span></td>
+        <td class="num">{{ m.sent }}</td>
+        <td class="num">{{ col.pending or '' }}</td>
+        <td class="num">{% if m.sent %}{{ m.clicked or 0 }} <span class="muted">({{ col.click_rate }})</span>{% else %}—{% endif %}</td>
+        <td class="num">{% if m.sent %}<b>{{ m.replied }}</b> <span class="muted">{{ col.reply_exact }}%</span>{% else %}—{% endif %}</td>
+        <td class="num">{{ col.bounce_rate }}</td>
+        <td class="muted">{{ m.last_sent or '—' }}</td>
+        <td><div class="rowactions">
+          <a class="btn quiet small" href="{{ url_for('add_recipients_page', campaign_id=c['id']) }}">נמענים</a>
+          {% if col.pending %}<a class="btn small" href="{{ url_for('send_page', campaign_id=c['id']) }}">שליחה</a>{% endif %}
+        </div></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <div class="card-head"><h2>תיבות שליחה</h2>
+    <span class="muted">הקמפיינים של {{ client['name'] }} יוצאים רק מהתיבות שלו</span>
+    <a class="btn ghost small spacer" href="{{ url_for('senders_page', client=client['id']) }}">
+      {{ 'ניהול התיבות' if boxes else 'הוספת תיבה' }}</a></div>
+  {% if not boxes %}
+    <div class="warn" style="margin:0;"><b>ללקוח עוד אין תיבת שליחה,</b> ולכן אי אפשר לשלוח עבורו.
+      מוסיפים את תיבת ה-Gmail שלו עם סיסמת אפליקציה.</div>
+  {% else %}
+    {% for b in boxes %}
+      <span class="tag">{{ b['from_name'] or b['label'] or '' }} &lt;<span dir="ltr">{{ b['from_email'] }}</span>&gt;
+        {% if not b['smtp_password'] %}<span style="color:var(--bad);">חסרה סיסמה</span>{% endif %}</span>
+    {% endfor %}
+  {% endif %}
+</div>
+
+<div class="grid c2">
+  <div class="card">
+    <div class="card-head"><h2>תנועות בארנק</h2></div>
+    {% if not tx %}<p class="muted">עוד אין תנועות. "הוספה לארנק" למעלה.</p>{% else %}
+    <table>
+      <thead><tr><th>תאריך</th><th>סוג</th><th class="num">מיילים</th><th class="num">סכום</th><th>הערה</th><th></th></tr></thead>
+      <tbody>{% for t in tx %}
+        <tr><td class="muted">{{ (t['created_at'] or '')[:10] }}</td><td>{{ kinds.get(t['kind'], t['kind']) }}</td>
+          <td class="num">{{ '{:+,}'.format(t['emails']) }}</td><td class="num">₪{{ '{:,.0f}'.format(t['amount']) }}</td>
+          <td class="muted">{{ t['note'] or '' }}</td>
+          <td><form method="post" action="{{ url_for('client_wallet_delete', client_id=client['id'], tx_id=t['id']) }}"
+                    onsubmit="return confirm('למחוק את התנועה מהארנק?');"><button class="quiet small" type="submit">מחיקה</button></form></td></tr>
+      {% endfor %}</tbody>
+    </table>
+    {% endif %}
+    <p class="muted" style="margin:10px 0 0;">היתרה מחושבת כך: מיילים שנרכשו, פחות מיילים שנשלחו, ועוד מיילים שחזרו (לא נגבים).</p>
+  </div>
+  <details class="card">
+    <summary>פרטי הלקוח</summary>
+    <form method="post" class="grid" style="margin-top:12px;">
+      <label class="field"><span>שם</span><input type="text" name="name" value="{{ client['name'] }}"></label>
+      <label class="field"><span>איש קשר</span><input type="text" name="contact" value="{{ client['contact'] or '' }}"></label>
+      <div class="grid c2">
+        <label class="field"><span>מייל</span><input type="email" name="email" dir="ltr" value="{{ client['email'] or '' }}"></label>
+        <label class="field"><span>טלפון</span><input type="text" name="phone" dir="ltr" value="{{ client['phone'] or '' }}"></label>
+      </div>
+      <label class="field"><span>הערות</span><textarea name="notes">{{ client['notes'] or '' }}</textarea></label>
+      <div><button type="submit">שמירה</button></div>
+    </form>
+    <div class="subsec">
+      <button type="button" class="danger small" onclick="document.getElementById('delClient').showModal()">מחיקת הלקוח</button>
+    </div>
+  </details>
+</div>
+
+<dialog id="buy">
+  <form method="post" action="{{ url_for('client_wallet_add', client_id=client['id']) }}">
+    <div class="d-head"><h2>הוספה לארנק של {{ client['name'] }}</h2></div>
+    <div class="d-body">
+      <div class="seg" id="buyMode">
+        <button type="button" class="on" data-k="package">חבילה</button>
+        <button type="button" data-k="custom">כמות אחרת</button>
+        <button type="button" data-k="bonus">מתנה / תיקון</button>
+        <button type="button" data-k="refund">החזר</button>
+      </div>
+      <input type="hidden" name="kind" id="kind" value="package">
+      <div id="m-package" class="pkgs">
+        {% for e, p in packages %}
+        <label class="pkg"><input type="radio" name="package" value="{{ e }}:{{ p }}" {{ 'checked' if loop.first }}>
+          <b>{{ '{:,}'.format(e) }}</b><span>מיילים · ₪{{ '{:,.0f}'.format(p) }}</span><br>
+          <span>₪{{ '%.2f'|format(p / e) }} למייל</span></label>
+        {% endfor %}
+      </div>
+      <div id="m-custom" class="grid c2" hidden>
+        <label class="field"><span>מיילים</span><input type="number" name="emails" id="emails" min="0"></label>
+        <label class="field"><span>סכום ששולם (₪)</span><input type="number" name="amount" id="amount" min="0" step="0.01"></label>
+        <p class="muted" style="margin:0; grid-column:1/-1;" id="hint">מחיר למייל במחירון: ₪{{ '%.2f'|format(per_email) }}. הסכום מתמלא לבד ואפשר לשנות.</p>
+      </div>
+      <label class="field"><span>הערה (רשות)</span><input type="text" name="note" placeholder="למשל: שולם בהעברה בנקאית"></label>
+    </div>
+    <div class="d-foot"><button type="submit">רישום בארנק</button>
+      <button type="button" class="ghost" onclick="this.closest('dialog').close()">ביטול</button></div>
+  </form>
+</dialog>
+
+<dialog id="delClient">
+  <form method="post" action="{{ url_for('client_delete', client_id=client['id']) }}">
+    <div class="d-head"><h2>מחיקת {{ client['name'] }}</h2></div>
+    <div class="d-body">
+      <p style="margin:0;">יימחקו: התיקייה, {{ columns|length }} הקמפיינים שלו, הארנק
+        ({{ tx|length }} תנועות) ותיבות השליחה שלו כולל הסיסמאות. אי אפשר לבטל את זה.</p>
+      {% if wallet.balance > 0 %}
+      <div class="warn" style="margin:0;">בארנק נשארו <b>{{ wallet.balance }}</b> מיילים ששולמו ולא נוצלו.</div>
+      {% endif %}
+      <p class="muted" style="margin:0;">רשימות הנמענים נשארות במאגר, כדי שלא יישלח פעמיים לאותם אנשים.</p>
+      <label class="field"><span>להקליד את שם הלקוח כדי לאשר</span>
+        <input type="text" name="confirm" placeholder="{{ client['name'] }}" required autocomplete="off"></label>
+    </div>
+    <div class="d-foot"><button type="submit" class="danger">מחיקה סופית</button>
+      <button type="button" class="ghost" onclick="this.closest('dialog').close()">ביטול</button></div>
+  </form>
+</dialog>
+
+<dialog id="newForClient">
+  <form method="post" action="{{ url_for('campaign_new') }}">
+    <input type="hidden" name="client_id" value="{{ client['id'] }}">
+    <div class="d-head"><h2>קמפיין חדש ל{{ client['name'] }}</h2></div>
+    <div class="d-body">
+      <label class="field"><span>שם הקמפיין</span><input type="text" name="title" required></label>
+      <input type="hidden" name="kind" value="email">
+      <p class="muted" style="margin:0;">אחרי היצירה כותבים נוסח ומעלים קובץ נמענים. התיבה שממנה שולחים
+        נבחרת בעמוד השליחה (אפשר להוסיף את התיבה של הלקוח בעמוד "תיבות שליחה").</p>
+    </div>
+    <div class="d-foot"><button type="submit">יצירה</button>
+      <button type="button" class="ghost" onclick="this.closest('dialog').close()">ביטול</button></div>
+  </form>
+</dialog>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const per = {{ per_email }};
+  const kind = document.getElementById('kind'), pkg = document.getElementById('m-package'),
+        custom = document.getElementById('m-custom'), emails = document.getElementById('emails'),
+        amount = document.getElementById('amount'), hint = document.getElementById('hint');
+  document.querySelectorAll('#buyMode button').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('#buyMode button').forEach(x => x.classList.remove('on'));
+    b.classList.add('on'); kind.value = b.dataset.k;
+    pkg.hidden = b.dataset.k !== 'package'; custom.hidden = b.dataset.k === 'package';
+    hint.hidden = b.dataset.k !== 'custom';
+    if (b.dataset.k === 'bonus') amount.value = 0;
+  }));
+  emails.addEventListener('input', () => {
+    if (kind.value === 'custom') amount.value = Math.round((parseInt(emails.value) || 0) * per);
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,10 @@
+.venv
+__pycache__
+*.pyc
+data/*.db
+docs
+assets
+landing
+Dockerfile
+render.yaml
+requirements-hr.txt
