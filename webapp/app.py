@@ -1729,6 +1729,100 @@ def page_leads_page():
     return render_template("page_leads.html", leads=leads, titles=titles)
 
 
+# ---------------------------- מייל המשך ----------------------------
+FOLLOWUP_BODY = (
+    "שלום {{שם}},\n\n"
+    "כתבתי לכם לפני כמה ימים, ורציתי לוודא שהמייל לא נבלע בין כל השאר.\n\n"
+    "אם זה רלוונטי ל{{שם_העסק}}, מספיק לענות \"כן\" ואחזור אליכם. ואם זה לא מתאים "
+    "כרגע, גם זה בסדר, ולא אכתוב שוב בנושא.\n\n"
+    "בברכה,\n{{שולח}}\n\n"
+    "לא מעוניינים לקבל מאיתנו פניות נוספות? השיבו \"הסר\" ולא נפנה אליכם שוב.")
+
+
+def followup_candidates(campaign, mode: str = "engaged") -> list:
+    """
+    מי שקיבל את הקמפיין ולא ענה. בלי מי שביקש הסרה, מי שהמייל אליו חזר,
+    מי שהשאיר פרטים בעמוד הנחיתה, וכתובות בדיקה.
+    mode="engaged": רק מי שפתח או לחץ. mode="all": כל מי שלא ענה.
+    """
+    st = leads_store(_col(campaign, "source_campaign"))
+    if not st:
+        return []
+    with st._conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM {leads} WHERE status='emailed' AND email IS NOT NULL AND email!='' "
+            "AND (replied_at IS NULL OR replied_at='') AND (bounced_at IS NULL OR bounced_at='') "
+            "AND COALESCE(primary_type,'') != 'בדיקה פנימית'").fetchall()
+    unsub = st.unsubscribed_emails()
+    try:
+        bounced = st.bounced_any_campaign()
+    except Exception:  # noqa: BLE001
+        bounced = set()
+    try:
+        left = page_lead_store().tracks_for(campaign["id"])
+    except Exception:  # noqa: BLE001
+        left = set()
+    out, seen = [], set()
+    for r in rows:
+        e = (r["email"] or "").strip().lower()
+        if e in seen or e in unsub or e in bounced:
+            continue
+        if _col(r, "track_id") and _col(r, "track_id") in left:
+            continue
+        if mode == "engaged" and not (_col(r, "opened_at") or _col(r, "clicked_at")):
+            continue
+        seen.add(e)
+        out.append(r)
+    return out
+
+
+@app.route("/campaign/<int:campaign_id>/followup", methods=["POST"])
+def campaign_followup(campaign_id):
+    """
+    פותח קמפיין המשך עם מי שלא ענה, באותו נושא ומאותה תיבה. לא שולח כלום:
+    בודקים את הנוסח ושולחים מעמוד השליחה של הקמפיין החדש. ההעתקה עוקפת
+    את בדיקת "כבר קיבל מאיתנו מייל" בכוונה: זה בדיוק מי שמקבל מייל המשך.
+    """
+    campaign = store.get(campaign_id)
+    if not campaign:
+        return redirect(url_for("board"))
+    marker = f"(המשך ל-#{campaign_id})"
+    for c in store.all():
+        if marker in (c["title"] or ""):
+            flash("כבר יש מייל המשך לקמפיין הזה. הנה הוא.")
+            return redirect(url_for("campaign_edit", campaign_id=c["id"]))
+    mode = "all" if request.form.get("mode") == "all" else "engaged"
+    leads = followup_candidates(campaign, mode)
+    if not leads:
+        flash("אין למי לשלוח מייל המשך: כל מי שפתח או לחץ כבר ענה, או שעוד לא נשלח כלום.")
+        return redirect(url_for("send_page", campaign_id=campaign_id))
+    who = "פתחו או לחצו ולא ענו" if mode == "engaged" else "לא ענו"
+    cid = store.create(f"מייל המשך: {campaign['title']} {marker}", kind=_col(campaign, "kind") or "email")
+    store.update(cid, source_campaign=f"c{cid}", subject_tpl=_col(campaign, "subject_tpl"),
+                 body_tpl=FOLLOWUP_BODY, sender_id=_col(campaign, "sender_id"),
+                 client_id=_col(campaign, "client_id") or "")
+    new = store.get(cid)
+    source = _ensure_source(new)
+    st = Storage(leads_db_path(source), campaign=source)
+    now = datetime.utcnow().isoformat() + "+00:00"
+    batch = [(f"followup{campaign_id}:{(_col(l, 'email') or '').lower()}", _col(l, "name"),
+              _col(l, "address"), _col(l, "phone"), _col(l, "website"), _col(l, "email"),
+              _col(l, "specialty") or "", _col(l, "first_name") or "-", _col(l, "primary_type"),
+              _col(l, "intro_how") or "", now) for l in leads]
+    with st._conn() as conn:
+        for i in range(0, len(batch), 9):      # D1: עד 100 משתנים בשאילתה
+            chunk = batch[i:i + 9]
+            conn.execute(
+                "INSERT INTO {leads} (place_id,name,address,phone,website,email,specialty,"
+                "first_name,primary_type,intro_how,lat,lng,review_count,status,source,found_at) VALUES "
+                + ",".join(["(?,?,?,?,?,?,?,?,?,?,0,0,0,'found','manual',?)"] * len(chunk))
+                + " ON CONFLICT(place_id) DO NOTHING",
+                [v for t in chunk for v in t])
+    flash(f"נפתח מייל המשך ל-{len(leads)} נמענים שקיבלו את הקמפיין, {who}. "
+          "כדאי לעבור על הנוסח, לשלוח קודם לכתובת בדיקה, ורק אז לכולם.")
+    return redirect(url_for("campaign_edit", campaign_id=cid))
+
+
 # ---------------------------- תיבות שליחה ----------------------------
 @app.route("/senders", methods=["GET", "POST"])
 def senders_page():
