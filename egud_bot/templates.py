@@ -542,6 +542,10 @@ PLACEHOLDERS = {
     "התמחות": "specialty",
     # איפה מצאנו את העסק, מהעמודה "איפה מצאנו" בקובץ הנמענים
     "מקור": "found_where",
+    # משפט פתיחה אישי שנכתב לכל נמען בנפרד (עמודה "פתיח" בקובץ)
+    "פתיח": "opening",
+    # איפה העסק מפרסם ("מהב", "קו עיתונות"), מהעמודה "איפה מפרסם"
+    "מקום_פרסום": "ad_place",
 }
 
 _PLACEHOLDER_RE = re.compile(r"\{\{?\s*([^{}]+?)\s*\}?\}")
@@ -549,7 +553,8 @@ _PLACEHOLDER_RE = re.compile(r"\{\{?\s*([^{}]+?)\s*\}?\}")
 
 def custom_values(business_name="", first_name="", field="", neighborhood="",
                   area="", rec=None, sender_name="", contact_email="",
-                  website="", profession_hint="", specialty="", intro_how="", **_) -> dict:
+                  website="", profession_hint="", specialty="", intro_how="",
+                  intro_fact="", intro_why="", **_) -> dict:
     """
     הערכים שמוזרקים לנוסח מותאם, מנתוני הליד.
 
@@ -581,13 +586,15 @@ def custom_values(business_name="", first_name="", field="", neighborhood="",
         # _tidy מוחק את הרווח שנשאר, ולא נשלח משפט קטוע.
         "specialty": specialty,
         "found_where": (intro_how or "").strip(),
+        "opening": (intro_fact or "").strip(),
+        "ad_place": (intro_why or "").strip(),
     }
 
 
 #: מציינים שעשויים להיות ריקים לנמען מסוים: לא לכל אחד יש אתר עם תיאור,
 #: ולא לכל אחד יש ביקורות. שורה שנשענת על אחד מהם ונשארה בלעדיו נמחקת
 #: כולה -- אחרת הנמען מקבל 'ראיתי באתר שלך: "".'
-OPTIONAL_FIELDS = {"specialty", "review_count", "rating"}
+OPTIONAL_FIELDS = {"specialty", "review_count", "rating", "opening"}
 
 #: תו פנימי שמסמן "כאן היה מציין רשות שלא התמלא". לא מופיע בטקסט אמיתי.
 _DROP_MARK = "\uf8ff"

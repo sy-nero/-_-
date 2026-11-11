@@ -36,6 +36,10 @@ COLUMNS = {
     # איפה מצאנו את העסק ("אינדקס העסקים של מודיעין עילית"), ל-{{מקור}} בנוסח
     "found_where": ("איפה מצאנו", "איפה_מצאנו", "מקור_פנייה", "מקור הפנייה", "נמצא ב",
                     "found_where", "found at"),
+    # משפט פתיחה אישי לכל נמען, ל-{{פתיח}} בנוסח
+    "opening": ("פתיח", "משפט פתיחה", "משפט_פתיחה", "opening"),
+    # איפה העסק מפרסם, ל-{{מקום_פרסום}} בנוסח
+    "ad_place": ("איפה מפרסם", "מקום פרסום", "מקום_פרסום", "ad_place"),
 }
 
 #: תיבות שלא מגיעות למי שמחליט בעסק
@@ -268,16 +272,18 @@ def import_contacts(storage, rows: list[dict], prefix: str, known: dict,
         first = get("first_name") or "-"
         batch.append((f"{prefix}:{email}", name, get("city"), get("phone"),
                       get("website"), email, "", first,
-                      get("group") or default_group, get("found_where"), now))
+                      get("group") or default_group, get("found_where"),
+                      get("opening"), get("ad_place"), now))
         added.append({"name": name, "email": email, "group": get("group") or default_group})
 
     with storage._conn() as conn:
-        for i in range(0, len(batch), 9):      # D1: עד 100 משתנים בשאילתה
-            chunk = batch[i:i + 9]
+        for i in range(0, len(batch), 7):      # D1: עד 100 משתנים בשאילתה
+            chunk = batch[i:i + 7]
             conn.execute(
                 "INSERT INTO {leads} (place_id,name,address,phone,website,email,specialty,"
-                "first_name,primary_type,intro_how,lat,lng,review_count,status,source,found_at) VALUES "
-                + ",".join(["(?,?,?,?,?,?,?,?,?,?,0,0,0,'found','manual',?)"] * len(chunk))
+                "first_name,primary_type,intro_how,intro_fact,intro_why,lat,lng,review_count,status,"
+                "source,found_at) VALUES "
+                + ",".join(["(?,?,?,?,?,?,?,?,?,?,?,?,0,0,0,'found','manual',?)"] * len(chunk))
                 + " ON CONFLICT(place_id) DO NOTHING",
                 [v for t in chunk for v in t])
         updated = 0
