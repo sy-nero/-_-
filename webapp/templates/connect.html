@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}חיבור לשיחת החיפוש{% endblock %}
+{% block head %}
+<style>
+  pre.copy { background:#16191d; color:#e8e8e3; padding:14px 16px; border-radius:var(--radius-sm);
+             white-space:pre-wrap; word-break:break-word; direction:ltr; text-align:left;
+             font-size:12.5px; line-height:1.6; margin:0; }
+  .tokenbox { display:flex; gap:8px; align-items:center; }
+  .tokenbox input { direction:ltr; font-family:monospace; }
+</style>
+{% endblock %}
+{% block body %}
+<div class="page-head">
+  <div><div class="crumb">סינרו · ניהול קמפיינים</div><h1>חיבור לשיחת החיפוש</h1></div>
+</div>
+
+<div class="card">
+  <h2>איך זה עובד</h2>
+  <p class="sub" style="margin-bottom:0;">שיחת החיפוש ב-Claude מוצאת עסקים, ובסוף שולחת את הרשימה לכתובת של הלוח.
+    הרשימה עוברת את כל הבדיקות של העלאת קובץ (כפילויות, מי שכבר קיבל, ספקים ישנים)
+    ומופיעה בקמפיין שבחרת, מוכנה לשליחה. מעתיקים את ההנחיה למטה לשיחת החיפוש פעם אחת.</p>
+</div>
+
+<div class="card">
+  <div class="card-head"><h2>המפתח</h2>
+    <span class="muted spacer">כמו סיסמה: לא משתפים אותו מחוץ לשיחת החיפוש</span></div>
+  <div class="tokenbox">
+    <input type="password" id="token" value="{{ token }}" readonly>
+    <button type="button" class="ghost" onclick="const t=document.getElementById('token'); t.type=t.type==='password'?'text':'password';">הצגה</button>
+    <form method="post" onsubmit="return confirm('ליצור מפתח חדש? הישן יפסיק לעבוד.');">
+      <button type="submit" class="ghost">מפתח חדש</button></form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head"><h2>ההנחיה לשיחת החיפוש</h2>
+    <button type="button" class="ghost spacer" onclick="navigator.clipboard.writeText(document.getElementById('prompt').innerText); this.textContent='הועתק';">העתקה</button></div>
+  <pre class="copy" id="prompt">כשאת/ה מסיימ/ת חיפוש של עסקים, שלח/י את התוצאות ישר ללוח הקמפיינים, במקום להחזיר לי קובץ.
+
+1. קודם בודקים לאיזה קמפיין לשלוח:
+curl -s {{ base }}/api/campaigns -H "Authorization: Bearer {{ token }}"
+
+2. שולחים את הרשימה (JSON), עם מספר הקמפיין שאמרתי לך:
+curl -s -X POST {{ base }}/api/import \
+  -H "Authorization: Bearer {{ token }}" \
+  -H "Content-Type: application/json" \
+  -d '{"campaign_id": 40, "group": "אולמות אירועים",
+       "rows": [{"name": "שם העסק", "email": "mail@example.com", "phone": "050-0000000",
+                 "city": "ירושלים", "first_name": "", "group": "אולמות אירועים"}]}'
+
+שדות: name, email (חובה), phone, city, first_name, group.
+אפשר גם לשלוח CSV שלם: {"campaign_id": 40, "csv": "שם,מייל,טלפון\n..."}
+
+3. התשובה אומרת כמה נוספו, כמה לא ולמה. תמסור/י לי את הסיכום.
+אם לא אמרתי לאיזה קמפיין, תשאל/י אותי לפני השליחה.</pre>
+</div>
+
+<div class="card">
+  <h2>מספרי הקמפיינים</h2>
+  <p class="sub">את המספר אומרים לשיחת החיפוש ("תשלחי לקמפיין 40").</p>
+  <table>
+    <thead><tr><th class="num">מספר</th><th>קמפיין</th><th>לקוח</th></tr></thead>
+    <tbody>{% for c in campaigns|reverse %}
+      <tr><td class="num"><b>{{ c['id'] }}</b></td><td>{{ c['title'] }}</td>
+        <td class="muted">{{ clients.get(client_of(c), '') if client_of(c) else 'שלנו' }}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+</div>
+{% endblock %}

@@ -6,12 +6,18 @@ import ssl
 import smtplib
 import logging
 import mimetypes
+import re
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
 from email.utils import formataddr
 
 logger = logging.getLogger(__name__)
+
+#: תמונות שנוסח הקמפיין מטמיע (![](שם_קובץ)) נשמרות כאן ונשלחות בתוך המייל
+MEDIA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                         "assets", "campaign_media")
+_CID_RE = re.compile(r'src="cid:([\w.-]+)"')
 
 
 class Mailer:
@@ -77,9 +83,21 @@ class Mailer:
         img.add_header("Content-Disposition", "inline", filename="logo")
         root.attach(img)
 
+    def _attach_media(self, root: MIMEMultipart, html_body: str) -> None:
+        for name in dict.fromkeys(_CID_RE.findall(html_body)):
+            path = os.path.join(MEDIA_DIR, name)
+            if name == "logo" or not os.path.isfile(path):
+                continue
+            ctype, _ = mimetypes.guess_type(path)
+            with open(path, "rb") as f:
+                img = MIMEImage(f.read(), _subtype=(ctype or "image/png").split("/")[-1])
+            img.add_header("Content-ID", f"<{name}>")
+            img.add_header("Content-Disposition", "inline", filename=name)
+            root.attach(img)
+
     def send(self, to_email: str, subject: str, html_body: str, text_body: str) -> None:
         if not self._server:
-            raise RuntimeError("Mailer לא מחובר — יש לקרוא ל-connect() תחילה")
+            raise smtplib.SMTPServerDisconnected("Mailer לא מחובר")
 
         # מבנה: related( alternative(text, html), logo-image )
         root = MIMEMultipart("related")
@@ -96,6 +114,15 @@ class Mailer:
         # מטמיעים לוגו רק אם ה-HTML מפנה אליו (mail אישי הוא ללא לוגו)
         if "cid:logo" in html_body:
             self._attach_logo(root)
+        self._attach_media(root, html_body)
 
-        self._server.sendmail(self.from_email, [to_email], root.as_string())
+        try:
+            self._server.sendmail(self.from_email, [to_email], root.as_string())
+        except smtplib.SMTPServerDisconnected:
+            # Gmail סוגר חיבור שעבד הרבה זמן. בלי זה כל המיילים אחרי הניתוק
+            # נכשלו ("please run connect() first") ונרשמו כמיילים שחזרו.
+            logger.info("החיבור ל-SMTP נסגר, מתחבר מחדש")
+            self.close()
+            self.connect()
+            self._server.sendmail(self.from_email, [to_email], root.as_string())
         logger.info("מייל נשלח אל %s", to_email)

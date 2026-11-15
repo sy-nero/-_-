@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>רנטגן עסקי | איגוד העסקים החרדיים</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root { --navy:#16233c; --navy-2:#24365a; --gold:#f2c230; --ink:#1d2433; --muted:#5d6678;
+          --line:#e3e6ec; --bg:#f6f4ee; --ok:#14634f; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:Heebo, Arial, sans-serif; background:var(--bg); color:var(--ink);
+         line-height:1.6; }
+  .wrap { max-width:520px; margin:0 auto; padding:20px 16px 40px; }
+  .brand { text-align:center; font-weight:800; color:var(--navy); letter-spacing:.3px;
+           font-size:15px; margin-bottom:14px; }
+  .brand span { display:block; font-weight:500; font-size:12px; color:var(--muted); }
+  .card { background:#fff; border-radius:16px; box-shadow:0 10px 34px rgba(22,35,60,.10);
+          overflow:hidden; }
+  .hero { background:var(--navy); color:#fff; padding:24px 22px 20px; }
+  .tag { display:inline-block; background:var(--gold); color:var(--navy); font-weight:700;
+         font-size:13px; border-radius:999px; padding:3px 12px; margin-bottom:10px; }
+  h1 { margin:0 0 8px; font-size:28px; line-height:1.25; font-weight:800; }
+  .sub { margin:0; font-size:17px; color:#dfe5f1; }
+  .sub b { color:var(--gold); }
+  .media img { display:block; width:100%; height:auto; }
+  .body { padding:20px 22px 24px; }
+  ul.points { list-style:none; margin:0 0 14px; padding:0; }
+  ul.points li { position:relative; padding:6px 30px 6px 0; font-size:16.5px; }
+  ul.points li::before { content:""; position:absolute; right:0; top:11px; width:20px; height:20px;
+         border-radius:50%; background:var(--ok); }
+  ul.points li::after { content:""; position:absolute; right:7px; top:15px; width:5px; height:9px;
+         border:solid #fff; border-width:0 2px 2px 0; transform:rotate(45deg); }
+  .who { font-size:14.5px; color:var(--muted); border-top:1px solid var(--line); padding-top:12px;
+         margin:0 0 18px; }
+  label { display:block; font-weight:600; font-size:15px; margin:12px 0 6px; }
+  label small { font-weight:400; color:var(--muted); }
+  input, select { width:100%; font:inherit; font-size:17px; padding:12px 14px; border:1px solid #cfd5df;
+         border-radius:10px; background:#fff; color:var(--ink); }
+  input:focus, select:focus { outline:2px solid var(--navy-2); border-color:var(--navy-2); }
+  .hp { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0);
+        clip-path:inset(50%); white-space:nowrap; }
+  html, body { overflow-x:hidden; }
+  button { width:100%; margin-top:18px; font:inherit; font-size:19px; font-weight:800; color:var(--navy);
+           background:var(--gold); border:0; border-radius:12px; padding:15px; cursor:pointer;
+           box-shadow:0 6px 18px rgba(242,194,48,.45); }
+  button:active { transform:translateY(1px); }
+  .after { text-align:center; font-size:14px; color:var(--muted); margin:10px 0 0; }
+  .err { background:#fdeceb; color:#a3271c; border-radius:10px; padding:10px 12px; margin:6px 0 0;
+         font-size:15px; }
+  .done { text-align:center; padding:34px 22px 38px; }
+  .done .check { width:64px; height:64px; border-radius:50%; background:var(--ok); margin:0 auto 14px;
+         position:relative; }
+  .done .check::after { content:""; position:absolute; left:24px; top:14px; width:13px; height:26px;
+         border:solid #fff; border-width:0 4px 4px 0; transform:rotate(45deg); }
+  .done h2 { margin:0 0 6px; font-size:24px; color:var(--navy); }
+  .done p { margin:0; color:var(--muted); font-size:16.5px; }
+  .foot { text-align:center; font-size:12.5px; color:var(--muted); margin-top:16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">איגוד העסקים החרדיים<span>הקרן למצוינות עסקית</span></div>
+  <div class="card">
+    {% if done %}
+    <div class="done">
+      <div class="check"></div>
+      <h2>תודה! קיבלנו את הפרטים</h2>
+      <p>ברכה תחזור אליכם תוך יום עסקים.</p>
+    </div>
+    {% else %}
+    <div class="hero">
+      <div class="tag">15 מקומות החודש</div>
+      <h1>רנטגן עסקי עם מומחה האיגוד</h1>
+      <p class="sub">האיגוד מממן <b>40%</b> מעלות האבחון.</p>
+    </div>
+    <div class="media">
+      <img src="https://raw.githubusercontent.com/sy-nero/-_-/claude/agent-profile-recruitment-bykccn/assets/campaign_media/xray_diagnosis.gif"
+           alt="רנטגן עסקי: מזהים בדיוק מה חוסם את הצמיחה של העסק" width="480">
+    </div>
+    <div class="body">
+      <ul class="points">
+        <li>פגישה של שעה וחצי על העסק שלכם</li>
+        <li>איפה הכסף נתקע: במחיר, במכירות, בלקוחות או בתזרים</li>
+        <li>מפת דרכים ברורה מה לשנות, צעד אחרי צעד</li>
+      </ul>
+      <p class="who">את האבחון מעביר מומחה האיגוד, לשעבר מנהל מחלקת העסקים במסיל"ה, שליווה מאות עסקים.</p>
+
+      <form method="post" action="{{ url_for('xray_page') }}" novalidate>
+        <input type="hidden" name="c" value="{{ c }}">
+        <input type="hidden" name="t" value="{{ t }}">
+        <div class="hp" aria-hidden="true"><label>אתר<input name="website" tabindex="-1" autocomplete="off"></label></div>
+        {% if error %}<div class="err">{{ error }}</div>{% endif %}
+        <label for="name">שם מלא</label>
+        <input id="name" name="name" required autocomplete="name" value="{{ form.get('name','') }}">
+        <label for="phone">טלפון</label>
+        <input id="phone" name="phone" type="tel" inputmode="tel" required autocomplete="tel"
+               placeholder="050-0000000" value="{{ form.get('phone','') }}" dir="ltr" style="text-align:right;">
+        <label for="topic">מה הכי מעסיק אתכם בעסק כרגע? <small>(לא חובה)</small></label>
+        <select id="topic" name="topic">
+          <option value="">בחירה</option>
+          {% for tp in topics %}<option {{ 'selected' if form.get('topic') == tp }}>{{ tp }}</option>{% endfor %}
+        </select>
+        <button type="submit">בדקו אם העסק שלי מתאים</button>
+        <p class="after">ברכה תחזור אליכם תוך יום עסקים.</p>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+  <div class="foot">איגוד העסקים החרדיים · הסבסוד מיועד לחברי האיגוד, וההצטרפות ללא תשלום</div>
+</div>
+</body>
+</html>

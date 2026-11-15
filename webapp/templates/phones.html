@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}טלפונים — {{ campaign['title'] }}{% endblock %}
+{% block body %}
+
+<div class="card">
+  <h2>{{ campaign['title'] }} — רשימת טלפונים</h2>
+  <p class="sub">
+    {{ leads|length }} אנשי קשר עם טלפון. מי שאין לו מייל מופיע ראשון — אליו
+    אין דרך אחרת לפנות.
+  </p>
+  <a class="btn" href="{{ url_for('phones_csv', campaign_id=campaign['id']) }}">
+    הורדה לאקסל</a>
+  <a class="btn ghost" href="{{ url_for('campaign_edit', campaign_id=campaign['id']) }}">
+    חזרה לקמפיין</a>
+</div>
+
+<div class="card">
+  {% if not leads %}
+    <p class="muted">אין עדיין אנשי קשר עם טלפון. אפשר לחפש בגוגל או להעלות
+      רשימה מעמוד הקמפיין.</p>
+  {% else %}
+  <div class="scroll">
+    <table class="sheet">
+      <thead><tr>
+        <th>שם</th><th>טלפון</th><th>אזור</th><th>ביקורות</th><th>דירוג</th><th>מייל</th>
+      </tr></thead>
+      <tbody>
+      {% for lead in leads %}
+        <tr>
+          <td><b>{{ lead['name'] }}</b></td>
+          <td class="remail">{{ lead['phone'] }}</td>
+          <td>{{ lead['neighborhood'] }}</td>
+          <td class="num">{{ lead['review_count'] }}</td>
+          <td class="num">{{ lead['rating'] or '—' }}</td>
+          <td class="remail">{{ lead['email'] or '—' }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

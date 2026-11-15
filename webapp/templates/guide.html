@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+{% block title %}מדריך{% endblock %}
+{% block head %}
+<style>
+  .guide { display:grid; grid-template-columns:220px minmax(0,1fr); gap:28px; align-items:start; }
+  .toc { position:sticky; top:20px; background:var(--surface); border:1px solid var(--line);
+         border-radius:var(--radius); padding:14px 10px; }
+  .toc b { display:block; font-size:12px; color:var(--muted); padding:0 8px 6px; }
+  .toc a { display:block; padding:5px 8px; border-radius:6px; color:var(--ink-2);
+           text-decoration:none; font-size:13.5px; }
+  .toc a:hover { background:var(--sunken); color:var(--ink); }
+  .toc a i { font-style:normal; color:var(--muted); display:inline-block; width:20px; }
+  section.g { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+              padding:22px 26px; margin-bottom:16px; scroll-margin-top:16px; }
+  section.g h2 { font-size:19px; margin:0 0 4px; display:flex; align-items:center; gap:10px; }
+  section.g h2 .n { width:28px; height:28px; border-radius:8px; background:var(--accent-soft);
+                    color:var(--accent); display:grid; place-items:center; font-size:14px; flex:none; }
+  section.g .lead { color:var(--ink-2); margin:0 0 14px; }
+  section.g h3 { font-size:14.5px; margin:18px 0 8px; }
+  ol.steps { list-style:none; counter-reset:s; padding:0; margin:0; display:grid; gap:10px; }
+  ol.steps li { counter-increment:s; position:relative; padding-inline-start:38px; line-height:1.7; }
+  ol.steps li::before { content:counter(s); position:absolute; inset-inline-start:0; top:1px;
+                        width:24px; height:24px; border-radius:50%; background:var(--accent);
+                        color:#fff; font-size:12.5px; font-weight:700; display:grid; place-items:center; }
+  .ui { display:inline-block; background:var(--sunken); border:1px solid var(--line-strong);
+        border-radius:6px; padding:0 7px; font-size:12.5px; font-weight:600; color:var(--ink); white-space:nowrap; }
+  .ui.go { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .tip { background:var(--accent-soft); border:1px solid #c6dfd5; border-radius:var(--radius-sm);
+         padding:10px 14px; margin-top:12px; font-size:13.5px; }
+  .tip b { color:var(--accent); }
+  .caution { background:var(--warn-bg); border:1px solid var(--warn-line); border-radius:var(--radius-sm);
+             padding:10px 14px; margin-top:12px; font-size:13.5px; color:var(--warn-ink); }
+  .flow { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:6px 0 4px; }
+  .flow span { background:var(--sunken); border:1px solid var(--line); border-radius:99px;
+               padding:4px 12px; font-size:13px; font-weight:600; }
+  .flow em { color:var(--muted); font-style:normal; }
+  .two { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; }
+  .box { border:1px solid var(--line); border-radius:var(--radius-sm); padding:12px 14px; background:#fcfcfb; }
+  .box > b { display:block; margin-bottom:3px; }
+  .box p { margin:0; font-size:13.5px; color:var(--ink-2); }
+  code.ph { background:#f1f6f4; border-color:#cfe3da; color:var(--accent); }
+  pre.ex { background:#16191d; color:#ececea; border-radius:var(--radius-sm); padding:12px 14px;
+           white-space:pre-wrap; font-size:13px; line-height:1.7; margin:8px 0 0; }
+  details.faq { border-bottom:1px solid var(--line); padding:10px 0; }
+  details.faq summary { cursor:pointer; font-weight:600; }
+  details.faq p { margin:8px 0 0; color:var(--ink-2); }
+  @media (max-width: 900px) { .guide { grid-template-columns:1fr; } .toc { position:static; } }
+</style>
+{% endblock %}
+{% block body %}
+<div class="page-head">
+  <div><div class="crumb">סינרו · ניהול קמפיינים</div><h1>מדריך שימוש</h1>
+    <div class="muted">כל מה שצריך כדי להריץ קמפיין מההתחלה ועד התשובות, גם בלי ניסיון קודם.</div></div>
+  <div class="actions">
+    <a class="btn ghost" href="{{ url_for('board') }}" onclick="try{localStorage.removeItem('tourDone')}catch(e){}">סיור מודרך בלוח</a>
+  </div>
+</div>
+
+<div class="guide">
+  <nav class="toc">
+    <b>תוכן</b>
+    <a href="#overview"><i>1</i>איך זה עובד</a>
+    <a href="#board"><i>2</i>לוח הבקרה</a>
+    <a href="#campaign"><i>3</i>קמפיין חדש</a>
+    <a href="#copy"><i>4</i>כתיבת הנוסח</a>
+    <a href="#recipients"><i>5</i>הוספת נמענים</a>
+    <a href="#send"><i>6</i>שליחה</a>
+    <a href="#after"><i>7</i>אחרי השליחה</a>
+    <a href="#ab"><i>8</i>השוואת נוסחים</a>
+    <a href="#segments"><i>9</i>פילוח</a>
+    <a href="#clients"><i>10</i>לקוחות וארנק</a>
+    <a href="#senders"><i>11</i>תיבות שליחה</a>
+    <a href="#connect"><i>12</i>חיבור לחיפוש</a>
+    <a href="#tips"><i>13</i>מה עובד הכי טוב</a>
+    <a href="#faq"><i>?</i>שאלות נפוצות</a>
+  </nav>
+
+  <div>
+    <section class="g" id="overview">
+      <h2><span class="n">1</span>איך זה עובד</h2>
+      <p class="lead">כל עבודה במערכת היא <b>קמפיין</b>: נוסח מייל אחד ורשימת נמענים. המסלול תמיד אותו מסלול:</p>
+      <div class="flow"><span>קמפיין</span><em>←</em><span>נוסח</span><em>←</em><span>נמענים</span><em>←</em>
+        <span>שליחה</span><em>←</em><span>בדיקת תשובות</span><em>←</em><span>פילוח ולמידה</span></div>
+      <div class="two" style="margin-top:14px;">
+        <div class="box"><b>קמפיינים שלנו</b><p>מה שהאיגוד וסינרו שולחים. מופיעים בלוח הבקרה.</p></div>
+        <div class="box"><b>קמפיינים של לקוחות</b><p>כל לקוח בתיקייה משלו, עם תיבה וארנק משלו. מופיעים בעמוד "לקוחות".</p></div>
+      </div>
+      <div class="tip"><b>לפני הכל:</b> המערכת מגינה עלייך מטעויות. היא לא תשלח פעמיים לאותו אדם, לא תשלח למי שביקש הסרה, ולא תשלח לכתובת שכבר חזרה.</div>
+    </section>
+
+    <section class="g" id="board">
+      <h2><span class="n">2</span>לוח הבקרה</h2>
+      <p class="lead">המסך הראשון. רואים בו במבט אחד מה קורה בכל הקמפיינים.</p>
+      <div class="two">
+        <div class="box"><b>שש קוביות למעלה</b><p>נשלחו, ממתינים, השיבו, לחצו, נפתחו, חזרו. המספר החשוב באמת הוא <b>השיבו</b>.</p></div>
+        <div class="box"><b>ממתינים לשליחה</b><p>קמפיינים שיש בהם נמענים שעוד לא קיבלו מייל, עם כפתור שליחה ישיר.</p></div>
+        <div class="box"><b>טבלת הקמפיינים</b><p>לחיצה על כותרת ממיינת. "פעילים" ו"הסתיימו" מסננים. הקמפיין עם הכי הרבה תשובות מסומן בירוק.</p></div>
+        <div class="box"><b>השוואה מפורטת</b><p>בתחתית: הטבלה הישנה עם נוסח, קהל, כאב ותובנות לכל קמפיין, אחד ליד השני.</p></div>
+      </div>
+      <h3>מה המצבים אומרים</h3>
+      <p><span class="pill is-ready">מוכן לשליחה</span> יש נמענים, עוד לא נשלח כלום ·
+         <span class="pill is-sending">בשליחה</span> חלק נשלחו, חלק ממתינים ·
+         <span class="pill is-done">הסתיים</span> כולם קיבלו</p>
+    </section>
+
+    <section class="g" id="campaign">
+      <h2><span class="n">3</span>קמפיין חדש</h2>
+      <p class="lead">שתי דרכים, ובדרך כלל השנייה עדיפה.</p>
+      <div class="two">
+        <div class="box"><b>מאפס</b><p>בתפריט: <span class="ui go">קמפיין חדש</span>, נותנים שם, ונכנסים לכתוב נוסח.</p></div>
+        <div class="box"><b>שכפול של קמפיין שעבד</b><p>נכנסים לקמפיין ולוחצים <span class="ui">שכפול</span>. מקבלים את אותו נושא, נוסח, סרטון ותיבה, בלי נמענים, ועוברים ישר להעלאת רשימה.</p></div>
+      </div>
+      <div class="tip"><b>טיפ:</b> שם טוב לקמפיין אומר מה ולמי: "מענק שיווק, מכתב אישי, אולמות אירועים". ככה קל להשוות אחר כך.</div>
+    </section>
+
+    <section class="g" id="copy">
+      <h2><span class="n">4</span>כתיבת הנוסח</h2>
+      <p class="lead">בעמוד הקמפיין, בכרטיס "מה לחפש ומה לשלוח": נושא המייל וגוף המייל. בסוף לוחצים <span class="ui go">שמירה</span>.</p>
+      <h3>מילים שמתחלפות לכל נמען</h3>
+      <p><code class="ph">{{ '{{' }}שם_העסק{{ '}}' }}</code> שם העסק ·
+         <code class="ph">{{ '{{' }}שם_פרטי{{ '}}' }}</code> שם פרטי, ואם אין, נעלם יפה ("שלום,") ·
+         <code class="ph">{{ '{{' }}שם{{ '}}' }}</code> שם פרטי, ואם אין, שם העסק</p>
+      <p><code class="ph">{{ '{{' }}פתיח{{ '}}' }}</code> משפט פתיחה אישי, מהעמודה "פתיח" בקובץ הנמענים. מי שאין לו, הפסקה נמחקת ·
+         <code class="ph">{{ '{{' }}מקום_פרסום{{ '}}' }}</code> איפה העסק מפרסם, מהעמודה "איפה מפרסם" ·
+         <code class="ph">{{ '{{' }}מקור{{ '}}' }}</code> איפה מצאנו את העסק, מהעמודה "איפה מצאנו"</p>
+      <pre class="ex">נושא:  {{ '{{' }}שם_העסק{{ '}}' }}, אולי מגיע לכם מענק של עד 30,000 ש"ח
+
+שלום {{ '{{' }}שם_פרטי{{ '}}' }},
+
+אני מירי מאיגוד העסקים החרדיים...</pre>
+      <h3>עיצוב בתוך הנוסח</h3>
+      <ol class="steps">
+        <li><b>פסקה חדשה:</b> שורה ריקה בין פסקאות.</li>
+        <li><b>קישור:</b> <code>[הטקסט שעליו לוחצים](https://...)</code></li>
+        <li><b>תמונה או סרטון (GIF) שמובילים לקישור:</b> <code>[![תיאור](כתובת התמונה)](https://...)</code> בשורה נפרדת.</li>
+        <li><b>הטקסט שמופיע ליד הנושא בתיבת הדואר:</b> שורה ראשונה שמתחילה ב-<code>טקסט מקדים:</code></li>
+      </ol>
+      <div class="tip"><b>מה עבד אצלנו:</b> מכתב קצר שנשמע כמו אדם ("אני עוברת על רשימות של עסקים..."), קישור אחד, ודרך קלה לענות ("אפשר לענות במילה אחת"). מיילים שנראים כמו פרסומת קיבלו פי 4 עד 6 פחות תשובות.</div>
+      <div class="caution">שורת ההסרה ("השיבו הסר ולא נפנה שוב") צריכה להופיע בסוף כל מייל. היא מגינה מתלונות ספאם.</div>
+    </section>
+
+    <section class="g" id="recipients">
+      <h2><span class="n">5</span>הוספת נמענים</h2>
+      <p class="lead">בעמוד הקמפיין: <span class="ui">הוספת נמענים</span>.</p>
+      <ol class="steps">
+        <li>גוררים לאזור המסומן קובץ <b>CSV או Excel</b>, או לוחצים ובוחרים קובץ.</li>
+        <li>חובה עמודה של מייל. השאר רשות: שם העסק, שם פרטי, טלפון, עיר, קבוצה או תחום. הלוח מזהה את העמודות לבד.</li>
+        <li>אפשר לכתוב "קבוצה" לכל הרשימה (למשל "אולמות אירועים"), כדי לראות אחר כך בפילוח מי ענה יותר.</li>
+        <li>לוחצים <span class="ui go">בדיקה והוספה לקמפיין</span> ומחכים כדקה.</li>
+        <li>מופיע דוח: כמה נכנסו, כמה לא, ולמה. אפשר לפתוח את הרשימה המלאה.</li>
+      </ol>
+      <h3>מה נבדק לבד</h3>
+      <div class="two">
+        <div class="box"><b>לא נכנסים</b><p>מי שכבר קיבל מייל · מי שממתין בקמפיין אחר · מי שביקש הסרה · כתובת שחזרה · כפילויות בקובץ · תיבות כמו jobs@ ו-cv@ · ספקים ישנים כמו נטוויז'ן</p></div>
+        <div class="box"><b>מתוקן לבד</b><p>טעויות הקלדה (gmial.com) · שמות עסקים: בלי בע"מ, טלפון ותיאור אחרי מקף</p></div>
+      </div>
+      <h3>כתובת בדיקה</h3>
+      <p>באותו עמוד, למטה: מוסיפים את המייל שלך עם שם עסק לדוגמה. הכתובת נכנסת תמיד, גם אם כבר קיבלה מייל, ולא נספרת בתוצאות ולא בארנק.</p>
+      <div class="caution">מתחרים (משרדי פרסום, עיתונים) הלוח לא מזהה. כדאי להוציא אותם מהקובץ לפני ההעלאה.</div>
+    </section>
+
+    <section class="g" id="send">
+      <h2><span class="n">6</span>שליחה</h2>
+      <ol class="steps">
+        <li>בעמוד הקמפיין: <span class="ui go">שליחה</span>.</li>
+        <li>למעלה רואים דוגמה של המייל, ואפשר לפתוח כל נמען ולראות בדיוק מה יקבל.</li>
+        <li>בוחרים <b>מאיזו תיבה</b> לשלוח.</li>
+        <li>מסמנים נמענים. קודם רק את כתובת הבדיקה, ובודקים שהמייל נראה טוב.</li>
+        <li>אחר כך מסמנים מנה ושולחים.</li>
+      </ol>
+      <div class="tip"><b>כמה ביום:</b> עד כ-80 מיילים ביום מכל תיבה. שליחה של מאות בבת אחת מעבירה את המיילים לספאם, גם בקמפיינים הבאים.</div>
+      <div class="caution">בכתובת בענן (ten-mu-33.vercel.app) כל לחיצה שולחת עד 50. נשארו מסומנים? לוחצים שוב.</div>
+    </section>
+
+    <section class="g" id="after">
+      <h2><span class="n">7</span>אחרי השליחה</h2>
+      <ol class="steps">
+        <li><b>בדיקת תשובות</b> (בלוח או בעמוד הקמפיין), פעם ביום. הלוח מחפש בכל הדואר, גם בארכיון, ומזהה גם תשובה מכתובת אחרת לפי הנושא.</li>
+        <li><b>מי שכתב "הסר" או "לא מעוניין"</b> נכנס לרשימת הסרה קבועה, ולא יקבל מאיתנו מייל יותר.</li>
+        <li><b>מייל שחזר</b> מסומן, ואף קמפיין לא ישלח אליו שוב.</li>
+        <li><b>לחיצות:</b> נספרות רק לחיצות של אנשים. לחיצה בדקה הראשונה אחרי השליחה היא סורק אבטחה, ולא נספרת.</li>
+      </ol>
+      <div class="tip"><b>מי שענה מצפה לתשובה מהר.</b> הכי טוב לחזור עוד באותו יום. ליד שמחכה יומיים מתקרר.</div>
+      <h3>מייל המשך</h3>
+      <p>4 עד 5 ימים אחרי, אפשר לשלוח מייל קצר אחד למי שלא ענה ("רציתי לוודא שהמייל הגיע"). פעם אחת בלבד. אחר כך לא פונים שוב לאותם אנשים.</p>
+    </section>
+
+    <section class="g" id="ab">
+      <h2><span class="n">8</span>השוואת נוסחים (A/B)</h2>
+      <p class="lead">הדרך לדעת מה באמת עובד, במקום לנחש.</p>
+      <ol class="steps">
+        <li>בעמוד הקמפיין, מתחת לנוסח, פותחים <b>השוואת נוסחים (A/B)</b>.</li>
+        <li>כותבים נושא אחר, גוף אחר, או את שניהם. שדה שנשאר ריק לוקח את הנוסח הרגיל, כך שאפשר לבדוק רק נושא.</li>
+        <li>שומרים ושולחים כרגיל. הלוח מחלק את הנמענים חצי-חצי לבד. בעמוד השליחה רואים ליד כל נמען איזה נוסח יקבל.</li>
+        <li>בראש עמוד הקמפיין מופיע כרטיס תוצאות: כמה ענו ולחצו בכל נוסח, ומי מוביל.</li>
+      </ol>
+      <div class="tip"><b>מתי לסמוך על התוצאה:</b> הלוח כותב "ההבדל מובהק" רק כשההבדל גדול מספיק ביחס לכמות. בדרך כלל צריך לפחות 100 נמענים לכל נוסח. משנים דבר אחד בכל פעם.</div>
+    </section>
+
+    <section class="g" id="segments">
+      <h2><span class="n">9</span>פילוח</h2>
+      <p class="lead">בתפריט: <b>פילוח ותוצאות</b>. מראה מי ענה יותר: לפי תחום, עיר, ספק מייל וקמפיין.</p>
+      <p>משם מחליטים לאן לשלוח בפעם הבאה. לדוגמה: אצלנו חנויות ריהוט ענו יותר ממחשבים, וכתובות בספקים ישנים כמעט תמיד חזרו. בעמוד של קמפיין או לקוח יש כפתור פילוח שמראה רק אותם.</p>
+    </section>
+
+    <section class="g" id="clients">
+      <h2><span class="n">10</span>לקוחות וארנק</h2>
+      <p class="lead">כשמפעילים קמפיינים עבור לקוח, כל לקוח מקבל תיקייה משלו.</p>
+      <h3>פתיחת לקוח</h3>
+      <ol class="steps">
+        <li>בתפריט: <b>לקוחות</b>, ואז <span class="ui go">לקוח חדש</span>. ממלאים שם ופרטי קשר.</li>
+        <li>בעמוד הלקוח: <b>תיבות שליחה</b>, ואז <span class="ui">הוספת תיבה</span>. מכניסים את ה-Gmail של הלקוח עם סיסמת אפליקציה. בלי תיבה אי אפשר לשלוח עבורו.</li>
+        <li><span class="ui">הוספה לארנק</span>: בוחרים חבילה, או כמות אחרת, ורושמים כמה שולם.</li>
+        <li><span class="ui go">קמפיין חדש</span> בעמוד הלקוח, ומשם כרגיל: נוסח, נמענים, שליחה.</li>
+      </ol>
+      <h3>איך הארנק עובד</h3>
+      <pre class="ex">יתרה  =  מיילים שנרכשו  −  מיילים שנשלחו  +  מיילים שחזרו</pre>
+      <div class="two" style="margin-top:12px;">
+        <div class="box"><b>מייל שחזר לא נגבה</b><p>הכתובת לא קיימת, אז המייל חוזר לארנק ואפשר לשלוח במקומו.</p></div>
+        <div class="box"><b>השליחה עוצרת ביתרה</b><p>סומנו 300 ויש 200 בארנק? יוצאים רק 200. ביתרה 0 השליחה חסומה.</p></div>
+        <div class="box"><b>כפילויות רק בתוך התיקייה</b><p>ללקוח מותר לשלוח גם למי שקיבל מייל מאיתנו. רק בתוך הקמפיינים שלו אותו אדם לא יקבל פעמיים.</p></div>
+        <div class="box"><b>מחירון</b><p>בעמוד "לקוחות", בכפתור "מחירון", קובעים חבילות (100, 200, 500, 1,000) ומחיר למייל בודד.</p></div>
+      </div>
+      <div class="caution">המחירים שמופיעים בהתחלה הם דוגמה. כדאי לעדכן אותם לפני שמוכרים.</div>
+      <h3>מחיקת לקוח</h3>
+      <p>בראש עמוד הלקוח: <span class="ui">מחיקת לקוח</span>, ומקלידים את שמו כדי לאשר. נמחקים התיקייה, הקמפיינים, הארנק והתיבות. רשימות הנמענים נשארות, כדי שלא יישלח פעמיים.</p>
+    </section>
+
+    <section class="g" id="senders">
+      <h2><span class="n">11</span>תיבות שליחה</h2>
+      <ol class="steps">
+        <li>מתחברים לתיבת ה-Gmail שממנה רוצים לשלוח, ונכנסים ל-<a href="https://myaccount.google.com/apppasswords" target="_blank">myaccount.google.com/apppasswords</a>.</li>
+        <li>יוצרים <b>סיסמת אפליקציה</b> (16 אותיות). זו לא הסיסמה הרגילה של התיבה.</li>
+        <li>בלוח: <b>תיבות שליחה</b>. ממלאים שם שולח (מה שהנמען רואה), כתובת וסיסמת אפליקציה, ושומרים.</li>
+        <li><span class="ui">בדיקת חיבור</span> מוודא שהכל תקין, בלי לשלוח כלום.</li>
+      </ol>
+      <div class="tip"><b>שם השולח חשוב:</b> "מירי | איגוד העסקים החרדיים" נפתח יותר מכתובת בלי שם. והכי טוב שהשולח, הנושא והקישור מגיעים מאותו גוף.</div>
+    </section>
+
+    <section class="g" id="connect">
+      <h2><span class="n">12</span>חיבור לשיחת החיפוש</h2>
+      <p class="lead">שיחת החיפוש ב-Claude מוצאת עסקים, ושולחת אותם ישר לקמפיין, בלי להוריד ולהעלות קבצים.</p>
+      <ol class="steps">
+        <li>בתפריט: <b>חיבור לחיפוש</b> (מהכתובת בענן, ten-mu-33.vercel.app).</li>
+        <li>לוחצים <span class="ui">העתקה</span> על ההנחיה, ומדביקים אותה פעם אחת בשיחת החיפוש.</li>
+        <li>מעכשיו אומרים לה: "תחפשי אולמות אירועים בבני ברק ותשלחי לקמפיין 40".</li>
+        <li>הרשימה עוברת את כל הבדיקות, ומופיעה בקמפיין מוכנה לשליחה. השיחה מחזירה סיכום.</li>
+      </ol>
+      <div class="caution">המפתח בעמוד הזה הוא כמו סיסמה. אם הוא דלף, לוחצים "מפתח חדש" ומעבירים את החדש לשיחת החיפוש.</div>
+    </section>
+
+    <section class="g" id="tips">
+      <h2><span class="n">13</span>מה עובד הכי טוב</h2>
+      <p class="lead">מה שלמדנו מהקמפיינים שכבר יצאו:</p>
+      <ol class="steps">
+        <li><b>מכתב אישי מנצח פרסומת.</b> אותה הצעה, באותה תיבה: מכתב אישי הביא 5% עד 7% תשובות, ומייל שיווקי עם תמונה כ-1%.</li>
+        <li><b>נושא קצר עם שם העסק,</b> בלי ₪ ובלי סימני קריאה.</li>
+        <li><b>דרך קלה לענות:</b> "אפשר לענות במילה אחת". ושאלה בסוף נותנת סיבה לענות.</li>
+        <li><b>רשימות נקיות:</b> פחות מ-3% מיילים חוזרים. מעל 8% פוגע בתיבה לכל הקמפיינים.</li>
+        <li><b>שליחה מפוזרת:</b> עד 80 ביום מכל תיבה.</li>
+        <li><b>חוזרים מהר</b> למי שענה.</li>
+      </ol>
+    </section>
+
+    <section class="g" id="faq">
+      <h2><span class="n">?</span>שאלות נפוצות</h2>
+      <details class="faq"><summary>הלוח לא מראה את העדכונים האחרונים</summary>
+        <p>בכתובת בענן מרעננים את הדף. במחשב, סוגרים את הלוח ופותחים מחדש. הגרסה כתובה בתחתית התפריט.</p></details>
+      <details class="faq"><summary>מישהו ענה לי והלוח לא סופר אותו</summary>
+        <p>לוחצים "בדיקת תשובות". אם ענה בטלפון, בוואטסאפ או בטופס באתר, הלוח לא רואה את זה, ואפשר לרשום ידנית בעמוד השליחה, בעמודה "רישום תשובה".</p></details>
+      <details class="faq"><summary>למה "ממתינים" קטן ממה שהעליתי?</summary>
+        <p>חלק מהכתובות לא עברו את הבדיקות. בדוח ההעלאה כתוב בדיוק מי ולמה.</p></details>
+      <details class="faq"><summary>אפשר לשלוח שוב לאותו אדם?</summary>
+        <p>לא באותה תיקייה. זו הגנה מכוונת. בתיקייה של לקוח אפשר לשלוח למי שקיבל מאיתנו, כי זה שולח אחר.</p></details>
+      <details class="faq"><summary>מה ההבדל בין "נפתחו" ל"לחצו"?</summary>
+        <p>"נפתחו" נמדד בתמונה קטנה ונסתרת במייל, וחלק מתוכנות המייל טוענות אותה לבד, אז זו הערכה. "לחצו" אמין יותר: מישהו לחץ על הקישור, דקה או יותר אחרי שהמייל יצא.</p></details>
+      <details class="faq"><summary>מייל לא נשלח וכתוב "Gmail ניתק את החיבור"</summary>
+        <p>קורה כששולחים הרבה בבת אחת. מי שלא קיבל נשאר ממתין. מחכים שעה ושולחים שוב, במנה קטנה יותר.</p></details>
+    </section>
+  </div>
+</div>
+{% endblock %}
