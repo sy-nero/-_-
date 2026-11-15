@@ -695,6 +695,9 @@ def render_custom(subject_tpl: str, body_tpl: str, **ctx):
     """
     values = custom_values(**ctx)
     subject = _tidy(fill_placeholders(subject_tpl, values))
+    # נוסח שהודבק בדפדפן נשמר עם \r\n. בלי לנרמל, אין "\n\n" בין הפסקאות,
+    # כל הנוסח נחשב לפסקה אחת, וכשהיא מתחילה ב"טקסט מקדים:" הגוף יוצא ריק.
+    body_tpl = (body_tpl or "").replace("\r\n", "\n").replace("\r", "\n")
     body = _tidy(fill_placeholders(body_tpl, values))
 
     lines = [ln.strip() for ln in body.split("\n\n") if ln.strip()]
